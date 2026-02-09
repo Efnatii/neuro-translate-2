@@ -61,6 +61,9 @@
           const value = event.target.value;
           this.state.modelSelectionPolicy = value;
           this.scheduleSave({ modelSelectionPolicy: value });
+          if (value === 'fastest' && this.state.translationModelList.length) {
+            this.triggerBenchmarkSelectedModels();
+          }
         });
       }
 
@@ -85,6 +88,28 @@
 
       if (this.visibilityButton) {
         this.visibilityButton.addEventListener('click', () => this.toggleVisibility());
+      }
+    }
+
+    triggerBenchmarkSelectedModels() {
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
+      const commandPayload = { name: 'BENCHMARK_SELECTED_MODELS', payload: {} };
+
+      if (this.portClient && typeof this.portClient.sendCommand === 'function') {
+        this.portClient.sendCommand(commandPayload.name, commandPayload.payload);
+        return;
+      }
+
+      if (!UiProtocol || !MessageEnvelope || !this.chromeApi || !this.chromeApi.runtime) {
+        return;
+      }
+
+      const envelope = MessageEnvelope.wrap(UiProtocol.UI_COMMAND, commandPayload, { source: 'popup' });
+      try {
+        this.chromeApi.runtime.sendMessage(envelope);
+      } catch (error) {
+        // ignore fallback errors
       }
     }
 

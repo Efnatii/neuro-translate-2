@@ -1,7 +1,8 @@
 (function initUiPortHub(global) {
   class UiPortHub {
-    constructor() {
+    constructor({ onCommand } = {}) {
       this.subscribers = new Set();
+      this.onCommand = typeof onCommand === 'function' ? onCommand : null;
     }
 
     attachToRuntime() {
@@ -36,6 +37,11 @@
 
       if (envelope.type === UiProtocol.UI_SUBSCRIBE) {
         this.subscribers.add(port);
+        return;
+      }
+
+      if (envelope.type === UiProtocol.UI_COMMAND && this.onCommand) {
+        this.onCommand({ port, envelope });
       }
     }
 
@@ -70,13 +76,17 @@
 
         const translationStatusByTab = result.translationStatusByTab || {};
         const translationVisibilityByTab = result.translationVisibilityByTab || {};
+        const modelBenchmarkStatus = result.modelBenchmarkStatus || null;
+        const modelBenchmarks = result.modelBenchmarks || {};
         const tabId = this.resolveTabId(meta, result);
 
         callback({
           settings,
           tabId,
           translationStatusByTab,
-          translationVisibilityByTab
+          translationVisibilityByTab,
+          modelBenchmarkStatus,
+          modelBenchmarks
         });
       });
     }

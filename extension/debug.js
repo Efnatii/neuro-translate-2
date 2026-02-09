@@ -7,7 +7,9 @@
         tabId: null,
         url: '',
         origin: '',
-        status: null
+        status: null,
+        benchmarkStatus: null,
+        benchmarks: {}
       };
       this.fields = {};
       this.portClient = null;
@@ -19,6 +21,7 @@
       this.render();
       this.initPortClient();
       this.loadStatusFromStorage(this.state.tabId);
+      this.loadBenchmarksFromStorage();
       this.bindStorageUpdates();
     }
 
@@ -29,6 +32,10 @@
       this.fields.total = this.doc.querySelector('[data-field="total"]');
       this.fields.inProgress = this.doc.querySelector('[data-field="inProgress"]');
       this.fields.message = this.doc.querySelector('[data-field="message"]');
+      this.fields.benchStatus = this.doc.querySelector('[data-field="bench-status"]');
+      this.fields.benchCurrent = this.doc.querySelector('[data-field="bench-current"]');
+      this.fields.benchMessage = this.doc.querySelector('[data-field="bench-message"]');
+      this.fields.benchTable = this.doc.querySelector('[data-field="bench-table"]');
     }
 
     readQuery() {
@@ -65,6 +72,17 @@
       });
     }
 
+    loadBenchmarksFromStorage() {
+      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
+        this.updateBenchmarks(null, {});
+        return;
+      }
+
+      this.chromeApi.storage.local.get({ modelBenchmarkStatus: null, modelBenchmarks: {} }, (result) => {
+        this.updateBenchmarks(result.modelBenchmarkStatus || null, result.modelBenchmarks || {});
+      });
+    }
+
     initPortClient() {
       const UiPortClient = global.NT && global.NT.UiPortClient ? global.NT.UiPortClient : null;
       if (!UiPortClient) {
@@ -93,6 +111,13 @@
         this.updateStatus(entry);
       }
 
+      if (payload.modelBenchmarkStatus || payload.modelBenchmarks) {
+        this.updateBenchmarks(
+          payload.modelBenchmarkStatus || this.state.benchmarkStatus,
+          payload.modelBenchmarks || this.state.benchmarks
+        );
+      }
+
       if (this.portClient && typeof this.portClient.acknowledgeSnapshot === 'function') {
         this.portClient.acknowledgeSnapshot();
       }
@@ -107,6 +132,13 @@
         const entry = this.state.tabId !== null ? payload.patch.translationStatusByTab[this.state.tabId] : null;
         this.updateStatus(entry);
       }
+
+      if (payload.patch.modelBenchmarkStatus || payload.patch.modelBenchmarks) {
+        this.updateBenchmarks(
+          payload.patch.modelBenchmarkStatus || this.state.benchmarkStatus,
+          payload.patch.modelBenchmarks || this.state.benchmarks
+        );
+      }
     }
 
     bindStorageUpdates() {
@@ -115,19 +147,33 @@
       }
 
       this.chromeApi.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName !== 'local' || !changes.translationStatusByTab) {
+        if (areaName !== 'local') {
           return;
         }
 
-        const value = changes.translationStatusByTab.newValue || {};
-        const entry = this.state.tabId !== null ? value[this.state.tabId] : null;
-        this.updateStatus(entry);
+        if (changes.translationStatusByTab) {
+          const value = changes.translationStatusByTab.newValue || {};
+          const entry = this.state.tabId !== null ? value[this.state.tabId] : null;
+          this.updateStatus(entry);
+        }
+
+        if (changes.modelBenchmarkStatus || changes.modelBenchmarks) {
+          const status = changes.modelBenchmarkStatus ? changes.modelBenchmarkStatus.newValue : this.state.benchmarkStatus;
+          const benchmarks = changes.modelBenchmarks ? changes.modelBenchmarks.newValue : this.state.benchmarks;
+          this.updateBenchmarks(status || null, benchmarks || {});
+        }
       });
     }
 
     updateStatus(entry) {
       this.state.status = entry || null;
       this.renderStatus();
+    }
+
+    updateBenchmarks(status, benchmarks) {
+      this.state.benchmarkStatus = status || null;
+      this.state.benchmarks = benchmarks || {};
+      this.renderBenchmarks();
     }
 
     render() {
@@ -137,6 +183,7 @@
       }
 
       this.renderStatus();
+      this.renderBenchmarks();
     }
 
     renderStatus() {
@@ -164,6 +211,55 @@
       }
     }
 
+    renderBenchmarks() {
+      const status = this.state.benchmarkStatus || {};
+      if (this.fields.benchStatus) {
+        this.fields.benchStatus.textContent = status.status || '—';
+      }
+      if (this.fields.benchCurrent) {
+        this.fields.benchCurrent.textContent = status.currentModelSpec || '—';
+      }
+      if (this.fields.benchMessage) {
+        this.fields.benchMessage.textContent = status.message || status.errorCode || '—';
+      }
+      if (this.fields.benchTable) {
+        this.fields.benchTable.innerHTML = '';
+        const entries = this.sortedBenchmarks(this.state.benchmarks);
+        if (!entries.length) {
+          const row = this.doc.createElement('tr');
+          const cell = this.doc.createElement('td');
+          cell.colSpan = 3;
+          cell.textContent = 'нет данных';
+          row.appendChild(cell);
+          this.fields.benchTable.appendChild(row);
+          return;
+        }
+        entries.forEach((entry) => {
+          const row = this.doc.createElement('tr');
+          row.appendChild(this.renderBenchCell(entry.modelSpec));
+          row.appendChild(this.renderBenchCell(this.formatNumber(entry.medianMs)));
+          row.appendChild(this.renderBenchCell(this.formatTimestamp(entry.updatedAt)));
+          this.fields.benchTable.appendChild(row);
+        });
+      }
+    }
+
+    renderBenchCell(value) {
+      const cell = this.doc.createElement('td');
+      cell.textContent = value;
+      return cell;
+    }
+
+    sortedBenchmarks(benchmarks) {
+      const entries = Object.keys(benchmarks || {}).map((modelSpec) => ({
+        modelSpec,
+        medianMs: benchmarks[modelSpec] ? benchmarks[modelSpec].medianMs : null,
+        updatedAt: benchmarks[modelSpec] ? benchmarks[modelSpec].updatedAt : null
+      }));
+      entries.sort((a, b) => a.modelSpec.localeCompare(b.modelSpec));
+      return entries;
+    }
+
     normalizeNumber(value, fallback = null) {
       if (typeof value === 'number') {
         return value;
@@ -176,6 +272,24 @@
         return value;
       }
       return 'нет данных';
+    }
+
+    formatNumber(value) {
+      if (typeof value === 'number') {
+        return `${Math.round(value)}`;
+      }
+      return '—';
+    }
+
+    formatTimestamp(value) {
+      if (typeof value !== 'number') {
+        return '—';
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return '—';
+      }
+      return `${date.toLocaleTimeString()}`;
     }
   }
 

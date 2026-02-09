@@ -55,6 +55,24 @@
         justify-content: space-between;
       }
 
+      .debug__table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      .debug__table th,
+      .debug__table td {
+        padding: 6px 4px;
+        border-bottom: 1px solid #222838;
+        text-align: left;
+      }
+
+      .debug__table th {
+        color: #8fa0b7;
+        font-weight: 600;
+      }
+
       progress {
         width: 100%;
         height: 10px;
@@ -80,6 +98,23 @@
         <div class="debug__row"><span>Total</span><span data-field="total">—</span></div>
         <div class="debug__row"><span>In progress</span><span data-field="inProgress">—</span></div>
         <div class="debug__row"><span>Message</span><span data-field="message">нет данных</span></div>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Model Benchmarks</div>
+        <div class="debug__row"><span>Status</span><span data-field="bench-status">—</span></div>
+        <div class="debug__row"><span>Current model</span><span data-field="bench-current">—</span></div>
+        <div class="debug__row"><span>Message</span><span data-field="bench-message">—</span></div>
+        <table class="debug__table">
+          <thead>
+            <tr>
+              <th>Model spec</th>
+              <th>Median (ms)</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody data-field="bench-table"></tbody>
+        </table>
       </section>
     </main>
 
