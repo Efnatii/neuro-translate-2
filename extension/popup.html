@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <title>Neuro Translate</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup">
+      <header class="popup__header">
+        <div>
+          <h1 class="popup__title">Neuro Translate</h1>
+          <p class="popup__subtitle">by Efnatii</p>
+        </div>
+        <button class="popup__debug" type="button" data-action="open-debug">Отладка ↗</button>
+      </header>
+
+      <section class="popup__section">
+        <details class="popup__details" data-section="api-key">
+          <summary>OpenAI API Key</summary>
+          <div class="popup__field">
+            <input class="popup__input" type="password" placeholder="sk-..." autocomplete="off" data-field="api-key">
+            <button class="popup__button" type="button" data-action="toggle-api">Показать</button>
+          </div>
+        </details>
+      </section>
+
+      <section class="popup__section">
+        <h2 class="popup__section-title">Модели перевода</h2>
+        <div class="popup__models" data-section="models"></div>
+      </section>
+
+      <section class="popup__section">
+        <label class="popup__label" for="selection-policy">Принцип выбора</label>
+        <select id="selection-policy" class="popup__select" data-field="selection-policy">
+          <option value="fastest">Самые быстрые</option>
+          <option value="smartest">Самые умные</option>
+          <option value="cheapest">Самые дешёвые</option>
+        </select>
+      </section>
+
+      <section class="popup__section">
+        <div class="popup__status">
+          <div class="popup__status-header">
+            <span class="popup__label">Статус</span>
+            <span class="popup__status-text" data-field="status-text">—</span>
+          </div>
+          <progress class="popup__progress" value="0" max="100" data-field="status-progress"></progress>
+        </div>
+      </section>
+
+      <footer class="popup__footer">
+        <button class="popup__icon-button" type="button" disabled title="скоро" aria-label="Перевести">
+          ▶️
+        </button>
+        <button class="popup__icon-button" type="button" disabled title="Отменить" aria-label="Отменить">
+          ⏹️
+        </button>
+        <button class="popup__icon-button" type="button" data-action="toggle-visibility" aria-label="Показать перевод">
+          <span data-field="visibility-icon">👁️</span>
+        </button>
+      </footer>
+    </main>
+
+    <script src="core/nt-namespace.js"></script>
+    <script src="core/message-envelope.js"></script>
+    <script src="core/ui-protocol.js"></script>
+    <script src="core/ui-port-client.js"></script>
+    <script src="core/capability-rank.js"></script>
+    <script src="ai-common.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
