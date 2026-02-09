@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <title>Neuro Translate — Отладка</title>
+    <style>
+      :root {
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        color-scheme: light;
+        font-size: 14px;
+      }
+
+      body {
+        margin: 0;
+        background: #0f1115;
+        color: #f5f7fb;
+      }
+
+      .debug {
+        max-width: 520px;
+        margin: 24px auto;
+        padding: 20px;
+        background: #151922;
+        border: 1px solid #222838;
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .debug__title {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .debug__subtitle {
+        margin: 0;
+        color: #9aa3b2;
+      }
+
+      .debug__label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8fa0b7;
+      }
+
+      .debug__status {
+        display: grid;
+        gap: 6px;
+      }
+
+      .debug__row {
+        display: flex;
+        justify-content: space-between;
+      }
+
+      progress {
+        width: 100%;
+        height: 10px;
+        accent-color: #4f8ef7;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="debug">
+      <header>
+        <h1 class="debug__title">Neuro Translate — Отладка</h1>
+        <p class="debug__subtitle" data-field="site">Сайт: —</p>
+      </header>
+
+      <section>
+        <div class="debug__label">Прогресс</div>
+        <progress value="0" max="100" data-field="progress"></progress>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Статус</div>
+        <div class="debug__row"><span>Completed</span><span data-field="completed">—</span></div>
+        <div class="debug__row"><span>Total</span><span data-field="total">—</span></div>
+        <div class="debug__row"><span>In progress</span><span data-field="inProgress">—</span></div>
+        <div class="debug__row"><span>Message</span><span data-field="message">нет данных</span></div>
+      </section>
+    </main>
+
+    <script src="core/nt-namespace.js"></script>
+    <script src="core/message-envelope.js"></script>
+    <script src="core/ui-protocol.js"></script>
+    <script src="core/ui-port-client.js"></script>
+    <script src="debug.js"></script>
+  </body>
+</html>
