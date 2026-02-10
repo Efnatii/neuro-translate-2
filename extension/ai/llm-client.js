@@ -1,9 +1,29 @@
+/**
+ * Single transport client for OpenAI `/v1/responses` requests.
+ *
+ * `LlmClient` remains the only AI transport module and supports two execution
+ * modes: direct `fetch` fallback and MV3 offscreen delegation through
+ * `OffscreenExecutor`. Offscreen mode is preferred for long-running calls so
+ * request execution is less coupled to service-worker lifetime.
+ *
+ * Public methods return normalized raw envelopes (`json`, `headers`, `status`)
+ * and throw structured errors with optional retry hints.
+ *
+ * Security note: authorization headers are created only for network transport
+ * and are never emitted into event logs or error diagnostics.
+ */
 (function initLlmClient(global) {
-  class LlmClient {
-    constructor({ chromeApi, fetchFn, baseUrl }) {
-      this.chromeApi = chromeApi;
+  class LlmClient extends global.NT.ChromeLocalStoreBase {
+    constructor({ chromeApi, fetchFn, baseUrl, time, offscreenExecutor } = {}) {
+      super({ chromeApi });
       this.fetchFn = fetchFn || global.fetch;
       this.baseUrl = baseUrl || 'https://api.openai.com/v1/responses';
+      this.time = time || (global.NT && global.NT.Time ? global.NT.Time : null);
+      this.offscreen = offscreenExecutor || null;
+    }
+
+    now() {
+      return this.time && typeof this.time.now === 'function' ? this.time.now() : Date.now();
     }
 
     async hasApiKey() {
@@ -11,12 +31,12 @@
       return Boolean(apiKey);
     }
 
-    async generateMinimalPing({ modelId, serviceTier, signal }) {
-      const response = await this.generateMinimalPingRaw({ modelId, serviceTier, signal });
+    async generateMinimalPing({ modelId, serviceTier, signal, meta } = {}) {
+      const response = await this.generateMinimalPingRaw({ modelId, serviceTier, signal, meta });
       return response.json;
     }
 
-    async generateMinimalPingRaw({ modelId, serviceTier, signal }) {
+    async generateMinimalPingRaw({ modelId, serviceTier, signal, meta } = {}) {
       const apiKey = await this.getApiKey();
       if (!apiKey) {
         const error = new Error('Missing API key');
@@ -34,10 +54,10 @@
         service_tier: serviceTier || 'default'
       };
 
-      return this.postResponseRaw({ apiKey, payload, signal });
+      return this.postResponseRaw({ apiKey, payload, signal, meta });
     }
 
-    async generateResponse({ modelId, serviceTier, input, maxOutputTokens, temperature, store, background, signal }) {
+    async generateResponse({ modelId, serviceTier, input, maxOutputTokens, temperature, store, background, signal, meta } = {}) {
       const response = await this.generateResponseRaw({
         modelId,
         serviceTier,
@@ -46,12 +66,13 @@
         temperature,
         store,
         background,
-        signal
+        signal,
+        meta
       });
       return response.json;
     }
 
-    async generateResponseRaw({ modelId, serviceTier, input, maxOutputTokens, temperature, store, background, signal }) {
+    async generateResponseRaw({ modelId, serviceTier, input, maxOutputTokens, temperature, store, background, signal, meta } = {}) {
       const apiKey = await this.getApiKey();
       if (!apiKey) {
         const error = new Error('Missing API key');
@@ -69,7 +90,7 @@
         service_tier: serviceTier || 'default'
       };
 
-      return this.postResponseRaw({ apiKey, payload, signal });
+      return this.postResponseRaw({ apiKey, payload, signal, meta });
     }
 
     async getApiKey() {
@@ -77,24 +98,83 @@
       return data.apiKey || '';
     }
 
-    storageGet(defaults) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return Promise.resolve(defaults || {});
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.get(defaults, (result) => resolve(result || defaults || {}));
-      });
+    normalizeHeaders(headersLike) {
+      const map = headersLike && typeof headersLike === 'object' ? { ...headersLike } : {};
+      return {
+        get(name) {
+          if (!name) {
+            return null;
+          }
+          const direct = map[name];
+          if (direct !== undefined) {
+            return direct;
+          }
+          const lower = map[String(name).toLowerCase()];
+          return lower !== undefined ? lower : null;
+        }
+      };
     }
 
-    async postResponseRaw({ apiKey, payload, signal }) {
+    createRequestId(meta) {
+      if (meta && typeof meta.requestId === 'string' && meta.requestId) {
+        return meta.requestId;
+      }
+      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
+      if (MessageEnvelope && typeof MessageEnvelope.newId === 'function') {
+        return MessageEnvelope.newId();
+      }
+      return `llm-${this.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    async postResponseRaw({ apiKey, payload, signal, meta } = {}) {
+      const requestId = this.createRequestId(meta || {});
+      const timeoutMs = meta && Number.isFinite(Number(meta.timeoutMs)) ? Number(meta.timeoutMs) : 90000;
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      };
+      const body = JSON.stringify(payload || {});
+
+      if (this.offscreen) {
+        const offscreenResult = await this.offscreen.execute({
+          requestId,
+          payload: {
+            url: this.baseUrl,
+            method: 'POST',
+            headers,
+            body,
+            timeoutMs
+          },
+          timeoutMs
+        });
+
+        const normalizedHeaders = this.normalizeHeaders(offscreenResult && offscreenResult.headers ? offscreenResult.headers : {});
+        if (!offscreenResult || !offscreenResult.ok) {
+          const error = new Error(
+            offscreenResult && offscreenResult.error && offscreenResult.error.message
+              ? offscreenResult.error.message
+              : 'Responses API request failed'
+          );
+          error.code = offscreenResult && offscreenResult.error && offscreenResult.error.code
+            ? offscreenResult.error.code
+            : 'RESPONSES_API_ERROR';
+          error.status = offscreenResult && typeof offscreenResult.status === 'number' ? offscreenResult.status : null;
+          error.headers = normalizedHeaders;
+          error.retryAfterMs = this.resolveRetryAfterMs(normalizedHeaders);
+          throw error;
+        }
+
+        return {
+          json: offscreenResult.json,
+          headers: normalizedHeaders,
+          status: offscreenResult.status
+        };
+      }
+
       const response = await this.fetchFn(this.baseUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(payload),
+        headers,
+        body,
         signal
       });
 
@@ -135,43 +215,11 @@
         }
       }
 
-      const resetRequests = this.parseDurationMs(headers.get('x-ratelimit-reset-requests'));
-      const resetTokens = this.parseDurationMs(headers.get('x-ratelimit-reset-tokens'));
-      const fallback = Math.max(resetRequests || 0, resetTokens || 0);
-      return fallback > 0 ? fallback : null;
-    }
-
-    parseDurationMs(rawValue) {
-      if (typeof rawValue !== 'string' || !rawValue.trim()) {
-        return null;
-      }
-
-      const value = rawValue.trim();
-      const pattern = /(\d+)(ms|s|m|h)/g;
-      let consumed = '';
-      let total = 0;
-      let match = pattern.exec(value);
-
-      while (match) {
-        const amount = Number(match[1]);
-        const unit = match[2];
-        if (!Number.isFinite(amount)) {
-          return null;
-        }
-        if (unit === 'ms') {
-          total += amount;
-        } else if (unit === 's') {
-          total += amount * 1000;
-        } else if (unit === 'm') {
-          total += amount * 60 * 1000;
-        } else if (unit === 'h') {
-          total += amount * 60 * 60 * 1000;
-        }
-        consumed += match[0];
-        match = pattern.exec(value);
-      }
-
-      return consumed === value ? total : null;
+      const Duration = global.NT.Duration;
+      const resetRequests = Duration.parseMs(headers.get('x-ratelimit-reset-requests'));
+      const resetTokens = Duration.parseMs(headers.get('x-ratelimit-reset-tokens'));
+      const fallback = Duration.maxDefined(resetRequests, resetTokens);
+      return fallback && fallback > 0 ? fallback : null;
     }
   }
 

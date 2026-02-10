@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <title>Neuro Translate — Отладка</title>
-        <link rel="stylesheet" href="/ui/debug.css">
+    <link rel="stylesheet" href="/ui/debug.css">
   </head>
   <body>
     <main class="debug">
@@ -49,8 +49,18 @@
         </table>
       </section>
 
+
       <section class="debug__status">
-        <div class="debug__label">Event Log</div>
+        <div class="debug__label">Rate limits</div>
+        <div class="debug__row"><span>Current model</span><span data-field="rate-current-model">—</span></div>
+        <div class="rate-head">
+          <span>Model</span><span>RemReq</span><span>RemTok</span><span>Reserved</span><span>Cooldown</span><span>Reset</span>
+        </div>
+        <div class="rate-table" data-field="rate-table"></div>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Events</div>
         <div class="debug__controls">
           <select data-field="event-level">
             <option value="all">Level: all</option>
@@ -64,9 +74,9 @@
           <input type="text" placeholder="Search text" data-field="event-search">
           <button type="button" data-action="event-copy">Copy JSON</button>
           <button type="button" data-action="event-clear">Clear</button>
+          <button type="button" data-action="event-older">Load older</button>
         </div>
-        <div class="debug__event-log" data-field="event-log"></div>
-        <button type="button" class="debug__button" data-action="event-more">Load more</button>
+        <div class="debug__event-log" id="eventList" data-field="event-log"></div>
       </section>
     </main>
 
@@ -74,9 +84,14 @@
     <script src="/core/time.js"></script>
     <script src="/core/html.js"></script>
     <script src="/core/retry-loop.js"></script>
+    <script src="/core/chrome-local-store-base.js"></script>
+    <script src="/core/model-selection.js"></script>
+    <script src="/core/event-types.js"></script>
+    <script src="/core/settings-store.js"></script>
     <script src="/core/message-envelope.js"></script>
     <script src="/core/ui-protocol.js"></script>
     <script src="/core/ui-port-client.js"></script>
+    <script src="/ui/ui-module.js"></script>
     <script src="/ui/debug.js"></script>
   </body>
 </html>

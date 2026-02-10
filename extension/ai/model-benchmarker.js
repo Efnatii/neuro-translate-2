@@ -1,3 +1,17 @@
+/**
+ * Background benchmark runner for latency snapshots.
+ *
+ * Benchmarker measures model latency with bounded retries/timeouts and persists
+ * benchmark/status data. Bench calls use `AiPingCall`, so rate-limit headers are
+ * captured consistently with request flow.
+ *
+ * It also provides optional throughput calibration for speed mode. Calibration
+ * runs rarely (TTL/min-interval guarded), uses low-priority scheduler slots,
+ * and records EWMA samples via `ModelPerformanceStore`.
+ *
+ * On 429 it also applies short cooldown in `ModelRateLimitStore` to prevent
+ * repeated bench pressure on temporarily throttled models.
+ */
 (function initModelBenchmarker(global) {
   const DEFAULT_SAMPLES = 3;
   const TIMEOUT_MS = 20000;
@@ -8,14 +22,18 @@
   const LEASE_MS = 5 * 60 * 1000;
 
   class ModelBenchmarker {
-    constructor({ chromeApi, llmClient, benchmarkStore, modelRegistry, loadScheduler, eventLogger }) {
+    constructor({ chromeApi, pingCall, responseCall, benchmarkStore, modelRegistry, loadScheduler, rateLimitStore, perfStore, eventLogger, eventFactory }) {
       this.chromeApi = chromeApi;
-      this.llmClient = llmClient;
+      this.pingCall = pingCall;
       this.benchmarkStore = benchmarkStore;
+      this.responseCall = responseCall || null;
       this.modelRegistry = modelRegistry;
       this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
       this.time = global.NT && global.NT.Time ? global.NT.Time : null;
       this.loadScheduler = loadScheduler;
+      this.rateLimitStore = rateLimitStore || null;
+      this.perfStore = perfStore || null;
+      this.eventFactory = eventFactory || null;
       this.benchPrompt = "Respond with a single '.'";
       this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
       const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
@@ -29,6 +47,7 @@
           jitterMs: 200
         })
         : null;
+      this.throughputCalibrateInFlight = false;
     }
 
     benchmarkSelected(modelSpecs, { force = false } = {}) {
@@ -39,8 +58,66 @@
       this.runBenchmarks(modelSpecs, { force, reason }).catch(() => {});
     }
 
+    async maybeCalibrateThroughput(modelSpecs, { reason = 'auto' } = {}) {
+      if (this.throughputCalibrateInFlight || !this.perfStore || !this.responseCall) {
+        return;
+      }
+
+      const nowTs = this.now();
+      const uniqueSpecs = this.uniqueSpecs(modelSpecs);
+      const perfMap = await this.perfStore.getAll();
+      const candidates = uniqueSpecs
+        .filter((modelSpec) => this.perfStore.needsBench(modelSpec, nowTs, perfMap[modelSpec] || null))
+        .slice(0, 2);
+
+      if (!candidates.length) {
+        return;
+      }
+
+      this.throughputCalibrateInFlight = true;
+      try {
+        for (const modelSpec of candidates) {
+          const parsed = this.parseModelSpec(modelSpec);
+          if (!parsed.id) {
+            continue;
+          }
+
+          const reserved = await this.reserveBenchSlot({
+            priority: 'low',
+            timeoutMs: 1600,
+            estTokens: 160
+          });
+          if (!reserved) {
+            continue;
+          }
+
+          try {
+            const serviceTier = this.mapServiceTier(parsed.tier);
+            const result = await this.responseCall.sendBenchThroughput({
+              modelSpec,
+              modelId: parsed.id,
+              serviceTier
+            });
+            await this.perfStore.markBenchAt(modelSpec, this.now());
+            this.logEvent('info', 'bench.sample', 'Throughput calibration sample', {
+              source: 'bench',
+              stage: 'throughput',
+              reason,
+              modelSpec,
+              tps: result && typeof result.tps === 'number' ? Number(result.tps.toFixed(2)) : null,
+              latencyMs: result ? result.latencyMs : null
+            });
+          } catch (error) {
+            await this.handleRateLimit(error, 'BENCH', modelSpec);
+          }
+        }
+      } finally {
+        this.throughputCalibrateInFlight = false;
+      }
+    }
+
     async quickPrebench(modelSpecs, { maxModels = 5, budgetMs = 3000 } = {}) {
-      const hasKey = await this.llmClient.hasApiKey();
+      const hasKey = await this.hasApiKey();
       if (!hasKey) {
         this.logEvent('warn', 'bench', 'Quick prebench skipped (no API key)', { source: 'bench' });
         return { results: {}, reason: 'NO_API_KEY' };
@@ -90,6 +167,7 @@
         try {
           const serviceTier = this.mapServiceTier(parsed.tier);
           const duration = await this.measureOnce({
+            modelSpec,
             modelId: parsed.id,
             serviceTier,
             timeoutMs: Math.min(remaining, QUICK_SAMPLE_TIMEOUT_MS)
@@ -122,7 +200,7 @@
             stage: 'quick',
             status: error && error.status ? error.status : null
           });
-          this.handleRateLimit(error, 'BENCH');
+          await this.handleRateLimit(error, 'BENCH', modelSpec);
         }
       }
 
@@ -135,7 +213,7 @@
     }
 
     async runBenchmarks(modelSpecs, { force = false, reason = 'auto' } = {}) {
-      const hasKey = await this.llmClient.hasApiKey();
+      const hasKey = await this.hasApiKey();
       if (!hasKey) {
         await this.benchmarkStore.setStatus({
           status: 'failed',
@@ -212,7 +290,7 @@
         await this.benchmarkStore.upsert(modelSpec, { lastAttemptAt: this.now() });
 
         try {
-          const samples = await this.collectSamples(parsed);
+          const samples = await this.collectSamples({ modelSpec, id: parsed.id, tier: parsed.tier });
           const medianMs = this.calculateMedian(samples);
           const p90Ms = this.calculatePercentile(samples, 0.9);
           await this.benchmarkStore.upsert(modelSpec, {
@@ -244,7 +322,7 @@
             stage: reason,
             status: error && error.status ? error.status : null
           });
-          this.handleRateLimit(error, 'BENCH');
+          await this.handleRateLimit(error, 'BENCH', modelSpec);
         }
 
         completed += 1;
@@ -273,7 +351,7 @@
       });
     }
 
-    async collectSamples({ id, tier }) {
+    async collectSamples({ modelSpec, id, tier }) {
       const samples = [];
       const serviceTier = this.mapServiceTier(tier);
 
@@ -288,33 +366,35 @@
         if (index > 0) {
           await this.delay(this.randomJitter());
         }
-        const duration = await this.measureWithRetry({ modelId: id, serviceTier });
+        const duration = await this.measureWithRetry({ modelSpec, modelId: id, serviceTier });
         samples.push(duration);
       }
 
       return samples;
     }
 
-    async measureWithRetry({ modelId, serviceTier }) {
+    async measureWithRetry({ modelSpec, modelId, serviceTier }) {
       if (!this.retryLoop) {
-        return this.measureOnce({ modelId, serviceTier });
+        return this.measureOnce({ modelSpec, modelId, serviceTier });
       }
 
-      return this.retryLoop.run(() => this.measureOnce({ modelId, serviceTier }));
+      return this.retryLoop.run(() => this.measureOnce({ modelSpec, modelId, serviceTier }));
     }
 
-    async measureOnce({ modelId, serviceTier, timeoutMs }) {
-      const controller = new AbortController();
-      const timeoutId = global.setTimeout(() => controller.abort(), timeoutMs || TIMEOUT_MS);
-      const startedAt = this.now();
-
-      try {
-        await this.llmClient.generateMinimalPing({ modelId, serviceTier, signal: controller.signal });
-        return this.now() - startedAt;
-      } finally {
-        global.clearTimeout(timeoutId);
+    async measureOnce({ modelSpec, modelId, serviceTier, timeoutMs, signal }) {
+      if (!this.pingCall || typeof this.pingCall.measureLatency !== 'function') {
+        throw new Error('PING_CALL_UNAVAILABLE');
       }
+      return this.pingCall.measureLatency({ modelSpec, modelId, serviceTier, timeoutMs, signal });
     }
+
+    async hasApiKey() {
+      if (!this.pingCall || !this.pingCall.llmClient || typeof this.pingCall.llmClient.hasApiKey !== 'function') {
+        return false;
+      }
+      return this.pingCall.llmClient.hasApiKey();
+    }
+
 
     uniqueSpecs(modelSpecs) {
       if (!Array.isArray(modelSpecs)) {
@@ -423,22 +503,35 @@
       ]);
     }
 
-    handleRateLimit(error, kind) {
-      if (!this.loadScheduler) {
-        return;
-      }
+    async handleRateLimit(error, kind, modelSpec) {
       if (error && error.status === 429) {
-        this.loadScheduler.onRateLimited({ retryAfterMs: error.retryAfterMs, kind });
-        this.logEvent('warn', 'rate-limit', 'Bench rate-limited', {
+        if (this.loadScheduler) {
+          this.loadScheduler.onRateLimited({ retryAfterMs: error.retryAfterMs, kind });
+        }
+        if (this.rateLimitStore && modelSpec) {
+          const retryAfterMs = Math.min(error.retryAfterMs || 15000, 60000);
+          await this.rateLimitStore.applyCooldown(modelSpec, { now: this.now(), retryAfterMs });
+        }
+        this.logEvent('warn', 'ai.rateLimit', 'Bench rate-limited', {
           source: 'bench',
           stage: kind,
-          status: error.status
+          status: error.status,
+          modelSpec
         });
       }
     }
 
     logEvent(level, tag, message, meta) {
       if (!this.eventLogger) {
+        return;
+      }
+      if (this.eventFactory) {
+        const event = level === 'error'
+          ? this.eventFactory.error(tag, message, meta)
+          : level === 'warn'
+            ? this.eventFactory.warn(tag, message, meta)
+            : this.eventFactory.info(tag, message, meta);
+        this.eventLogger(event);
         return;
       }
       this.eventLogger({ level, tag, message, meta });

@@ -1,8 +1,19 @@
+/**
+ * Popup UI controller for quick settings and status preview.
+ *
+ * This controller intentionally contains only view/state behavior. All external
+ * interactions (tabs/runtime/port/settings persistence) are delegated to
+ * `UiModule`, which acts as the UI narrow throat.
+ *
+ * Snapshot + patch synchronization comes from `UiPortClient` via `UiModule`.
+ * Persistent settings writes are debounced by `SettingsStore` inside the module,
+ * so popup logic stays deterministic across MV3 reconnects.
+ */
 (function initPopup(global) {
   class PopupController {
-    constructor({ doc, chromeApi }) {
+    constructor({ doc, ui }) {
       this.doc = doc;
-      this.chromeApi = chromeApi;
+      this.ui = ui;
       this.state = {
         apiKey: '',
         translationModelList: [],
@@ -10,22 +21,34 @@
         translationVisible: true
       };
       this.activeTabId = null;
-      this.settingsStore = null;
+      this.modelRegistry = { entries: [], byKey: {} };
     }
 
     async init() {
       this.cacheElements();
       this.bindEvents();
-      this.initSettingsStore();
 
-      const activeTab = await this.getActiveTab();
+      const activeTab = await this.ui.getActiveTab();
       this.activeTabId = activeTab ? activeTab.id : null;
+      this.modelRegistry = this.ui.getModelRegistry();
 
-      this.initPortClient();
-      await this.loadSettings();
+      const settings = await this.ui.getSettings([
+        'apiKey',
+        'translationModelList',
+        'modelSelection',
+        'modelSelectionPolicy',
+        'translationVisibilityByTab'
+      ]);
+
+      this.state.apiKey = settings.apiKey || '';
+      this.state.translationModelList = Array.isArray(settings.translationModelList) ? settings.translationModelList : [];
+      this.state.modelSelection = this.ui.normalizeSelection(settings.modelSelection, settings.modelSelectionPolicy);
+      const byTab = settings.translationVisibilityByTab || {};
+      this.state.translationVisible = this.activeTabId !== null ? byTab[this.activeTabId] !== false : true;
+
       this.renderModels();
       this.renderSettings();
-      await this.renderStatus();
+      this.renderStatus();
     }
 
     cacheElements() {
@@ -65,7 +88,7 @@
           };
           this.scheduleSave({ modelSelection: this.state.modelSelection });
           if (this.state.modelSelection.speed && this.state.translationModelList.length) {
-            this.triggerBenchmarkSelectedModels();
+            this.ui.sendUiCommand('BENCHMARK_SELECTED_MODELS', {});
           }
         });
       }
@@ -87,13 +110,11 @@
           if (!target || target.type !== 'checkbox') {
             return;
           }
-
-          const spec = target.value;
           const list = new Set(this.state.translationModelList);
           if (target.checked) {
-            list.add(spec);
+            list.add(target.value);
           } else {
-            list.delete(spec);
+            list.delete(target.value);
           }
           this.state.translationModelList = Array.from(list);
           this.scheduleSave({ translationModelList: this.state.translationModelList });
@@ -105,124 +126,37 @@
       }
     }
 
-    triggerBenchmarkSelectedModels() {
-      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
-      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-      const commandPayload = { name: 'BENCHMARK_SELECTED_MODELS', payload: {} };
-
-      if (this.portClient && typeof this.portClient.sendCommand === 'function') {
-        this.portClient.sendCommand(commandPayload.name, commandPayload.payload);
-        return;
-      }
-
-      if (!UiProtocol || !MessageEnvelope || !this.chromeApi || !this.chromeApi.runtime) {
-        return;
-      }
-
-      const envelope = MessageEnvelope.wrap(UiProtocol.UI_COMMAND, commandPayload, { source: 'popup' });
-      try {
-        this.chromeApi.runtime.sendMessage(envelope);
-      } catch (error) {
-        // ignore fallback errors
-      }
-    }
-
-    initPortClient() {
-      const UiPortClient = global.NT && global.NT.UiPortClient ? global.NT.UiPortClient : null;
-      if (!UiPortClient) {
-        return;
-      }
-
-      this.portClient = new UiPortClient({
-        portName: 'popup',
-        onSnapshot: (payload) => this.applySnapshot(payload),
-        onPatch: (payload) => this.applyPatch(payload)
-      });
-      this.portClient.connect();
-    }
-
-    initSettingsStore() {
-      const SettingsStore = global.NT && global.NT.SettingsStore ? global.NT.SettingsStore : null;
-      if (!SettingsStore) {
-        return;
-      }
-
-      const sanitize = global.NT_SETTINGS && typeof global.NT_SETTINGS.sanitizeSettings === 'function'
-        ? global.NT_SETTINGS.sanitizeSettings
-        : null;
-
-      this.settingsStore = new SettingsStore({
-        chromeApi: this.chromeApi,
-        sanitize,
-        debounceMs: 400,
-        defaults: {
-          apiKey: '',
-          translationModelList: [],
-          modelSelection: { speed: true, preference: null },
-          modelSelectionPolicy: null,
-          translationVisibilityByTab: {}
-        }
-      });
-    }
-
-    async loadSettings() {
-      const keys = [
-        'apiKey',
-        'translationModelList',
-        'modelSelection',
-        'modelSelectionPolicy',
-        'translationVisibilityByTab'
-      ];
-      const raw = this.settingsStore ? await this.settingsStore.get(keys) : await this.storageGet(keys);
-      const sanitized = raw || {};
-
-      this.state.apiKey = sanitized.apiKey || '';
-      this.state.translationModelList = Array.isArray(sanitized.translationModelList)
-        ? sanitized.translationModelList
-        : [];
-      this.state.modelSelection = this.normalizeModelSelection(sanitized.modelSelection, sanitized.modelSelectionPolicy);
-      if (sanitized.translationVisibilityByTab && this.activeTabId !== null) {
-        const visibility = sanitized.translationVisibilityByTab[this.activeTabId];
-        if (typeof visibility === 'boolean') {
-          this.state.translationVisible = visibility;
-        }
-      }
-
-      if (!sanitized.modelSelection && this.state.modelSelection) {
-        this.scheduleSave({ modelSelection: this.state.modelSelection });
-      }
-    }
-
     applySnapshot(payload) {
       if (!payload) {
         return;
+      }
+
+      const settings = payload.settings || {};
+      if (Object.prototype.hasOwnProperty.call(settings, 'apiKey')) {
+        this.state.apiKey = settings.apiKey || '';
+      }
+      if (Array.isArray(settings.translationModelList)) {
+        this.state.translationModelList = settings.translationModelList;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'modelSelection') || Object.prototype.hasOwnProperty.call(settings, 'modelSelectionPolicy')) {
+        this.state.modelSelection = this.ui.normalizeSelection(settings.modelSelection, settings.modelSelectionPolicy);
       }
 
       if (payload.tabId !== null && payload.tabId !== undefined) {
         this.activeTabId = payload.tabId;
       }
 
-      if (payload.settings) {
-        this.state.apiKey = payload.settings.apiKey || '';
-        this.state.translationModelList = Array.isArray(payload.settings.translationModelList)
-          ? payload.settings.translationModelList
-          : [];
-        this.state.modelSelection = this.normalizeModelSelection(payload.settings.modelSelection, payload.settings.modelSelectionPolicy);
+      const visibilityMap = payload.translationVisibilityByTab || {};
+      if (this.activeTabId !== null && Object.prototype.hasOwnProperty.call(visibilityMap, this.activeTabId)) {
+        this.state.translationVisible = visibilityMap[this.activeTabId] !== false;
       }
 
-      if (payload.translationVisibilityByTab && this.activeTabId !== null) {
-        const visibility = payload.translationVisibilityByTab[this.activeTabId];
-        if (typeof visibility === 'boolean') {
-          this.state.translationVisible = visibility;
-        }
-      }
-
-      this.renderModels();
       this.renderSettings();
-      this.renderStatusFromSnapshot(payload.translationStatusByTab);
+      this.renderModels();
+      this.renderStatus(payload.translationStatusByTab || null);
 
-      if (this.portClient && typeof this.portClient.acknowledgeSnapshot === 'function') {
-        this.portClient.acknowledgeSnapshot();
+      if (this.ui.portClient && typeof this.ui.portClient.acknowledgeSnapshot === 'function') {
+        this.ui.portClient.acknowledgeSnapshot();
       }
     }
 
@@ -230,68 +164,63 @@
       if (!payload || !payload.patch) {
         return;
       }
-
       const patch = payload.patch;
 
-      if (patch.apiKey !== undefined) {
+      if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {
         this.state.apiKey = patch.apiKey || '';
       }
-      if (patch.translationModelList !== undefined) {
-        this.state.translationModelList = Array.isArray(patch.translationModelList)
-          ? patch.translationModelList
-          : [];
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationModelList') && Array.isArray(patch.translationModelList)) {
+        this.state.translationModelList = patch.translationModelList;
       }
-      if (patch.modelSelection !== undefined) {
-        this.state.modelSelection = this.normalizeModelSelection(patch.modelSelection, null);
+      if (Object.prototype.hasOwnProperty.call(patch, 'modelSelection')) {
+        this.state.modelSelection = this.ui.normalizeSelection(patch.modelSelection, null);
       }
-      if (patch.translationVisibilityByTab && this.activeTabId !== null) {
-        const visibility = patch.translationVisibilityByTab[this.activeTabId];
-        if (typeof visibility === 'boolean') {
-          this.state.translationVisible = visibility;
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationVisibilityByTab') && this.activeTabId !== null) {
+        const map = patch.translationVisibilityByTab || {};
+        if (Object.prototype.hasOwnProperty.call(map, this.activeTabId)) {
+          this.state.translationVisible = map[this.activeTabId] !== false;
         }
       }
 
-      if (patch.translationStatusByTab) {
-        this.renderStatusFromSnapshot(patch.translationStatusByTab);
-      }
-
       this.renderSettings();
-      this.syncModelSelections();
+      this.renderModels();
+      this.renderStatus(patch.translationStatusByTab || null);
     }
 
-    renderSettings() {
-      if (this.apiKeyInput) {
-        this.apiKeyInput.value = this.state.apiKey;
-      }
+    scheduleSave(patch) {
+      this.ui.queueSettingsPatch(patch, {
+        finalize: (payload) => {
+          if (payload.translationVisibilityByTab && this.activeTabId !== null) {
+            payload.translationVisibilityByTab = { [this.activeTabId]: this.state.translationVisible };
+          }
+        }
+      });
+    }
 
-      if (this.speedCheckbox) {
-        this.speedCheckbox.checked = Boolean(this.state.modelSelection.speed);
-      }
-
-      if (this.preferenceSelect) {
-        this.preferenceSelect.value = this.state.modelSelection.preference || 'none';
-      }
-
+    async toggleVisibility() {
+      this.state.translationVisible = !this.state.translationVisible;
       this.updateVisibilityIcon();
-      this.syncModelSelections();
+      if (this.activeTabId === null) {
+        return;
+      }
+      await this.ui.setVisibility(this.activeTabId, this.state.translationVisible);
     }
 
-    normalizeModelSelection(modelSelection, legacyPolicy) {
-      if (modelSelection && typeof modelSelection === 'object') {
-        const speed = modelSelection.speed !== false;
-        const preference = modelSelection.preference === 'smartest' || modelSelection.preference === 'cheapest'
-          ? modelSelection.preference
-          : null;
-        return { speed, preference };
-      }
+    async openDebug() {
+      const tab = await this.ui.getActiveTab();
+      this.ui.openDebug({
+        tabId: tab ? tab.id : '',
+        url: tab && tab.url ? tab.url : ''
+      });
+    }
 
-      if (legacyPolicy === 'smartest') {
-        return { speed: false, preference: 'smartest' };
+    toggleApiKeyVisibility() {
+      if (!this.apiKeyInput || !this.apiKeyToggle) {
+        return;
       }
-      if (legacyPolicy === 'cheapest') {
-        return { speed: false, preference: 'cheapest' };
-      }
-      return { speed: true, preference: null };
+      const isPassword = this.apiKeyInput.type === 'password';
+      this.apiKeyInput.type = isPassword ? 'text' : 'password';
+      this.apiKeyToggle.textContent = isPassword ? 'Скрыть' : 'Показать';
     }
 
     renderModels() {
@@ -299,296 +228,86 @@
         return;
       }
 
-      const registry = this.getModelRegistry();
-      const grouped = this.groupModels(registry.entries);
-
+      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       this.modelsRoot.innerHTML = '';
+      const options = this.modelRegistry.entries || [];
+      options.forEach((entry) => {
+        const modelSpec = `${entry.id}:${entry.tier}`;
+        const label = this.doc.createElement('label');
+        label.className = 'popup__checkbox';
 
-      ['flex', 'standard', 'priority'].forEach((tier) => {
-        const group = grouped[tier] || [];
-        const groupEl = this.doc.createElement('div');
-        groupEl.className = 'popup__model-group';
+        const input = this.doc.createElement('input');
+        input.type = 'checkbox';
+        input.value = modelSpec;
+        input.checked = this.state.translationModelList.includes(modelSpec);
 
-        const title = this.doc.createElement('div');
-        title.className = 'popup__model-title';
-        title.textContent = tier.toUpperCase();
-        groupEl.appendChild(title);
+        const text = this.doc.createElement('span');
+        const tier = entry.tier ? String(entry.tier).toUpperCase() : 'STANDARD';
+        const safe = Html ? Html.safeText(`${entry.id} (${tier})`, '—') : `${entry.id} (${tier})`;
+        text.textContent = safe;
 
-        group.forEach((entry) => {
-          const item = this.doc.createElement('label');
-          item.className = 'popup__model-item';
-
-          const info = this.doc.createElement('div');
-          info.className = 'popup__model-info';
-
-          const labelRow = this.doc.createElement('div');
-          labelRow.className = 'popup__model-label';
-
-          const checkbox = this.doc.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.value = this.formatModelSpec(entry.id, entry.tier);
-          checkbox.checked = this.state.translationModelList.includes(checkbox.value);
-
-          const name = this.doc.createElement('span');
-          name.textContent = entry.id;
-
-          labelRow.appendChild(checkbox);
-          labelRow.appendChild(name);
-
-          const meta = this.doc.createElement('div');
-          meta.className = 'popup__model-meta';
-          meta.textContent = this.formatMeta(entry);
-
-          info.appendChild(labelRow);
-          info.appendChild(meta);
-
-          const badge = this.doc.createElement('span');
-          badge.className = 'popup__badge';
-          badge.textContent = this.formatPriceBadge(entry.sum_1M);
-
-          item.appendChild(info);
-          item.appendChild(badge);
-
-          groupEl.appendChild(item);
-        });
-
-        this.modelsRoot.appendChild(groupEl);
+        label.appendChild(input);
+        label.appendChild(text);
+        this.modelsRoot.appendChild(label);
       });
     }
 
-    syncModelSelections() {
-      if (!this.modelsRoot) {
+    renderSettings() {
+      if (this.apiKeyInput) {
+        this.apiKeyInput.value = this.state.apiKey;
+      }
+      if (this.speedCheckbox) {
+        this.speedCheckbox.checked = Boolean(this.state.modelSelection.speed);
+      }
+      if (this.preferenceSelect) {
+        const value = this.state.modelSelection.preference;
+        this.preferenceSelect.value = value === 'smartest' || value === 'cheapest' ? value : '';
+      }
+      this.updateVisibilityIcon();
+    }
+
+    renderStatus(statusByTab) {
+      const Time = global.NT && global.NT.Time ? global.NT.Time : null;
+      const entry = statusByTab && this.activeTabId !== null ? statusByTab[this.activeTabId] : null;
+      if (!entry) {
+        if (this.statusText) {
+          this.statusText.textContent = '—';
+        }
+        if (this.statusProgress) {
+          this.statusProgress.value = 0;
+        }
         return;
       }
 
-      const selected = new Set(this.state.translationModelList);
-      this.modelsRoot.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-        checkbox.checked = selected.has(checkbox.value);
-      });
-    }
-
-    groupModels(entries) {
-      const grouped = { flex: [], standard: [], priority: [] };
-
-      entries.forEach((entry) => {
-        if (grouped[entry.tier]) {
-          grouped[entry.tier].push(entry);
-        }
-      });
-
-      Object.keys(grouped).forEach((tier) => {
-        grouped[tier].sort((a, b) => this.sortByPrice(a, b));
-      });
-
-      return grouped;
-    }
-
-    sortByPrice(a, b) {
-      const aValue = typeof a.sum_1M === 'number' ? a.sum_1M : Number.POSITIVE_INFINITY;
-      const bValue = typeof b.sum_1M === 'number' ? b.sum_1M : Number.POSITIVE_INFINITY;
-
-      if (aValue === bValue) {
-        return a.id.localeCompare(b.id);
-      }
-
-      return aValue - bValue;
-    }
-
-    formatMeta(entry) {
-      const input = this.formatPrice(entry.inputPrice);
-      const cached = this.formatPrice(entry.cachedInputPrice);
-      const output = this.formatPrice(entry.outputPrice);
-      return `input ${input} · cached ${cached} · output ${output}`;
-    }
-
-    formatPrice(value) {
-      if (typeof value !== 'number') {
-        return '—';
-      }
-      return `$${value}`;
-    }
-
-    formatPriceBadge(sum) {
-      if (typeof sum !== 'number') {
-        return '— / 1M';
-      }
-      return `$${sum} / 1M`;
-    }
-
-    formatModelSpec(id, tier) {
-      if (global.NT && global.NT.AiCommon && typeof global.NT.AiCommon.formatModelSpec === 'function') {
-        return global.NT.AiCommon.formatModelSpec(id, tier);
-      }
-      return `${id}:${tier}`;
-    }
-
-    getModelRegistry() {
-      if (global.NT && global.NT.AiCommon && typeof global.NT.AiCommon.createModelRegistry === 'function') {
-        return global.NT.AiCommon.createModelRegistry();
-      }
-
-      return { entries: [] };
-    }
-
-    async renderStatus() {
-      const statusData = await this.storageGet(['translationStatusByTab']);
-      const byTab = statusData.translationStatusByTab || {};
-      this.renderStatusFromSnapshot(byTab);
-    }
-
-    renderStatusFromSnapshot(byTab) {
-      const entry = this.activeTabId !== null ? byTab[this.activeTabId] : null;
-      const statusText = this.resolveStatusText(entry);
-      const progressValue = this.resolveProgressValue(entry);
+      const progress = typeof entry.progress === 'number'
+        ? (Time && typeof Time.clamp === 'function' ? Time.clamp(entry.progress, 0, 100) : Math.max(0, Math.min(100, entry.progress)))
+        : 0;
 
       if (this.statusText) {
-        this.statusText.textContent = statusText;
+        this.statusText.textContent = entry.message || entry.status || '—';
       }
-
       if (this.statusProgress) {
-        this.statusProgress.value = progressValue;
+        this.statusProgress.value = progress;
       }
-    }
-
-    resolveStatusText(entry) {
-      if (!entry) {
-        return '—';
-      }
-
-      if (typeof entry === 'string') {
-        return entry;
-      }
-
-      if (typeof entry.status === 'string') {
-        return entry.status;
-      }
-
-      return '—';
-    }
-
-    resolveProgressValue(entry) {
-      if (!entry || typeof entry.progress !== 'number') {
-        return 0;
-      }
-
-      const Time = global.NT && global.NT.Time ? global.NT.Time : null;
-      return Time && typeof Time.clamp === 'function' ? Time.clamp(entry.progress, 0, 100) : Math.max(0, Math.min(100, entry.progress));
     }
 
     updateVisibilityIcon() {
       if (!this.visibilityIcon) {
         return;
       }
-
       this.visibilityIcon.textContent = this.state.translationVisible ? '👁️' : '🙈';
-    }
-
-    async toggleVisibility() {
-      this.state.translationVisible = !this.state.translationVisible;
-      this.updateVisibilityIcon();
-
-      if (!this.chromeApi || !this.chromeApi.tabs || typeof this.chromeApi.tabs.sendMessage !== 'function') {
-        return;
-      }
-
-      if (this.activeTabId === null) {
-        return;
-      }
-
-      try {
-        await new Promise((resolve, reject) => {
-          this.chromeApi.tabs.sendMessage(
-            this.activeTabId,
-            { type: 'SET_TRANSLATION_VISIBILITY', visible: this.state.translationVisible },
-            (response) => {
-              const error = this.chromeApi.runtime && this.chromeApi.runtime.lastError;
-              if (error) {
-                reject(error);
-                return;
-              }
-              resolve(response);
-            }
-          );
-        });
-      } catch (error) {
-        // ignore tab errors
-      }
-
-      this.scheduleSave({ translationVisibilityByTab: { [this.activeTabId]: this.state.translationVisible } });
-    }
-
-    toggleApiKeyVisibility() {
-      if (!this.apiKeyInput || !this.apiKeyToggle) {
-        return;
-      }
-
-      const isPassword = this.apiKeyInput.type === 'password';
-      this.apiKeyInput.type = isPassword ? 'text' : 'password';
-      this.apiKeyToggle.textContent = isPassword ? 'Скрыть' : 'Показать';
-    }
-
-    async openDebug() {
-      if (!this.chromeApi || !this.chromeApi.tabs || !this.chromeApi.runtime) {
-        return;
-      }
-
-      const activeTab = await this.getActiveTab();
-      const tabId = activeTab ? activeTab.id : '';
-      const tabUrl = activeTab && activeTab.url ? activeTab.url : '';
-      const debugUrl = `${this.chromeApi.runtime.getURL('ui/debug.html')}?tabId=${tabId}&url=${encodeURIComponent(tabUrl)}`;
-
-      this.chromeApi.tabs.create({ url: debugUrl });
-    }
-
-    scheduleSave(patch) {
-      if (!this.settingsStore) {
-        this.storageSet(patch);
-        return;
-      }
-
-      this.settingsStore.queuePatch(patch, {
-        finalize: (payload) => {
-          if (payload.translationVisibilityByTab && this.activeTabId !== null) {
-            const current = this.state.translationVisible;
-            payload.translationVisibilityByTab = { [this.activeTabId]: current };
-          }
-        }
-      });
-    }
-
-    storageGet(keys) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return Promise.resolve({});
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.get(keys, (result) => resolve(result || {}));
-      });
-    }
-
-    storageSet(payload) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return Promise.resolve();
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.set(payload, () => resolve());
-      });
-    }
-
-    getActiveTab() {
-      if (!this.chromeApi || !this.chromeApi.tabs || typeof this.chromeApi.tabs.query !== 'function') {
-        return Promise.resolve(null);
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          resolve(tabs && tabs.length ? tabs[0] : null);
-        });
-      });
     }
   }
 
-  const controller = new PopupController({ doc: global.document, chromeApi: global.chrome });
+  const ui = new global.NT.UiModule({
+    chromeApi: global.chrome,
+    portName: 'popup'
+  }).init();
+
+  const controller = new PopupController({ doc: global.document, ui });
+  ui.setHandlers({
+    onSnapshot: (payload) => controller.applySnapshot(payload),
+    onPatch: (payload) => controller.applyPatch(payload)
+  });
   controller.init();
 })(globalThis);

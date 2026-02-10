@@ -1,146 +1,152 @@
-      :root {
-        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-        color-scheme: light;
-        font-size: 14px;
-      }
+/*
+ * Debug page presentation layer.
+ *
+ * Styles keep operational diagnostics readable in narrow extension windows:
+ * no horizontal scroll, wrapped long tokens/model specs, compact grids.
+ *
+ * Event stream and rate-limit tables are optimized for high update cadence
+ * from snapshot/patch deltas while preserving clear visual hierarchy.
+ */
+* {
+  box-sizing: border-box;
+}
 
-      body {
-        margin: 0;
-        background: #0f1115;
-        color: #f5f7fb;
-      }
+:root {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+  font-size: 14px;
+}
 
-      .debug {
-        max-width: 520px;
-        margin: 24px auto;
-        padding: 20px;
-        background: #151922;
-        border: 1px solid #222838;
-        border-radius: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
+body {
+  margin: 0;
+  background: #0f1115;
+  color: #f5f7fb;
+  overflow-x: hidden;
+}
 
-      .debug__title {
-        margin: 0;
-        font-size: 20px;
-      }
+.debug {
+  max-width: 760px;
+  margin: 16px auto;
+  padding: 16px;
+  background: #151922;
+  border: 1px solid #222838;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
-      .debug__subtitle {
-        margin: 0;
-        color: #9aa3b2;
-      }
+.debug__title { margin: 0; font-size: 20px; }
+.debug__subtitle { margin: 0; color: #9aa3b2; }
+.debug__label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #8fa0b7; }
+.debug__status { display: grid; gap: 6px; }
+.debug__row { display: flex; justify-content: space-between; gap: 8px; }
 
-      .debug__label {
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #8fa0b7;
-      }
+.debug__table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.debug__table th, .debug__table td { padding: 6px 4px; border-bottom: 1px solid #222838; text-align: left; }
+.debug__table th { color: #8fa0b7; font-weight: 600; }
 
-      .debug__status {
-        display: grid;
-        gap: 6px;
-      }
+.debug__controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.debug__controls input,
+.debug__controls select,
+.debug__controls button,
+.event-copy-btn {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #2a3144;
+  background: #0f1218;
+  color: #f5f7fb;
+}
+.debug__controls button,
+.event-copy-btn { cursor: pointer; }
 
-      .debug__row {
-        display: flex;
-        justify-content: space-between;
-      }
+#eventList,
+.debug__event-log {
+  display: flex;
+  flex-direction: column;
+  max-height: 440px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #222838;
+  border-radius: 10px;
+  background: #0f1218;
+}
 
-      .debug__table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
+.event-row {
+  display: grid;
+  grid-template-columns: 74px 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
 
-      .debug__table th,
-      .debug__table td {
-        padding: 6px 4px;
-        border-bottom: 1px solid #222838;
-        text-align: left;
-      }
+.event-time,
+.event-level {
+  font-variant-numeric: tabular-nums;
+  opacity: .85;
+}
 
-      .debug__table th {
-        color: #8fa0b7;
-        font-weight: 600;
-      }
+.event-level { text-transform: uppercase; font-size: 11px; }
+.event-content { min-width: 0; }
+.event-tag { font-size: 11px; opacity: .75; overflow-wrap: anywhere; }
+.event-msg,
+.event-meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
 
-      .debug__controls {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 8px;
-      }
+.event-meta {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  opacity: .75;
+  padding-left: 0;
+}
 
-      .debug__controls input,
-      .debug__controls select,
-      .debug__controls button {
-        font-size: 12px;
-        padding: 6px 8px;
-        border-radius: 8px;
-        border: 1px solid #2a3144;
-        background: #0f1218;
-        color: #f5f7fb;
-      }
+pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+progress { width: 100%; height: 10px; accent-color: #4f8ef7; }
 
-      .debug__controls button {
-        cursor: pointer;
-      }
+.rate-head,
+.rate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(5, minmax(0, 0.8fr));
+  gap: 8px;
+  align-items: start;
+}
 
-      .debug__button {
-        font-size: 12px;
-        padding: 6px 10px;
-        border-radius: 8px;
-        border: 1px solid #2a3144;
-        background: #0f1218;
-        color: #f5f7fb;
-        cursor: pointer;
-        align-self: flex-start;
-      }
+.rate-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #8fa0b7;
+  margin-top: 6px;
+}
 
-      .debug__event-log {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: 420px;
-        overflow-y: auto;
-        overflow-x: hidden;
-        padding-right: 6px;
-      }
+.rate-table {
+  border: 1px solid #222838;
+  border-radius: 10px;
+  background: #0f1218;
+  overflow-x: hidden;
+}
 
-      .event-row {
-        display: grid;
-        grid-template-columns: 72px 110px minmax(0, 1fr);
-        gap: 8px;
-        align-items: start;
-      }
+.rate-row {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
 
-      .event-message,
-      .event-meta {
-        overflow-wrap: anywhere;
-        word-break: break-word;
-        white-space: normal;
-      }
+.rate-cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
-      .event-meta {
-        color: #8fa0b7;
-        font-size: 11px;
-      }
+.rate-cell-model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 
-      .debug__event-card {
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: 1px solid #222838;
-        background: #0f1218;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      progress {
-        width: 100%;
-        height: 10px;
-        accent-color: #4f8ef7;
-      }
-    
+.rate-row--current {
+  background: rgba(79,142,247,.12);
+}

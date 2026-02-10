@@ -1,3 +1,13 @@
+/**
+ * LEGACY MODULE — NOT USED IN PRODUCTION PATH.
+ *
+ * This file is kept only as historical reference for previous model-selection
+ * experiments. Active model selection now lives in `LlmEngine` and uses
+ * `ModelSelection` policies with benchmark/rate-limit data.
+ *
+ * Do not import this file in background bootstrap or UI runtime paths.
+ * In MV3, minimizing loaded scripts reduces complexity and restart overhead.
+ */
 (function initModelChooser(global) {
   class ModelChooser {
     constructor({ chromeApi, modelRegistry, benchmarkStore, benchmarker, eventLogger }) {
@@ -241,10 +251,6 @@
         }
       };
 
-      if (tabId !== null && tabId !== undefined) {
-        this.storeDecision(tabId, result, taskType);
-      }
-
       this.logEvent('info', 'chooser', 'Model decision finalized', {
         source: 'background',
         modelSpec: result.chosenModelSpec,
@@ -254,28 +260,7 @@
     }
 
     storeDecision(tabId, result, taskType) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return;
-      }
-
-      const payload = {
-        chosenModelSpec: result.chosenModelSpec,
-        chosenModelId: result.chosenModelId,
-        serviceTier: result.serviceTier,
-        decision: result.decision,
-        taskType: taskType || 'unknown',
-        updatedAt: this.now()
-      };
-
-      this.chromeApi.storage.local.get({ translationStatusByTab: {} }, (data) => {
-        const status = { ...(data.translationStatusByTab || {}) };
-        const current = status[tabId] || {};
-        status[tabId] = {
-          ...current,
-          modelDecision: payload
-        };
-        this.chromeApi.storage.local.set({ translationStatusByTab: status });
-      });
+      // legacy no-op: model decision persistence moved to BG TabStateStore
     }
 
     now() {

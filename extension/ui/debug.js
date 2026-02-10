@@ -1,8 +1,21 @@
+/**
+ * Debug page controller for live diagnostics stream.
+ *
+ * State is hydrated from snapshot/patch messages via `UiModule`; no direct
+ * storage access is used in this controller. Event log updates are incremental:
+ * append deltas, reset notifications, and explicit older-page requests.
+ *
+ * Rendering keeps rows compact and wrapped to avoid horizontal scrolling while
+ * preserving full message/meta visibility.
+ *
+ * The page also renders compact per-model rate-limit state from snapshot/patch
+ * (`modelLimitsBySpec`) to explain cooldown/reservation waits in real time.
+ */
 (function initDebugPage(global) {
   class DebugPage {
-    constructor({ doc, chromeApi }) {
+    constructor({ doc, ui }) {
       this.doc = doc;
-      this.chromeApi = chromeApi;
+      this.ui = ui;
       this.state = {
         tabId: null,
         url: '',
@@ -10,12 +23,14 @@
         status: null,
         benchmarkStatus: null,
         benchmarks: {},
-        eventLog: { seq: 0, items: [] }
+        modelLimitsBySpec: {},
+        eventLog: { seq: 0, items: [] },
+        filters: { level: 'all', q: '', tag: 'all' },
+        oldestSeq: null
       };
       this.fields = {};
-      this.portClient = null;
-      this.eventFilters = { level: 'all', tag: 'all', search: '' };
-      this.eventLimit = 200;
+      this.pendingLoadOlderRequestId = null;
+      this.renderTimer = null;
     }
 
     init() {
@@ -23,11 +38,6 @@
       this.bindEventControls();
       this.state = { ...this.state, ...this.readQuery() };
       this.render();
-      this.initPortClient();
-      this.loadStatusFromStorage(this.state.tabId);
-      this.loadBenchmarksFromStorage();
-      this.loadEventLogFromStorage();
-      this.bindStorageUpdates();
     }
 
     cacheElements() {
@@ -44,21 +54,22 @@
       this.fields.benchCurrent = this.doc.querySelector('[data-field="bench-current"]');
       this.fields.benchMessage = this.doc.querySelector('[data-field="bench-message"]');
       this.fields.benchTable = this.doc.querySelector('[data-field="bench-table"]');
+      this.fields.rateCurrentModel = this.doc.querySelector('[data-field="rate-current-model"]');
+      this.fields.rateTable = this.doc.querySelector('[data-field="rate-table"]');
       this.fields.eventLevel = this.doc.querySelector('[data-field="event-level"]');
       this.fields.eventTag = this.doc.querySelector('[data-field="event-tag"]');
       this.fields.eventSearch = this.doc.querySelector('[data-field="event-search"]');
       this.fields.eventLog = this.doc.querySelector('[data-field="event-log"]');
       this.fields.eventCopy = this.doc.querySelector('[data-action="event-copy"]');
       this.fields.eventClear = this.doc.querySelector('[data-action="event-clear"]');
-      this.fields.eventMore = this.doc.querySelector('[data-action="event-more"]');
+      this.fields.eventOlder = this.doc.querySelector('[data-action="event-older"]');
     }
 
     readQuery() {
       const params = new URLSearchParams(global.location.search);
-      const tabId = params.get('tabId');
+      const tabId = Number(params.get('tabId'));
       const url = params.get('url') || '';
       let origin = '';
-
       if (url) {
         try {
           origin = new URL(url).origin;
@@ -66,288 +77,361 @@
           origin = url;
         }
       }
-
-      return {
-        tabId: tabId ? Number(tabId) : null,
-        url,
-        origin
-      };
-    }
-
-    loadStatusFromStorage(tabId) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        this.updateStatus(null);
-        return;
-      }
-
-      this.chromeApi.storage.local.get({ translationStatusByTab: {} }, (result) => {
-        const byTab = result.translationStatusByTab || {};
-        const entry = tabId !== null ? byTab[tabId] : null;
-        this.updateStatus(entry);
-      });
-    }
-
-    loadBenchmarksFromStorage() {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        this.updateBenchmarks(null, {});
-        return;
-      }
-
-      this.chromeApi.storage.local.get({ modelBenchmarkStatus: null, modelBenchmarks: {} }, (result) => {
-        this.updateBenchmarks(result.modelBenchmarkStatus || null, result.modelBenchmarks || {});
-      });
-    }
-
-    loadEventLogFromStorage() {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        this.updateEventLog({ seq: 0, items: [] });
-        return;
-      }
-
-      this.chromeApi.storage.local.get({ eventLog: { seq: 0, items: [] } }, (result) => {
-        this.updateEventLog(result.eventLog || { seq: 0, items: [] });
-      });
-    }
-
-    initPortClient() {
-      const UiPortClient = global.NT && global.NT.UiPortClient ? global.NT.UiPortClient : null;
-      if (!UiPortClient) {
-        return;
-      }
-
-      this.portClient = new UiPortClient({
-        portName: 'debug',
-        onSnapshot: (payload) => this.applySnapshot(payload),
-        onPatch: (payload) => this.applyPatch(payload)
-      });
-      this.portClient.connect();
+      return { tabId: Number.isFinite(tabId) ? tabId : null, url, origin };
     }
 
     applySnapshot(payload) {
       if (!payload) {
         return;
       }
-
       if (payload.tabId !== null && payload.tabId !== undefined) {
         this.state.tabId = payload.tabId;
       }
-
       if (payload.translationStatusByTab) {
-        const entry = this.state.tabId !== null ? payload.translationStatusByTab[this.state.tabId] : null;
-        this.updateStatus(entry);
+        this.state.status = this.state.tabId !== null ? payload.translationStatusByTab[this.state.tabId] || null : null;
       }
-
-      if (payload.modelBenchmarkStatus || payload.modelBenchmarks) {
-        this.updateBenchmarks(
-          payload.modelBenchmarkStatus || this.state.benchmarkStatus,
-          payload.modelBenchmarks || this.state.benchmarks
-        );
+      if (Object.prototype.hasOwnProperty.call(payload, 'modelBenchmarkStatus')) {
+        this.state.benchmarkStatus = payload.modelBenchmarkStatus || null;
       }
-
+      if (Object.prototype.hasOwnProperty.call(payload, 'modelBenchmarks')) {
+        this.state.benchmarks = payload.modelBenchmarks || {};
+      }
+      if (payload.modelLimitsBySpec) {
+        this.state.modelLimitsBySpec = payload.modelLimitsBySpec || {};
+      }
       if (payload.eventLog) {
-        this.updateEventLog(payload.eventLog);
+        this._mergeEventLogSnapshot(payload.eventLog.items || []);
+        this.state.eventLog.seq = typeof payload.eventLog.seq === 'number' ? payload.eventLog.seq : this.state.eventLog.seq;
       }
 
-      if (this.portClient && typeof this.portClient.acknowledgeSnapshot === 'function') {
-        this.portClient.acknowledgeSnapshot();
+      if (this.ui.portClient && typeof this.ui.portClient.acknowledgeSnapshot === 'function') {
+        this.ui.portClient.acknowledgeSnapshot();
       }
+      this.render();
     }
 
     applyPatch(payload) {
-      if (!payload || !payload.patch) {
+      if (!payload) {
         return;
       }
 
-      if (payload.patch.translationStatusByTab) {
-        const entry = this.state.tabId !== null ? payload.patch.translationStatusByTab[this.state.tabId] : null;
-        this.updateStatus(entry);
+      if (payload.translationStatusByTab) {
+        this.state.status = this.state.tabId !== null ? payload.translationStatusByTab[this.state.tabId] || null : null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'modelBenchmarkStatus')) {
+        this.state.benchmarkStatus = payload.modelBenchmarkStatus || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'modelBenchmarks')) {
+        this.state.benchmarks = payload.modelBenchmarks || {};
       }
 
-      if (payload.patch.modelBenchmarkStatus || payload.patch.modelBenchmarks) {
-        this.updateBenchmarks(
-          payload.patch.modelBenchmarkStatus || this.state.benchmarkStatus,
-          payload.patch.modelBenchmarks || this.state.benchmarks
-        );
+      if (payload.modelLimitsBySpec) {
+        this.state.modelLimitsBySpec = payload.modelLimitsBySpec || {};
       }
 
-      if (payload.patch.eventLog) {
-        this.updateEventLog(payload.patch.eventLog);
+      if (payload.eventLogAppend && payload.eventLogAppend.item) {
+        const entry = payload.eventLogAppend.item;
+        const exists = this.state.eventLog.items.some((item) => item && item.seq === entry.seq);
+        if (!exists) {
+          this.state.eventLog.items.push(entry);
+          this.state.eventLog.items.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+          if (this.state.eventLog.items.length > 800) {
+            this.state.eventLog.items = this.state.eventLog.items.slice(-800);
+          }
+          this.state.oldestSeq = this.state.eventLog.items.length ? this.state.eventLog.items[0].seq : null;
+        }
+        this.state.eventLog.seq = Math.max(this.state.eventLog.seq || 0, payload.eventLogAppend.seq || 0);
+        this.scheduleEventRender();
       }
-    }
 
-    bindStorageUpdates() {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.onChanged) {
-        return;
+      if (payload.eventLogReset) {
+        this.state.eventLog = { seq: this.state.eventLog.seq || 0, items: [] };
+        this.state.oldestSeq = null;
+        this.scheduleEventRender();
       }
 
-      this.chromeApi.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName !== 'local') {
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
+      if (payload.type === UiProtocol.UI_EVENT_LOG_PAGE_RESULT) {
+        if (!this.pendingLoadOlderRequestId || payload.requestId !== this.pendingLoadOlderRequestId) {
           return;
         }
-
-        if (changes.translationStatusByTab) {
-          const value = changes.translationStatusByTab.newValue || {};
-          const entry = this.state.tabId !== null ? value[this.state.tabId] : null;
-          this.updateStatus(entry);
-        }
-
-        if (changes.modelBenchmarkStatus || changes.modelBenchmarks) {
-          const status = changes.modelBenchmarkStatus ? changes.modelBenchmarkStatus.newValue : this.state.benchmarkStatus;
-          const benchmarks = changes.modelBenchmarks ? changes.modelBenchmarks.newValue : this.state.benchmarks;
-          this.updateBenchmarks(status || null, benchmarks || {});
-        }
-
-        if (changes.eventLog) {
-          this.updateEventLog(changes.eventLog.newValue || { seq: 0, items: [] });
-        }
-      });
-    }
-
-    updateStatus(entry) {
-      this.state.status = entry || null;
-      this.renderStatus();
-      this.renderDecision();
-    }
-
-    updateBenchmarks(status, benchmarks) {
-      this.state.benchmarkStatus = status || null;
-      this.state.benchmarks = benchmarks || {};
-      this.renderBenchmarks();
-    }
-
-    updateEventLog(eventLog) {
-      this.state.eventLog = eventLog && typeof eventLog === 'object' ? eventLog : { seq: 0, items: [] };
-      this.refreshTagOptions();
-      this.renderEventLog();
-    }
-
-    render() {
-      if (this.fields.site) {
-        const site = this.state.origin || this.state.url || '—';
-        this.fields.site.textContent = `Сайт: ${site}`;
+        this.pendingLoadOlderRequestId = null;
+        const incoming = Array.isArray(payload.items) ? payload.items : [];
+        const existing = new Set(this.state.eventLog.items.map((item) => item.seq));
+        const merged = incoming.filter((item) => item && !existing.has(item.seq)).concat(this.state.eventLog.items);
+        merged.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+        this.state.eventLog.items = merged;
+        this.state.oldestSeq = merged.length ? merged[0].seq : null;
+        this.scheduleEventRender();
       }
 
       this.renderStatus();
-      this.renderDecision();
       this.renderBenchmarks();
-      this.renderEventLog();
+      this.renderRateLimits();
+    }
+
+    _mergeEventLogSnapshot(items) {
+      const incoming = Array.isArray(items) ? items : [];
+      const map = new Map();
+      this.state.eventLog.items.forEach((item) => {
+        if (item && typeof item.seq === 'number') {
+          map.set(item.seq, item);
+        }
+      });
+      incoming.forEach((item) => {
+        if (item && typeof item.seq === 'number') {
+          map.set(item.seq, item);
+        }
+      });
+      this.state.eventLog.items = Array.from(map.values()).sort((a, b) => a.seq - b.seq);
+      this.state.oldestSeq = this.state.eventLog.items.length ? this.state.eventLog.items[0].seq : null;
     }
 
     bindEventControls() {
       if (this.fields.eventLevel) {
-        this.fields.eventLevel.addEventListener('change', (event) => {
-          this.eventFilters.level = event.target.value;
+        this.fields.eventLevel.addEventListener('change', () => {
+          this.state.filters.level = this.fields.eventLevel.value || 'all';
           this.renderEventLog();
         });
       }
-
       if (this.fields.eventTag) {
-        this.fields.eventTag.addEventListener('change', (event) => {
-          this.eventFilters.tag = event.target.value;
+        this.fields.eventTag.addEventListener('change', () => {
+          this.state.filters.tag = this.fields.eventTag.value || 'all';
           this.renderEventLog();
         });
       }
-
       if (this.fields.eventSearch) {
-        this.fields.eventSearch.addEventListener('input', (event) => {
-          this.eventFilters.search = event.target.value || '';
+        this.fields.eventSearch.addEventListener('input', () => {
+          this.state.filters.q = this.fields.eventSearch.value || '';
           this.renderEventLog();
         });
       }
-
-      if (this.fields.eventMore) {
-        this.fields.eventMore.addEventListener('click', () => {
-          this.eventLimit += 200;
-          this.renderEventLog();
-        });
-      }
-
       if (this.fields.eventCopy) {
         this.fields.eventCopy.addEventListener('click', () => this.copyEventJson());
       }
-
       if (this.fields.eventClear) {
-        this.fields.eventClear.addEventListener('click', () => this.clearEventLog());
+        this.fields.eventClear.addEventListener('click', () => {
+          this.ui.sendUiCommand('CLEAR_EVENT_LOG', {});
+        });
       }
+      if (this.fields.eventOlder) {
+        this.fields.eventOlder.addEventListener('click', () => this.loadOlderEvents());
+      }
+    }
+
+    loadOlderEvents() {
+      const oldest = this.state.oldestSeq || (this.state.eventLog.items.length ? this.state.eventLog.items[0].seq : null);
+      const requestId = this.ui.sendUiCommand('EVENT_LOG_PAGE', { beforeSeq: oldest, limit: 200 }, {});
+      this.pendingLoadOlderRequestId = requestId;
+    }
+
+    render() {
+      if (this.fields.site) {
+        this.fields.site.textContent = `Сайт: ${this.state.origin || '—'}`;
+      }
+      this.renderStatus();
+      this.renderBenchmarks();
+      this.renderRateLimits();
+      this.renderRateLimits();
+      this.renderEventLog();
     }
 
     renderStatus() {
-      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       const status = this.state.status || {};
-      const completed = this.normalizeNumber(status.completed);
-      const total = this.normalizeNumber(status.total);
-      const inProgress = this.normalizeNumber(status.inProgress);
-      const message = this.normalizeMessage(status.message);
-      const safeMessage = Html ? Html.safeText(message, 'нет данных') : message;
-      const progressValue = this.normalizeNumber(status.progress, 0);
-
+      if (this.fields.progress) {
+        this.fields.progress.value = Math.max(0, Math.min(100, Number(status.progress || 0)));
+      }
       if (this.fields.completed) {
-        this.fields.completed.textContent = completed !== null ? completed : '—';
+        this.fields.completed.textContent = String(status.completed || 0);
       }
       if (this.fields.total) {
-        this.fields.total.textContent = total !== null ? total : '—';
+        this.fields.total.textContent = String(status.total || 0);
       }
       if (this.fields.inProgress) {
-        this.fields.inProgress.textContent = inProgress !== null ? inProgress : '—';
+        this.fields.inProgress.textContent = String(status.inProgress || 0);
       }
       if (this.fields.message) {
-        this.fields.message.textContent = safeMessage;
+        this.fields.message.textContent = status.message || status.status || 'нет данных';
       }
-      if (this.fields.progress) {
-        this.fields.progress.value = Math.max(0, Math.min(100, progressValue));
-      }
-    }
-
-    renderDecision() {
-      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
-      const decision = this.state.status && this.state.status.modelDecision ? this.state.status.modelDecision : null;
-      const policy = decision && decision.decision ? decision.decision.policy : null;
-      const reason = decision && decision.decision ? decision.decision.reason : null;
-      const modelSpec = decision ? decision.chosenModelSpec : null;
-
+      const md = status.modelDecision || {};
       if (this.fields.decisionPolicy) {
-        this.fields.decisionPolicy.textContent = Html ? Html.safeText(policy || '—', '—') : (policy || '—');
+        this.fields.decisionPolicy.textContent = md.decision && md.decision.policy ? md.decision.policy : '—';
       }
       if (this.fields.decisionModel) {
-        this.fields.decisionModel.textContent = Html ? Html.safeText(modelSpec || '—', '—') : (modelSpec || '—');
+        this.fields.decisionModel.textContent = md.chosenModelSpec || '—';
       }
       if (this.fields.decisionReason) {
-        this.fields.decisionReason.textContent = Html ? Html.safeText(reason || '—', '—') : (reason || '—');
+        this.fields.decisionReason.textContent = md.decision && md.decision.reason ? md.decision.reason : '—';
       }
     }
 
     renderBenchmarks() {
-      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       const status = this.state.benchmarkStatus || {};
       if (this.fields.benchStatus) {
-        this.fields.benchStatus.textContent = Html ? Html.safeText(status.status || '—', '—') : (status.status || '—');
+        this.fields.benchStatus.textContent = status.status || '—';
       }
       if (this.fields.benchCurrent) {
-        this.fields.benchCurrent.textContent = Html ? Html.safeText(status.currentModelSpec || '—', '—') : (status.currentModelSpec || '—');
+        this.fields.benchCurrent.textContent = status.currentModelSpec || '—';
       }
       if (this.fields.benchMessage) {
-        const message = status.message || status.errorCode || '—';
-        this.fields.benchMessage.textContent = Html ? Html.safeText(message, '—') : message;
+        this.fields.benchMessage.textContent = status.message || status.reason || '—';
       }
-      if (this.fields.benchTable) {
-        this.fields.benchTable.innerHTML = '';
-        const entries = this.sortedBenchmarks(this.state.benchmarks);
-        if (!entries.length) {
-          const row = this.doc.createElement('tr');
-          const cell = this.doc.createElement('td');
-          cell.colSpan = 3;
-          cell.textContent = 'нет данных';
-          row.appendChild(cell);
-          this.fields.benchTable.appendChild(row);
-          return;
+      if (!this.fields.benchTable) {
+        return;
+      }
+      this.fields.benchTable.innerHTML = '';
+      const entries = Object.keys(this.state.benchmarks || {}).sort();
+      entries.forEach((spec) => {
+        const row = this.doc.createElement('tr');
+        row.appendChild(this.cell(spec));
+        row.appendChild(this.cell(String(Math.round((this.state.benchmarks[spec] || {}).medianMs || 0) || '—')));
+        row.appendChild(this.cell(this.formatTs((this.state.benchmarks[spec] || {}).updatedAt)));
+        this.fields.benchTable.appendChild(row);
+      });
+      if (!entries.length) {
+        const row = this.doc.createElement('tr');
+        row.appendChild(this.cell('—')); row.appendChild(this.cell('—')); row.appendChild(this.cell('—'));
+        this.fields.benchTable.appendChild(row);
+      }
+    }
+
+
+    renderRateLimits() {
+      if (!this.fields.rateTable) {
+        return;
+      }
+      const limits = this.state.modelLimitsBySpec || {};
+      const rows = Object.keys(limits).sort();
+      const currentModel = this.state.status && this.state.status.modelDecision
+        ? this.state.status.modelDecision.chosenModelSpec || null
+        : null;
+      if (this.fields.rateCurrentModel) {
+        this.fields.rateCurrentModel.textContent = currentModel || '—';
+      }
+
+      this.fields.rateTable.innerHTML = '';
+      rows.forEach((spec) => {
+        const item = limits[spec] || {};
+        const remReq = item.remainingRequests === null || item.remainingRequests === undefined ? '—' : String(item.remainingRequests);
+        const remTok = item.remainingTokens === null || item.remainingTokens === undefined ? '—' : String(item.remainingTokens);
+        const reserved = `${item.reservedRequests || 0}/${item.reservedTokens || 0}`;
+        const cooldown = this.formatCooldown(item.cooldownUntilTs);
+        const reset = this.formatReset(item.resetRequestsAt, item.resetTokensAt);
+
+        const row = this.doc.createElement('div');
+        row.className = 'rate-row';
+        if (spec === currentModel) {
+          row.classList.add('rate-row--current');
         }
-        entries.forEach((entry) => {
-          const row = this.doc.createElement('tr');
-          row.appendChild(this.renderBenchCell(Html ? Html.safeText(entry.modelSpec, '—') : entry.modelSpec));
-          row.appendChild(this.renderBenchCell(this.formatNumber(entry.medianMs)));
-          row.appendChild(this.renderBenchCell(this.formatTimestamp(entry.updatedAt)));
-          this.fields.benchTable.appendChild(row);
-        });
+        row.appendChild(this.rateCell('rate-cell-model', spec));
+        row.appendChild(this.rateCell('', remReq));
+        row.appendChild(this.rateCell('', remTok));
+        row.appendChild(this.rateCell('', reserved));
+        row.appendChild(this.rateCell('', cooldown));
+        row.appendChild(this.rateCell('', reset));
+        this.fields.rateTable.appendChild(row);
+      });
+
+      if (!rows.length) {
+        const row = this.doc.createElement('div');
+        row.className = 'rate-row';
+        row.textContent = 'данные лимитов пока отсутствуют';
+        this.fields.rateTable.appendChild(row);
+      }
+    }
+
+    rateCell(className, text) {
+      const el = this.doc.createElement('div');
+      el.className = `rate-cell ${className || ''}`.trim();
+      el.textContent = text;
+      return el;
+    }
+
+    formatCooldown(cooldownUntilTs) {
+      if (typeof cooldownUntilTs !== 'number') {
+        return '—';
+      }
+      const remain = Math.max(0, cooldownUntilTs - Date.now());
+      if (remain <= 0) {
+        return 'ready';
+      }
+      return `cooldown ${Math.ceil(remain / 1000)}s`;
+    }
+
+    formatReset(reqTs, tokTs) {
+      const req = typeof reqTs === 'number' ? Math.max(0, reqTs - Date.now()) : null;
+      const tok = typeof tokTs === 'number' ? Math.max(0, tokTs - Date.now()) : null;
+      const vals = [req, tok].filter((v) => typeof v === 'number');
+      if (!vals.length) {
+        return '—';
+      }
+      return `${Math.ceil(Math.min(...vals) / 1000)}s`;
+    }
+
+    scheduleEventRender() {
+      if (this.renderTimer) {
+        return;
+      }
+      this.renderTimer = global.setTimeout(() => {
+        this.renderTimer = null;
+        this.renderEventLog();
+      }, 120);
+    }
+
+    renderEventLog() {
+      if (!this.fields.eventLog) {
+        return;
+      }
+      const filtered = this.getFilteredEvents();
+      const visible = filtered.slice(-400);
+      this.fields.eventLog.innerHTML = '';
+      this.refreshTagOptions();
+
+      visible.forEach((event) => {
+        const row = this.doc.createElement('div');
+        row.className = 'event-row';
+
+        const time = this.doc.createElement('div');
+        time.className = 'event-time';
+        time.textContent = this.formatTs(event.ts);
+
+        const level = this.doc.createElement('div');
+        level.className = 'event-level';
+        level.textContent = String(event.level || 'info');
+
+        const content = this.doc.createElement('div');
+        content.className = 'event-content';
+        const tag = this.doc.createElement('div');
+        tag.className = 'event-tag';
+        tag.textContent = String(event.tag || 'general');
+        const msg = this.doc.createElement('div');
+        msg.className = 'event-msg';
+        msg.textContent = String(event.message || '');
+        const copyBtn = this.doc.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'event-copy-btn';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => this.copySingleEvent(event));
+        content.appendChild(tag);
+        content.appendChild(msg);
+        content.appendChild(copyBtn);
+
+        const meta = this.doc.createElement('div');
+        meta.className = 'event-meta';
+        meta.textContent = this.formatMeta(event.meta || {});
+
+        row.appendChild(time);
+        row.appendChild(level);
+        row.appendChild(content);
+        row.appendChild(meta);
+        this.fields.eventLog.appendChild(row);
+      });
+
+      if (!visible.length) {
+        const empty = this.doc.createElement('div');
+        empty.className = 'event-row';
+        empty.textContent = 'нет событий';
+        this.fields.eventLog.appendChild(empty);
       }
     }
 
@@ -355,216 +439,55 @@
       if (!this.fields.eventTag) {
         return;
       }
-      const tags = new Set();
-      (this.state.eventLog.items || []).forEach((item) => {
-        if (item && item.tag) {
-          tags.add(item.tag);
-        }
-      });
-
-      const current = this.fields.eventTag.value || 'all';
-      const options = ['all', ...Array.from(tags).sort()];
+      const tags = ['all', ...Array.from(new Set(this.state.eventLog.items.map((item) => item.tag).filter(Boolean))).sort()];
+      const current = this.state.filters.tag || 'all';
       this.fields.eventTag.innerHTML = '';
-      options.forEach((tag) => {
-        const option = this.doc.createElement('option');
-        option.value = tag;
-        option.textContent = tag === 'all' ? 'Tag: all' : `Tag: ${tag}`;
-        this.fields.eventTag.appendChild(option);
+      tags.forEach((value) => {
+        const opt = this.doc.createElement('option');
+        opt.value = value;
+        opt.textContent = value === 'all' ? 'Tag: all' : `Tag: ${value}`;
+        this.fields.eventTag.appendChild(opt);
       });
-      this.fields.eventTag.value = options.includes(current) ? current : 'all';
-    }
-
-    renderEventLog() {
-      if (!this.fields.eventLog) {
-        return;
-      }
-      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
-      const filtered = this.getFilteredEvents();
-      const visible = filtered.slice(-this.eventLimit);
-
-      this.fields.eventLog.innerHTML = '';
-      if (!visible.length) {
-        const empty = this.doc.createElement('div');
-        empty.className = 'debug__subtitle';
-        empty.textContent = 'нет событий';
-        this.fields.eventLog.appendChild(empty);
-      } else {
-        visible.forEach((event) => {
-          const card = this.doc.createElement('div');
-          card.className = 'debug__event-card';
-
-          const row = this.doc.createElement('div');
-          row.className = 'event-row';
-
-          const timeCell = this.doc.createElement('div');
-          timeCell.textContent = this.formatTimestamp(event.ts);
-
-          const tagCell = this.doc.createElement('div');
-          tagCell.textContent = event.tag || '—';
-
-          const messageCell = this.doc.createElement('div');
-          messageCell.className = 'event-message';
-          messageCell.textContent = Html ? Html.safeText(event.message || '—', '—') : (event.message || '—');
-
-          row.appendChild(timeCell);
-          row.appendChild(tagCell);
-          row.appendChild(messageCell);
-
-          const meta = this.doc.createElement('div');
-          meta.className = 'event-meta';
-          meta.textContent = this.formatEventMeta(event.meta || {});
-
-          card.appendChild(row);
-          card.appendChild(meta);
-          this.fields.eventLog.appendChild(card);
-        });
-      }
-
-      if (this.fields.eventMore) {
-        this.fields.eventMore.style.display = filtered.length > this.eventLimit ? 'inline-flex' : 'none';
-      }
+      this.fields.eventTag.value = tags.includes(current) ? current : 'all';
+      this.state.filters.tag = this.fields.eventTag.value;
     }
 
     getFilteredEvents() {
-      const items = Array.isArray(this.state.eventLog.items) ? this.state.eventLog.items : [];
-      const level = this.eventFilters.level;
-      const tag = this.eventFilters.tag;
-      const search = this.eventFilters.search.trim().toLowerCase();
-
-      return items.filter((event) => {
-        if (!event) {
+      const level = this.state.filters.level || 'all';
+      const tag = this.state.filters.tag || 'all';
+      const q = (this.state.filters.q || '').trim().toLowerCase();
+      return this.state.eventLog.items.filter((item) => {
+        if (!item) {
           return false;
         }
-        if (level !== 'all' && event.level !== level) {
+        if (level !== 'all' && item.level !== level) {
           return false;
         }
-        if (tag !== 'all' && event.tag !== tag) {
+        if (tag !== 'all' && item.tag !== tag) {
           return false;
         }
-        if (search) {
-          const haystack = [
-            event.message,
-            event.tag,
-            event.level,
-            event.meta ? JSON.stringify(event.meta) : ''
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase();
-          if (!haystack.includes(search)) {
-            return false;
-          }
+        if (!q) {
+          return true;
         }
-        return true;
+        const haystack = `${item.tag || ''} ${item.message || ''} ${JSON.stringify(item.meta || {})}`.toLowerCase();
+        return haystack.includes(q);
       });
     }
 
-    formatEventMeta(meta) {
+    formatMeta(meta) {
       const parts = [];
-      if (meta.source) {
-        parts.push(`source=${meta.source}`);
-      }
-      if (meta.tabId !== null && meta.tabId !== undefined) {
-        parts.push(`tab=${meta.tabId}`);
-      }
-      if (meta.requestId) {
-        parts.push(`req=${meta.requestId}`);
-      }
-      if (meta.stage) {
-        parts.push(`stage=${meta.stage}`);
-      }
-      if (meta.modelSpec) {
-        parts.push(`model=${meta.modelSpec}`);
-      }
-      if (meta.status) {
-        parts.push(`status=${meta.status}`);
-      }
-      if (typeof meta.latencyMs === 'number') {
-        parts.push(`latency=${Math.round(meta.latencyMs)}ms`);
-      }
+      if (meta.source) parts.push(`src=${meta.source}`);
+      if (meta.tabId !== null && meta.tabId !== undefined) parts.push(`tab=${meta.tabId}`);
+      if (meta.modelSpec) parts.push(`model=${meta.modelSpec}`);
+      if (meta.status) parts.push(`status=${meta.status}`);
+      if (meta.stage) parts.push(`stage=${meta.stage}`);
+      if (meta.requestId) parts.push(`req=${meta.requestId}`);
+      if (typeof meta.retryAfterMs === 'number') parts.push(`retry=${meta.retryAfterMs}ms`);
+      if (typeof meta.latencyMs === 'number') parts.push(`latency=${Math.round(meta.latencyMs)}ms`);
       return parts.join(' · ') || '—';
     }
 
-    async copyEventJson() {
-      const payload = this.getFilteredEvents();
-      const json = JSON.stringify(payload, null, 2);
-      if (global.navigator && global.navigator.clipboard && typeof global.navigator.clipboard.writeText === 'function') {
-        try {
-          await global.navigator.clipboard.writeText(json);
-          return;
-        } catch (error) {
-          // fallback below
-        }
-      }
-
-      const textarea = this.doc.createElement('textarea');
-      textarea.value = json;
-      this.doc.body.appendChild(textarea);
-      textarea.select();
-      this.doc.execCommand('copy');
-      textarea.remove();
-    }
-
-    clearEventLog() {
-      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
-      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-      const commandPayload = { name: 'CLEAR_EVENT_LOG', payload: {} };
-
-      if (this.portClient && typeof this.portClient.sendCommand === 'function') {
-        this.portClient.sendCommand(commandPayload.name, commandPayload.payload);
-        return;
-      }
-
-      if (!UiProtocol || !MessageEnvelope || !this.chromeApi || !this.chromeApi.runtime) {
-        return;
-      }
-
-      const envelope = MessageEnvelope.wrap(UiProtocol.UI_COMMAND, commandPayload, { source: 'debug' });
-      try {
-        this.chromeApi.runtime.sendMessage(envelope);
-      } catch (error) {
-        // ignore fallback errors
-      }
-    }
-
-    renderBenchCell(value) {
-      const cell = this.doc.createElement('td');
-      cell.textContent = value;
-      return cell;
-    }
-
-    sortedBenchmarks(benchmarks) {
-      const entries = Object.keys(benchmarks || {}).map((modelSpec) => ({
-        modelSpec,
-        medianMs: benchmarks[modelSpec] ? benchmarks[modelSpec].medianMs : null,
-        updatedAt: benchmarks[modelSpec] ? benchmarks[modelSpec].updatedAt : null
-      }));
-      entries.sort((a, b) => a.modelSpec.localeCompare(b.modelSpec));
-      return entries;
-    }
-
-    normalizeNumber(value, fallback = null) {
-      if (typeof value === 'number') {
-        return value;
-      }
-      return fallback;
-    }
-
-    normalizeMessage(value) {
-      if (typeof value === 'string' && value.trim()) {
-        return value;
-      }
-      return 'нет данных';
-    }
-
-    formatNumber(value) {
-      if (typeof value === 'number') {
-        return `${Math.round(value)}`;
-      }
-      return '—';
-    }
-
-    formatTimestamp(value) {
+    formatTs(value) {
       const Time = global.NT && global.NT.Time ? global.NT.Time : null;
       if (Time && typeof Time.formatTime === 'function') {
         return Time.formatTime(value);
@@ -572,14 +495,51 @@
       if (typeof value !== 'number') {
         return '—';
       }
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) {
-        return '—';
+      return new Date(value).toLocaleTimeString();
+    }
+
+    cell(text) {
+      const td = this.doc.createElement('td');
+      td.textContent = text;
+      return td;
+    }
+
+    async copyEventJson() {
+      const json = JSON.stringify(this.state.eventLog.items, null, 2);
+      await this.copyText(json);
+    }
+
+    async copySingleEvent(event) {
+      await this.copyText(JSON.stringify(event || {}, null, 2));
+    }
+
+    async copyText(text) {
+      if (global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText) {
+        try {
+          await global.navigator.clipboard.writeText(text);
+          return;
+        } catch (error) {
+          // fallback
+        }
       }
-      return `${date.toLocaleTimeString()}`;
+      const textarea = this.doc.createElement('textarea');
+      textarea.value = text;
+      this.doc.body.appendChild(textarea);
+      textarea.select();
+      this.doc.execCommand('copy');
+      textarea.remove();
     }
   }
 
-  const page = new DebugPage({ doc: global.document, chromeApi: global.chrome });
+  const ui = new global.NT.UiModule({
+    chromeApi: global.chrome,
+    portName: 'debug'
+  }).init();
+
+  const page = new DebugPage({ doc: global.document, ui });
+  ui.setHandlers({
+    onSnapshot: (payload) => page.applySnapshot(payload),
+    onPatch: (payload) => page.applyPatch(payload)
+  });
   page.init();
 })(globalThis);
