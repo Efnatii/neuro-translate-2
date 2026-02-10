@@ -9,19 +9,24 @@
         origin: '',
         status: null,
         benchmarkStatus: null,
-        benchmarks: {}
+        benchmarks: {},
+        eventLog: { seq: 0, items: [] }
       };
       this.fields = {};
       this.portClient = null;
+      this.eventFilters = { level: 'all', tag: 'all', search: '' };
+      this.eventLimit = 200;
     }
 
     init() {
       this.cacheElements();
+      this.bindEventControls();
       this.state = { ...this.state, ...this.readQuery() };
       this.render();
       this.initPortClient();
       this.loadStatusFromStorage(this.state.tabId);
       this.loadBenchmarksFromStorage();
+      this.loadEventLogFromStorage();
       this.bindStorageUpdates();
     }
 
@@ -32,10 +37,20 @@
       this.fields.total = this.doc.querySelector('[data-field="total"]');
       this.fields.inProgress = this.doc.querySelector('[data-field="inProgress"]');
       this.fields.message = this.doc.querySelector('[data-field="message"]');
+      this.fields.decisionPolicy = this.doc.querySelector('[data-field="decision-policy"]');
+      this.fields.decisionModel = this.doc.querySelector('[data-field="decision-model"]');
+      this.fields.decisionReason = this.doc.querySelector('[data-field="decision-reason"]');
       this.fields.benchStatus = this.doc.querySelector('[data-field="bench-status"]');
       this.fields.benchCurrent = this.doc.querySelector('[data-field="bench-current"]');
       this.fields.benchMessage = this.doc.querySelector('[data-field="bench-message"]');
       this.fields.benchTable = this.doc.querySelector('[data-field="bench-table"]');
+      this.fields.eventLevel = this.doc.querySelector('[data-field="event-level"]');
+      this.fields.eventTag = this.doc.querySelector('[data-field="event-tag"]');
+      this.fields.eventSearch = this.doc.querySelector('[data-field="event-search"]');
+      this.fields.eventLog = this.doc.querySelector('[data-field="event-log"]');
+      this.fields.eventCopy = this.doc.querySelector('[data-action="event-copy"]');
+      this.fields.eventClear = this.doc.querySelector('[data-action="event-clear"]');
+      this.fields.eventMore = this.doc.querySelector('[data-action="event-more"]');
     }
 
     readQuery() {
@@ -83,6 +98,17 @@
       });
     }
 
+    loadEventLogFromStorage() {
+      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
+        this.updateEventLog({ seq: 0, items: [] });
+        return;
+      }
+
+      this.chromeApi.storage.local.get({ eventLog: { seq: 0, items: [] } }, (result) => {
+        this.updateEventLog(result.eventLog || { seq: 0, items: [] });
+      });
+    }
+
     initPortClient() {
       const UiPortClient = global.NT && global.NT.UiPortClient ? global.NT.UiPortClient : null;
       if (!UiPortClient) {
@@ -118,6 +144,10 @@
         );
       }
 
+      if (payload.eventLog) {
+        this.updateEventLog(payload.eventLog);
+      }
+
       if (this.portClient && typeof this.portClient.acknowledgeSnapshot === 'function') {
         this.portClient.acknowledgeSnapshot();
       }
@@ -138,6 +168,10 @@
           payload.patch.modelBenchmarkStatus || this.state.benchmarkStatus,
           payload.patch.modelBenchmarks || this.state.benchmarks
         );
+      }
+
+      if (payload.patch.eventLog) {
+        this.updateEventLog(payload.patch.eventLog);
       }
     }
 
@@ -162,18 +196,29 @@
           const benchmarks = changes.modelBenchmarks ? changes.modelBenchmarks.newValue : this.state.benchmarks;
           this.updateBenchmarks(status || null, benchmarks || {});
         }
+
+        if (changes.eventLog) {
+          this.updateEventLog(changes.eventLog.newValue || { seq: 0, items: [] });
+        }
       });
     }
 
     updateStatus(entry) {
       this.state.status = entry || null;
       this.renderStatus();
+      this.renderDecision();
     }
 
     updateBenchmarks(status, benchmarks) {
       this.state.benchmarkStatus = status || null;
       this.state.benchmarks = benchmarks || {};
       this.renderBenchmarks();
+    }
+
+    updateEventLog(eventLog) {
+      this.state.eventLog = eventLog && typeof eventLog === 'object' ? eventLog : { seq: 0, items: [] };
+      this.refreshTagOptions();
+      this.renderEventLog();
     }
 
     render() {
@@ -183,15 +228,57 @@
       }
 
       this.renderStatus();
+      this.renderDecision();
       this.renderBenchmarks();
+      this.renderEventLog();
+    }
+
+    bindEventControls() {
+      if (this.fields.eventLevel) {
+        this.fields.eventLevel.addEventListener('change', (event) => {
+          this.eventFilters.level = event.target.value;
+          this.renderEventLog();
+        });
+      }
+
+      if (this.fields.eventTag) {
+        this.fields.eventTag.addEventListener('change', (event) => {
+          this.eventFilters.tag = event.target.value;
+          this.renderEventLog();
+        });
+      }
+
+      if (this.fields.eventSearch) {
+        this.fields.eventSearch.addEventListener('input', (event) => {
+          this.eventFilters.search = event.target.value || '';
+          this.renderEventLog();
+        });
+      }
+
+      if (this.fields.eventMore) {
+        this.fields.eventMore.addEventListener('click', () => {
+          this.eventLimit += 200;
+          this.renderEventLog();
+        });
+      }
+
+      if (this.fields.eventCopy) {
+        this.fields.eventCopy.addEventListener('click', () => this.copyEventJson());
+      }
+
+      if (this.fields.eventClear) {
+        this.fields.eventClear.addEventListener('click', () => this.clearEventLog());
+      }
     }
 
     renderStatus() {
+      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       const status = this.state.status || {};
       const completed = this.normalizeNumber(status.completed);
       const total = this.normalizeNumber(status.total);
       const inProgress = this.normalizeNumber(status.inProgress);
       const message = this.normalizeMessage(status.message);
+      const safeMessage = Html ? Html.safeText(message, 'нет данных') : message;
       const progressValue = this.normalizeNumber(status.progress, 0);
 
       if (this.fields.completed) {
@@ -204,23 +291,43 @@
         this.fields.inProgress.textContent = inProgress !== null ? inProgress : '—';
       }
       if (this.fields.message) {
-        this.fields.message.textContent = message;
+        this.fields.message.textContent = safeMessage;
       }
       if (this.fields.progress) {
         this.fields.progress.value = Math.max(0, Math.min(100, progressValue));
       }
     }
 
+    renderDecision() {
+      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
+      const decision = this.state.status && this.state.status.modelDecision ? this.state.status.modelDecision : null;
+      const policy = decision && decision.decision ? decision.decision.policy : null;
+      const reason = decision && decision.decision ? decision.decision.reason : null;
+      const modelSpec = decision ? decision.chosenModelSpec : null;
+
+      if (this.fields.decisionPolicy) {
+        this.fields.decisionPolicy.textContent = Html ? Html.safeText(policy || '—', '—') : (policy || '—');
+      }
+      if (this.fields.decisionModel) {
+        this.fields.decisionModel.textContent = Html ? Html.safeText(modelSpec || '—', '—') : (modelSpec || '—');
+      }
+      if (this.fields.decisionReason) {
+        this.fields.decisionReason.textContent = Html ? Html.safeText(reason || '—', '—') : (reason || '—');
+      }
+    }
+
     renderBenchmarks() {
+      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       const status = this.state.benchmarkStatus || {};
       if (this.fields.benchStatus) {
-        this.fields.benchStatus.textContent = status.status || '—';
+        this.fields.benchStatus.textContent = Html ? Html.safeText(status.status || '—', '—') : (status.status || '—');
       }
       if (this.fields.benchCurrent) {
-        this.fields.benchCurrent.textContent = status.currentModelSpec || '—';
+        this.fields.benchCurrent.textContent = Html ? Html.safeText(status.currentModelSpec || '—', '—') : (status.currentModelSpec || '—');
       }
       if (this.fields.benchMessage) {
-        this.fields.benchMessage.textContent = status.message || status.errorCode || '—';
+        const message = status.message || status.errorCode || '—';
+        this.fields.benchMessage.textContent = Html ? Html.safeText(message, '—') : message;
       }
       if (this.fields.benchTable) {
         this.fields.benchTable.innerHTML = '';
@@ -236,11 +343,187 @@
         }
         entries.forEach((entry) => {
           const row = this.doc.createElement('tr');
-          row.appendChild(this.renderBenchCell(entry.modelSpec));
+          row.appendChild(this.renderBenchCell(Html ? Html.safeText(entry.modelSpec, '—') : entry.modelSpec));
           row.appendChild(this.renderBenchCell(this.formatNumber(entry.medianMs)));
           row.appendChild(this.renderBenchCell(this.formatTimestamp(entry.updatedAt)));
           this.fields.benchTable.appendChild(row);
         });
+      }
+    }
+
+    refreshTagOptions() {
+      if (!this.fields.eventTag) {
+        return;
+      }
+      const tags = new Set();
+      (this.state.eventLog.items || []).forEach((item) => {
+        if (item && item.tag) {
+          tags.add(item.tag);
+        }
+      });
+
+      const current = this.fields.eventTag.value || 'all';
+      const options = ['all', ...Array.from(tags).sort()];
+      this.fields.eventTag.innerHTML = '';
+      options.forEach((tag) => {
+        const option = this.doc.createElement('option');
+        option.value = tag;
+        option.textContent = tag === 'all' ? 'Tag: all' : `Tag: ${tag}`;
+        this.fields.eventTag.appendChild(option);
+      });
+      this.fields.eventTag.value = options.includes(current) ? current : 'all';
+    }
+
+    renderEventLog() {
+      if (!this.fields.eventLog) {
+        return;
+      }
+      const Html = global.NT && global.NT.Html ? global.NT.Html : null;
+      const filtered = this.getFilteredEvents();
+      const visible = filtered.slice(-this.eventLimit);
+
+      this.fields.eventLog.innerHTML = '';
+      if (!visible.length) {
+        const empty = this.doc.createElement('div');
+        empty.className = 'debug__subtitle';
+        empty.textContent = 'нет событий';
+        this.fields.eventLog.appendChild(empty);
+      } else {
+        visible.forEach((event) => {
+          const card = this.doc.createElement('div');
+          card.className = 'debug__event-card';
+
+          const row = this.doc.createElement('div');
+          row.className = 'event-row';
+
+          const timeCell = this.doc.createElement('div');
+          timeCell.textContent = this.formatTimestamp(event.ts);
+
+          const tagCell = this.doc.createElement('div');
+          tagCell.textContent = event.tag || '—';
+
+          const messageCell = this.doc.createElement('div');
+          messageCell.className = 'event-message';
+          messageCell.textContent = Html ? Html.safeText(event.message || '—', '—') : (event.message || '—');
+
+          row.appendChild(timeCell);
+          row.appendChild(tagCell);
+          row.appendChild(messageCell);
+
+          const meta = this.doc.createElement('div');
+          meta.className = 'event-meta';
+          meta.textContent = this.formatEventMeta(event.meta || {});
+
+          card.appendChild(row);
+          card.appendChild(meta);
+          this.fields.eventLog.appendChild(card);
+        });
+      }
+
+      if (this.fields.eventMore) {
+        this.fields.eventMore.style.display = filtered.length > this.eventLimit ? 'inline-flex' : 'none';
+      }
+    }
+
+    getFilteredEvents() {
+      const items = Array.isArray(this.state.eventLog.items) ? this.state.eventLog.items : [];
+      const level = this.eventFilters.level;
+      const tag = this.eventFilters.tag;
+      const search = this.eventFilters.search.trim().toLowerCase();
+
+      return items.filter((event) => {
+        if (!event) {
+          return false;
+        }
+        if (level !== 'all' && event.level !== level) {
+          return false;
+        }
+        if (tag !== 'all' && event.tag !== tag) {
+          return false;
+        }
+        if (search) {
+          const haystack = [
+            event.message,
+            event.tag,
+            event.level,
+            event.meta ? JSON.stringify(event.meta) : ''
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          if (!haystack.includes(search)) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+
+    formatEventMeta(meta) {
+      const parts = [];
+      if (meta.source) {
+        parts.push(`source=${meta.source}`);
+      }
+      if (meta.tabId !== null && meta.tabId !== undefined) {
+        parts.push(`tab=${meta.tabId}`);
+      }
+      if (meta.requestId) {
+        parts.push(`req=${meta.requestId}`);
+      }
+      if (meta.stage) {
+        parts.push(`stage=${meta.stage}`);
+      }
+      if (meta.modelSpec) {
+        parts.push(`model=${meta.modelSpec}`);
+      }
+      if (meta.status) {
+        parts.push(`status=${meta.status}`);
+      }
+      if (typeof meta.latencyMs === 'number') {
+        parts.push(`latency=${Math.round(meta.latencyMs)}ms`);
+      }
+      return parts.join(' · ') || '—';
+    }
+
+    async copyEventJson() {
+      const payload = this.getFilteredEvents();
+      const json = JSON.stringify(payload, null, 2);
+      if (global.navigator && global.navigator.clipboard && typeof global.navigator.clipboard.writeText === 'function') {
+        try {
+          await global.navigator.clipboard.writeText(json);
+          return;
+        } catch (error) {
+          // fallback below
+        }
+      }
+
+      const textarea = this.doc.createElement('textarea');
+      textarea.value = json;
+      this.doc.body.appendChild(textarea);
+      textarea.select();
+      this.doc.execCommand('copy');
+      textarea.remove();
+    }
+
+    clearEventLog() {
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
+      const commandPayload = { name: 'CLEAR_EVENT_LOG', payload: {} };
+
+      if (this.portClient && typeof this.portClient.sendCommand === 'function') {
+        this.portClient.sendCommand(commandPayload.name, commandPayload.payload);
+        return;
+      }
+
+      if (!UiProtocol || !MessageEnvelope || !this.chromeApi || !this.chromeApi.runtime) {
+        return;
+      }
+
+      const envelope = MessageEnvelope.wrap(UiProtocol.UI_COMMAND, commandPayload, { source: 'debug' });
+      try {
+        this.chromeApi.runtime.sendMessage(envelope);
+      } catch (error) {
+        // ignore fallback errors
       }
     }
 
@@ -282,6 +565,10 @@
     }
 
     formatTimestamp(value) {
+      const Time = global.NT && global.NT.Time ? global.NT.Time : null;
+      if (Time && typeof Time.formatTime === 'function') {
+        return Time.formatTime(value);
+      }
       if (typeof value !== 'number') {
         return '—';
       }

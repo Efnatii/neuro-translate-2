@@ -5,22 +5,36 @@
       this.onSnapshot = onSnapshot;
       this.onPatch = onPatch;
       this.port = null;
-      this.retryDelay = 300;
-      this.retryTimer = null;
       this.connected = false;
+      this.retryController = null;
+      this.retryInFlight = null;
+      const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
+      this.retryLoop = RetryLoop
+        ? new RetryLoop({
+          maxAttempts: 8,
+          maxTotalMs: 60000,
+          baseDelayMs: 300,
+          maxDelayMs: 5000,
+          multiplier: 1.6,
+          jitterMs: 200
+        })
+        : null;
     }
 
-    connect() {
+    connect({ skipAbort = false } = {}) {
       if (!global.chrome || !global.chrome.runtime || typeof global.chrome.runtime.connect !== 'function') {
-        return;
+        return false;
       }
 
-      this.clearRetry();
+      if (!skipAbort) {
+        this.abortRetry();
+      }
       this.port = global.chrome.runtime.connect({ name: this.portName });
       this.connected = true;
       this.port.onMessage.addListener((message) => this.handleMessage(message));
       this.port.onDisconnect.addListener(() => this.handleDisconnect());
       this.startHandshake();
+      return true;
     }
 
     handleMessage(message) {
@@ -102,24 +116,37 @@
     }
 
     scheduleReconnect() {
-      if (this.retryTimer) {
+      if (this.retryInFlight || !this.retryLoop) {
         return;
       }
 
-      const delay = Math.min(this.retryDelay, 5000);
-      this.retryTimer = global.setTimeout(() => {
-        this.retryTimer = null;
-        this.retryDelay = Math.min(this.retryDelay * 1.6, 5000);
-        this.connect();
-      }, delay);
+      this.retryController = new AbortController();
+      this.retryInFlight = this.retryLoop
+        .run(
+          () => {
+            const connected = this.connect({ skipAbort: true });
+            if (!connected) {
+              const error = new Error('UI port reconnect failed');
+              error.code = 'UI_PORT_CONNECT_FAILED';
+              throw error;
+            }
+            return true;
+          },
+          { signal: this.retryController.signal }
+        )
+        .catch(() => {})
+        .finally(() => {
+          this.retryController = null;
+          this.retryInFlight = null;
+        });
     }
 
-    clearRetry() {
-      if (this.retryTimer) {
-        global.clearTimeout(this.retryTimer);
-        this.retryTimer = null;
+    abortRetry() {
+      if (this.retryController) {
+        this.retryController.abort();
+        this.retryController = null;
       }
-      this.retryDelay = 300;
+      this.retryInFlight = null;
     }
   }
 

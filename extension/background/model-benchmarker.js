@@ -4,61 +4,193 @@
   const MAX_ATTEMPTS = 2;
   const JITTER_MIN_MS = 150;
   const JITTER_MAX_MS = 350;
+  const QUICK_SAMPLE_TIMEOUT_MS = 1200;
+  const LEASE_MS = 5 * 60 * 1000;
 
   class ModelBenchmarker {
-    constructor({ chromeApi, llmClient, benchmarkStore, modelRegistry }) {
+    constructor({ chromeApi, llmClient, benchmarkStore, modelRegistry, loadScheduler, eventLogger }) {
       this.chromeApi = chromeApi;
       this.llmClient = llmClient;
       this.benchmarkStore = benchmarkStore;
       this.modelRegistry = modelRegistry;
+      this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
+      this.time = global.NT && global.NT.Time ? global.NT.Time : null;
+      this.loadScheduler = loadScheduler;
+      this.benchPrompt = "Respond with a single '.'";
+      this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
+      const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
+      this.retryLoop = RetryLoop
+        ? new RetryLoop({
+          maxAttempts: MAX_ATTEMPTS,
+          maxTotalMs: TIMEOUT_MS * MAX_ATTEMPTS + 2000,
+          baseDelayMs: 200,
+          maxDelayMs: 1200,
+          multiplier: 1.5,
+          jitterMs: 200
+        })
+        : null;
     }
 
-    async benchmarkSelected(modelSpecs, { force = false } = {}) {
+    benchmarkSelected(modelSpecs, { force = false } = {}) {
+      return this.runBenchmarks(modelSpecs, { force, reason: 'manual' });
+    }
+
+    scheduleBenchmarks(modelSpecs, { force = false, reason = 'auto' } = {}) {
+      this.runBenchmarks(modelSpecs, { force, reason }).catch(() => {});
+    }
+
+    async quickPrebench(modelSpecs, { maxModels = 5, budgetMs = 3000 } = {}) {
+      const hasKey = await this.llmClient.hasApiKey();
+      if (!hasKey) {
+        this.logEvent('warn', 'bench', 'Quick prebench skipped (no API key)', { source: 'bench' });
+        return { results: {}, reason: 'NO_API_KEY' };
+      }
+
+      const uniqueSpecs = this.uniqueSpecs(modelSpecs).slice(0, maxModels);
+      const results = {};
+      const deadline = this.now() + budgetMs;
+      this.logEvent('info', 'bench', 'Quick prebench started', {
+        source: 'bench',
+        stage: 'quick',
+        status: uniqueSpecs.length
+      });
+
+      for (const modelSpec of uniqueSpecs) {
+        const now = this.now();
+        if (now >= deadline) {
+          break;
+        }
+
+        const parsed = this.parseModelSpec(modelSpec);
+        if (!parsed.id) {
+          continue;
+        }
+
+        const entry = await this.benchmarkStore.getEntry(modelSpec);
+        if (this.benchmarkStore.isFresh(entry, now)) {
+          results[modelSpec] = entry;
+          continue;
+        }
+        if (!this.benchmarkStore.canAttempt(entry, now)) {
+          continue;
+        }
+
+        await this.benchmarkStore.upsert(modelSpec, { lastAttemptAt: now });
+
+        const remaining = Math.max(0, deadline - now);
+        const reserved = await this.reserveBenchSlot({
+          priority: 'high',
+          timeoutMs: remaining,
+          estTokens: this.estimateBenchTokens()
+        });
+        if (!reserved) {
+          break;
+        }
+
+        try {
+          const serviceTier = this.mapServiceTier(parsed.tier);
+          const duration = await this.measureOnce({
+            modelId: parsed.id,
+            serviceTier,
+            timeoutMs: Math.min(remaining, QUICK_SAMPLE_TIMEOUT_MS)
+          });
+          const patch = {
+            medianMs: duration,
+            p90Ms: duration,
+            samples: 1,
+            updatedAt: this.now(),
+            lastError: null,
+            quick: true
+          };
+          await this.benchmarkStore.upsert(modelSpec, patch);
+          results[modelSpec] = patch;
+          this.logEvent('info', 'bench', 'Quick bench sample recorded', {
+            source: 'bench',
+            modelSpec,
+            latencyMs: duration,
+            stage: 'quick'
+          });
+        } catch (error) {
+          await this.benchmarkStore.upsert(modelSpec, {
+            updatedAt: this.now(),
+            lastError: this.normalizeError(error),
+            quick: true
+          });
+          this.logEvent('error', 'bench', 'Quick bench sample failed', {
+            source: 'bench',
+            modelSpec,
+            stage: 'quick',
+            status: error && error.status ? error.status : null
+          });
+          this.handleRateLimit(error, 'BENCH');
+        }
+      }
+
+      this.logEvent('info', 'bench', 'Quick prebench finished', {
+        source: 'bench',
+        stage: 'quick',
+        status: Object.keys(results).length
+      });
+      return { results, reason: 'QUICK_PREBENCH' };
+    }
+
+    async runBenchmarks(modelSpecs, { force = false, reason = 'auto' } = {}) {
       const hasKey = await this.llmClient.hasApiKey();
       if (!hasKey) {
         await this.benchmarkStore.setStatus({
           status: 'failed',
           errorCode: 'NO_API_KEY',
           message: 'API key is missing',
-          updatedAt: Date.now()
+          updatedAt: this.now()
         });
+        this.logEvent('warn', 'bench', 'Bench skipped (no API key)', { source: 'bench' });
         return;
       }
 
       const uniqueSpecs = this.uniqueSpecs(modelSpecs);
-      const total = uniqueSpecs.length;
+      const now = this.now();
+      const eligible = [];
+
+      for (const modelSpec of uniqueSpecs) {
+        const entry = await this.benchmarkStore.getEntry(modelSpec);
+        if (!force) {
+          if (this.benchmarkStore.isFresh(entry, now)) {
+            continue;
+          }
+          if (!this.benchmarkStore.canAttempt(entry, now)) {
+            continue;
+          }
+        }
+        eligible.push(modelSpec);
+      }
+
+      const total = eligible.length;
       const statusBase = {
-        status: 'running',
+        status: total ? 'running' : 'idle',
+        reason,
         total,
         completed: 0,
-        startedAt: Date.now(),
-        updatedAt: Date.now(),
+        startedAt: this.now(),
+        updatedAt: this.now(),
         currentModelSpec: null
       };
 
-      await this.benchmarkStore.setStatus(statusBase);
+      await this.benchmarkStore.setStatus(this.withLease(statusBase));
+      this.logEvent('info', 'bench', 'Bench started', {
+        source: 'bench',
+        stage: reason,
+        status: total
+      });
 
       let completed = 0;
 
-      for (const modelSpec of uniqueSpecs) {
-        const shouldSkip = !force && await this.benchmarkStore.get(modelSpec);
-        if (shouldSkip) {
-          completed += 1;
-          await this.benchmarkStore.setStatus({
-            ...statusBase,
-            completed,
-            currentModelSpec: modelSpec,
-            updatedAt: Date.now()
-          });
-          continue;
-        }
-
-        await this.benchmarkStore.setStatus({
+      for (const modelSpec of eligible) {
+        await this.benchmarkStore.setStatus(this.withLease({
           ...statusBase,
           completed,
           currentModelSpec: modelSpec,
-          updatedAt: Date.now()
-        });
+          updatedAt: this.now()
+        }));
 
         const parsed = this.parseModelSpec(modelSpec);
         if (!parsed.id) {
@@ -66,7 +198,8 @@
             medianMs: null,
             p90Ms: null,
             samples: 0,
-            updatedAt: Date.now(),
+            updatedAt: this.now(),
+            lastAttemptAt: this.now(),
             lastError: {
               code: 'INVALID_MODEL_SPEC',
               message: 'Model spec is missing an id'
@@ -76,6 +209,8 @@
           continue;
         }
 
+        await this.benchmarkStore.upsert(modelSpec, { lastAttemptAt: this.now() });
+
         try {
           const samples = await this.collectSamples(parsed);
           const medianMs = this.calculateMedian(samples);
@@ -84,35 +219,57 @@
             medianMs,
             p90Ms,
             samples: samples.length,
-            updatedAt: Date.now(),
-            lastError: null
+            updatedAt: this.now(),
+            lastError: null,
+            quick: false
+          });
+          this.logEvent('info', 'bench', 'Bench completed', {
+            source: 'bench',
+            modelSpec,
+            latencyMs: medianMs,
+            stage: reason
           });
         } catch (error) {
           await this.benchmarkStore.upsert(modelSpec, {
             medianMs: null,
             p90Ms: null,
             samples: 0,
-            updatedAt: Date.now(),
-            lastError: this.normalizeError(error)
+            updatedAt: this.now(),
+            lastError: this.normalizeError(error),
+            quick: false
           });
+          this.logEvent('error', 'bench', 'Bench failed', {
+            source: 'bench',
+            modelSpec,
+            stage: reason,
+            status: error && error.status ? error.status : null
+          });
+          this.handleRateLimit(error, 'BENCH');
         }
 
         completed += 1;
-        await this.benchmarkStore.setStatus({
+        await this.benchmarkStore.setStatus(this.withLease({
           ...statusBase,
           completed,
           currentModelSpec: modelSpec,
-          updatedAt: Date.now()
-        });
+          updatedAt: this.now()
+        }));
       }
 
       await this.benchmarkStore.setStatus({
         status: 'done',
+        reason,
         total,
         completed,
-        finishedAt: Date.now(),
-        updatedAt: Date.now(),
-        currentModelSpec: null
+        finishedAt: this.now(),
+        updatedAt: this.now(),
+        currentModelSpec: null,
+        leaseUntilTs: null
+      });
+      this.logEvent('info', 'bench', 'Bench finished', {
+        source: 'bench',
+        stage: reason,
+        status: completed
       });
     }
 
@@ -121,6 +278,13 @@
       const serviceTier = this.mapServiceTier(tier);
 
       for (let index = 0; index < DEFAULT_SAMPLES; index += 1) {
+        const reserved = await this.reserveBenchSlot({
+          priority: 'low',
+          estTokens: this.estimateBenchTokens()
+        });
+        if (!reserved) {
+          throw new Error('BENCH_SLOT_TIMEOUT');
+        }
         if (index > 0) {
           await this.delay(this.randomJitter());
         }
@@ -132,27 +296,21 @@
     }
 
     async measureWithRetry({ modelId, serviceTier }) {
-      let lastError = null;
-
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-        try {
-          return await this.measureOnce({ modelId, serviceTier });
-        } catch (error) {
-          lastError = error;
-        }
+      if (!this.retryLoop) {
+        return this.measureOnce({ modelId, serviceTier });
       }
 
-      throw lastError;
+      return this.retryLoop.run(() => this.measureOnce({ modelId, serviceTier }));
     }
 
-    async measureOnce({ modelId, serviceTier }) {
+    async measureOnce({ modelId, serviceTier, timeoutMs }) {
       const controller = new AbortController();
-      const timeoutId = global.setTimeout(() => controller.abort(), TIMEOUT_MS);
-      const startedAt = Date.now();
+      const timeoutId = global.setTimeout(() => controller.abort(), timeoutMs || TIMEOUT_MS);
+      const startedAt = this.now();
 
       try {
         await this.llmClient.generateMinimalPing({ modelId, serviceTier, signal: controller.signal });
-        return Date.now() - startedAt;
+        return this.now() - startedAt;
       } finally {
         global.clearTimeout(timeoutId);
       }
@@ -174,27 +332,6 @@
       });
 
       return unique;
-    }
-
-    parseModelSpec(modelSpec) {
-      const AiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
-      if (AiCommon && typeof AiCommon.parseModelSpec === 'function') {
-        return AiCommon.parseModelSpec(modelSpec);
-      }
-
-      const [idPart, tierPart] = String(modelSpec || '').split(':');
-      return { id: idPart || '', tier: tierPart || 'standard' };
-    }
-
-    mapServiceTier(tier) {
-      const normalized = String(tier || '').trim().toLowerCase();
-      if (normalized === 'flex') {
-        return 'flex';
-      }
-      if (normalized === 'priority') {
-        return 'priority';
-      }
-      return 'default';
     }
 
     calculateMedian(samples) {
@@ -228,7 +365,8 @@
       return {
         code: error.code || 'ERROR',
         message: error.message || 'Benchmark failed',
-        status: error.status || null
+        status: error.status || null,
+        retryAfterMs: error.retryAfterMs || null
       };
     }
 
@@ -240,6 +378,84 @@
 
     randomJitter() {
       return JITTER_MIN_MS + Math.floor(Math.random() * (JITTER_MAX_MS - JITTER_MIN_MS + 1));
+    }
+
+    parseModelSpec(modelSpec) {
+      if (this.aiCommon && typeof this.aiCommon.parseModelSpec === 'function') {
+        return this.aiCommon.parseModelSpec(modelSpec);
+      }
+      return { id: '', tier: 'standard' };
+    }
+
+    mapServiceTier(tier) {
+      if (this.aiCommon && typeof this.aiCommon.mapServiceTier === 'function') {
+        return this.aiCommon.mapServiceTier(tier);
+      }
+      return 'default';
+    }
+
+    estimateBenchTokens() {
+      return Math.ceil(this.benchPrompt.length / 4) + 4;
+    }
+
+    async reserveBenchSlot({ priority, estTokens, timeoutMs } = {}) {
+      if (!this.loadScheduler) {
+        return true;
+      }
+
+      const task = {
+        kind: 'BENCH',
+        estTokens: estTokens || this.estimateBenchTokens(),
+        estRpm: 1,
+        priority: priority || 'low'
+      };
+
+      if (!timeoutMs) {
+        await this.loadScheduler.reserveSlot(task);
+        return true;
+      }
+
+      return Promise.race([
+        this.loadScheduler.reserveSlot(task).then(() => true),
+        new Promise((resolve) => {
+          global.setTimeout(() => resolve(false), timeoutMs);
+        })
+      ]);
+    }
+
+    handleRateLimit(error, kind) {
+      if (!this.loadScheduler) {
+        return;
+      }
+      if (error && error.status === 429) {
+        this.loadScheduler.onRateLimited({ retryAfterMs: error.retryAfterMs, kind });
+        this.logEvent('warn', 'rate-limit', 'Bench rate-limited', {
+          source: 'bench',
+          stage: kind,
+          status: error.status
+        });
+      }
+    }
+
+    logEvent(level, tag, message, meta) {
+      if (!this.eventLogger) {
+        return;
+      }
+      this.eventLogger({ level, tag, message, meta });
+    }
+
+    withLease(status) {
+      if (status.status !== 'running') {
+        return status;
+      }
+      return {
+        ...status,
+        leaseUntilTs: this.now() + LEASE_MS
+      };
+    }
+
+    now() {
+      return this.time && typeof this.time.now === 'function' ? this.time.now() : Date.now();
     }
   }
 

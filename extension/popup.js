@@ -10,13 +10,13 @@
         translationVisible: true
       };
       this.activeTabId = null;
-      this.saveTimer = null;
-      this.pendingPatch = {};
+      this.settingsStore = null;
     }
 
     async init() {
       this.cacheElements();
       this.bindEvents();
+      this.initSettingsStore();
 
       const activeTab = await this.getActiveTab();
       this.activeTabId = activeTab ? activeTab.id : null;
@@ -127,17 +127,38 @@
       this.portClient.connect();
     }
 
+    initSettingsStore() {
+      const SettingsStore = global.NT && global.NT.SettingsStore ? global.NT.SettingsStore : null;
+      if (!SettingsStore) {
+        return;
+      }
+
+      const sanitize = global.NT_SETTINGS && typeof global.NT_SETTINGS.sanitizeSettings === 'function'
+        ? global.NT_SETTINGS.sanitizeSettings
+        : null;
+
+      this.settingsStore = new SettingsStore({
+        chromeApi: this.chromeApi,
+        sanitize,
+        debounceMs: 400,
+        defaults: {
+          apiKey: '',
+          translationModelList: [],
+          modelSelectionPolicy: 'fastest',
+          translationVisibilityByTab: {}
+        }
+      });
+    }
+
     async loadSettings() {
-      const raw = await this.storageGet([
+      const keys = [
         'apiKey',
         'translationModelList',
         'modelSelectionPolicy',
         'translationVisibilityByTab'
-      ]);
-      const sanitize = global.NT_SETTINGS && typeof global.NT_SETTINGS.sanitizeSettings === 'function'
-        ? global.NT_SETTINGS.sanitizeSettings
-        : null;
-      const sanitized = sanitize ? sanitize(raw) : raw;
+      ];
+      const raw = this.settingsStore ? await this.settingsStore.get(keys) : await this.storageGet(keys);
+      const sanitized = raw || {};
 
       this.state.apiKey = sanitized.apiKey || '';
       this.state.translationModelList = Array.isArray(sanitized.translationModelList)
@@ -408,7 +429,8 @@
         return 0;
       }
 
-      return Math.max(0, Math.min(100, entry.progress));
+      const Time = global.NT && global.NT.Time ? global.NT.Time : null;
+      return Time && typeof Time.clamp === 'function' ? Time.clamp(entry.progress, 0, 100) : Math.max(0, Math.min(100, entry.progress));
     }
 
     updateVisibilityIcon() {
@@ -477,23 +499,19 @@
     }
 
     scheduleSave(patch) {
-      Object.assign(this.pendingPatch, patch);
-
-      if (this.saveTimer) {
-        clearTimeout(this.saveTimer);
+      if (!this.settingsStore) {
+        this.storageSet(patch);
+        return;
       }
 
-      this.saveTimer = setTimeout(() => {
-        const payload = { ...this.pendingPatch };
-        this.pendingPatch = {};
-
-        if (payload.translationVisibilityByTab && this.activeTabId !== null) {
-          const current = this.state.translationVisible;
-          payload.translationVisibilityByTab = { [this.activeTabId]: current };
+      this.settingsStore.queuePatch(patch, {
+        finalize: (payload) => {
+          if (payload.translationVisibilityByTab && this.activeTabId !== null) {
+            const current = this.state.translationVisible;
+            payload.translationVisibilityByTab = { [this.activeTabId]: current };
+          }
         }
-
-        this.storageSet(payload);
-      }, 400);
+      });
     }
 
     storageGet(keys) {
