@@ -78,7 +78,7 @@
         const settings = {
           apiKey: result.apiKey || '',
           translationModelList: Array.isArray(result.translationModelList) ? result.translationModelList : [],
-          modelSelectionPolicy: result.modelSelectionPolicy || 'fastest'
+          modelSelection: this.normalizeModelSelection(result.modelSelection, result.modelSelectionPolicy)
         };
 
         const translationStatusByTab = result.translationStatusByTab || {};
@@ -98,6 +98,25 @@
           eventLog
         });
       });
+    }
+
+
+    normalizeModelSelection(modelSelection, legacyPolicy) {
+      if (modelSelection && typeof modelSelection === 'object') {
+        const speed = modelSelection.speed !== false;
+        const preference = modelSelection.preference === 'smartest' || modelSelection.preference === 'cheapest'
+          ? modelSelection.preference
+          : null;
+        return { speed, preference };
+      }
+
+      if (legacyPolicy === 'smartest') {
+        return { speed: false, preference: 'smartest' };
+      }
+      if (legacyPolicy === 'cheapest') {
+        return { speed: false, preference: 'cheapest' };
+      }
+      return { speed: true, preference: null };
     }
 
     resolveTabId(meta, result) {

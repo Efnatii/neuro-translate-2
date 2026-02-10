@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Neuro Translate",
+  "description": "Edge extension for translation workflow control and model benchmarking.",
+  "version": "0.1.0",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "extension/background.js"
+  },
+  "action": {
+    "default_popup": "extension/popup.html"
+  }
+}

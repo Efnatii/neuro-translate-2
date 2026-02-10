@@ -39,19 +39,55 @@ function checkSendResponse(files) {
       }
     });
   });
-
   return issues;
+}
+
+function checkRequiredSymbols() {
+  const checks = [
+    {
+      file: path.join(EXTENSION_DIR, 'background', 'llm-engine.js'),
+      symbols: ['class LlmEngine', 'getModelSpec(', 'request(']
+    },
+    {
+      file: path.join(EXTENSION_DIR, 'core', 'llm-client.js'),
+      symbols: ['generateResponseRaw(', 'generateMinimalPingRaw(']
+    },
+    {
+      file: path.join(EXTENSION_DIR, 'background', 'model-rate-limit-store.js'),
+      symbols: ['class ModelRateLimitStore', 'upsertFromHeaders(', 'computeAvailability(']
+    }
+  ];
+
+  const missing = [];
+  checks.forEach((check) => {
+    const content = fs.existsSync(check.file) ? fs.readFileSync(check.file, 'utf8') : '';
+    check.symbols.forEach((symbol) => {
+      if (!content.includes(symbol)) {
+        missing.push(`${path.relative(ROOT, check.file)} :: ${symbol}`);
+      }
+    });
+  });
+
+  return missing;
 }
 
 const files = listJsFiles(EXTENSION_DIR);
 const issues = checkSendResponse(files);
+const missingSymbols = checkRequiredSymbols();
 
-if (issues.length) {
-  console.error('Found onMessage listener with sendResponse missing return true:');
-  issues.forEach((issue) => {
-    console.error(`- ${path.relative(ROOT, issue.file)}:${issue.line}`);
-  });
+if (issues.length || missingSymbols.length) {
+  if (issues.length) {
+    console.error('Found onMessage listener with sendResponse missing return true:');
+    issues.forEach((issue) => {
+      console.error(`- ${path.relative(ROOT, issue.file)}:${issue.line}`);
+    });
+  }
+
+  if (missingSymbols.length) {
+    console.error('Missing required symbols:');
+    missingSymbols.forEach((entry) => console.error(`- ${entry}`));
+  }
   process.exit(1);
 }
 
-console.log('Smoke check passed: no sendResponse without return true detected.');
+console.log('Smoke check passed: protocol guards and required LLM modules are present.');
