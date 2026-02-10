@@ -37,6 +37,17 @@
     return `${id}:${normalizeTier(tier)}`;
   }
 
+  function mapServiceTier(tier) {
+    const normalized = normalizeTier(tier);
+    if (normalized === ModelTier.FLEX) {
+      return 'flex';
+    }
+    if (normalized === ModelTier.PRIORITY) {
+      return 'priority';
+    }
+    return 'default';
+  }
+
   function buildRegistryEntry({ id, tier, inputPrice, outputPrice, cachedInputPrice }) {
     const inputValue = typeof inputPrice === 'number' ? inputPrice : null;
     const outputValue = typeof outputPrice === 'number' ? outputPrice : null;
@@ -183,6 +194,7 @@
     ModelTier,
     parseModelSpec,
     formatModelSpec,
+    mapServiceTier,
     createModelRegistry,
     buildModelOptions
   };

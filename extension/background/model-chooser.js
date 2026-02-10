@@ -1,10 +1,13 @@
 (function initModelChooser(global) {
   class ModelChooser {
-    constructor({ chromeApi, modelRegistry, benchmarkStore, benchmarker }) {
+    constructor({ chromeApi, modelRegistry, benchmarkStore, benchmarker, eventLogger }) {
       this.chromeApi = chromeApi;
       this.modelRegistry = modelRegistry;
       this.benchmarkStore = benchmarkStore;
       this.benchmarker = benchmarker;
+      this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
+      this.time = global.NT && global.NT.Time ? global.NT.Time : null;
+      this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
     }
 
     async choose({ taskType, policy, modelSpecs, tabId } = {}) {
@@ -32,7 +35,7 @@
         return this.finalizeDecision(chosen, decision, tabId, taskType);
       }
 
-      const fastest = await this.pickFastest(validSpecs);
+      const fastest = await this.pickFastest(validSpecs, decision);
       decision.reason = fastest.reason;
       if (fastest.considered) {
         decision.considered = fastest.considered;
@@ -108,15 +111,61 @@
       }, null);
     }
 
-    async pickFastest(modelSpecs) {
-      const missingBench = await this.ensureBenchmarks(modelSpecs);
-      const benchmarks = await this.loadBenchmarks(modelSpecs);
+    async pickFastest(modelSpecs, decision) {
+      const freshBenchmarks = await this.benchmarkStore.getAll();
+      const considered = decision.considered.map((item) => ({ ...item }));
 
-      if (missingBench || benchmarks.some((entry) => entry.medianMs === null)) {
-        return { modelSpec: this.pickCheapest(modelSpecs), reason: 'NO_BENCH', considered: benchmarks };
+      considered.forEach((entry) => {
+        const bench = freshBenchmarks[entry.modelSpec];
+        if (bench && typeof bench.medianMs === 'number') {
+          entry.medianMs = bench.medianMs;
+        }
+      });
+
+      const withBench = considered.filter((entry) => typeof entry.medianMs === 'number');
+      if (withBench.length) {
+        const fastest = this.pickFastestFromBench(withBench, modelSpecs);
+        const missing = modelSpecs.filter((spec) => !freshBenchmarks[spec]);
+        if (missing.length && this.benchmarker && typeof this.benchmarker.scheduleBenchmarks === 'function') {
+          this.benchmarker.scheduleBenchmarks(missing, { force: false, reason: 'missing' });
+        }
+        return { modelSpec: fastest, reason: 'MIN_LATENCY', considered };
       }
 
-      const fastest = benchmarks.reduce((best, entry) => {
+      const candidates = this.selectPrebenchCandidates(modelSpecs);
+      const quick = this.benchmarker && typeof this.benchmarker.quickPrebench === 'function'
+        ? await this.benchmarker.quickPrebench(candidates, {
+          maxModels: 5,
+          budgetMs: 3000
+        })
+        : null;
+
+      const quickResults = quick && quick.results ? quick.results : {};
+      considered.forEach((entry) => {
+        const quickEntry = quickResults[entry.modelSpec];
+        if (quickEntry && typeof quickEntry.medianMs === 'number') {
+          entry.medianMs = quickEntry.medianMs;
+        }
+      });
+
+      const quickBench = considered.filter((entry) => typeof entry.medianMs === 'number');
+      if (quickBench.length) {
+        const fastest = this.pickFastestFromBench(quickBench, modelSpecs);
+        if (this.benchmarker && typeof this.benchmarker.scheduleBenchmarks === 'function') {
+          this.benchmarker.scheduleBenchmarks(modelSpecs, { force: false, reason: 'full' });
+        }
+        return { modelSpec: fastest, reason: 'QUICK_BENCH', considered };
+      }
+
+      const fallback = this.pickCheapest(modelSpecs);
+      if (this.benchmarker && typeof this.benchmarker.scheduleBenchmarks === 'function') {
+        this.benchmarker.scheduleBenchmarks(modelSpecs, { force: false, reason: 'full' });
+      }
+      return { modelSpec: fallback, reason: 'NO_BENCH', considered };
+    }
+
+    pickFastestFromBench(benchEntries, modelSpecs) {
+      const fastest = benchEntries.reduce((best, entry) => {
         if (!best) {
           return entry;
         }
@@ -130,27 +179,38 @@
         return this.isCheaper(entry.modelSpec, best.modelSpec) ? entry : best;
       }, null);
 
-      return { modelSpec: fastest ? fastest.modelSpec : modelSpecs[0], reason: 'MIN_LATENCY', considered: benchmarks };
+      if (fastest && fastest.modelSpec) {
+        return fastest.modelSpec;
+      }
+
+      return modelSpecs[0];
     }
 
-    async ensureBenchmarks(modelSpecs) {
-      const entries = await Promise.all(modelSpecs.map((spec) => this.benchmarkStore.get(spec)));
-      const missing = entries.some((entry) => !entry || typeof entry.medianMs !== 'number');
-      if (missing) {
-        await this.benchmarker.benchmarkSelected(modelSpecs, { force: false });
-      }
-      return missing;
+    selectPrebenchCandidates(modelSpecs) {
+      const entries = modelSpecs.map((spec) => ({
+        spec,
+        entry: this.modelRegistry.byKey[spec]
+      }));
+
+      entries.sort((a, b) => {
+        const rankA = a.entry ? a.entry.capabilityRank : 0;
+        const rankB = b.entry ? b.entry.capabilityRank : 0;
+        if (rankA !== rankB) {
+          return rankB - rankA;
+        }
+        return this.sortByPrice(a.entry, b.entry);
+      });
+
+      return entries.map((item) => item.spec);
     }
 
-    async loadBenchmarks(modelSpecs) {
-      const entries = [];
-      for (const spec of modelSpecs) {
-        const stored = await this.benchmarkStore.get(spec);
-        const considered = this.describeSpec(spec);
-        considered.medianMs = stored && typeof stored.medianMs === 'number' ? stored.medianMs : null;
-        entries.push(considered);
+    sortByPrice(entryA, entryB) {
+      const aValue = entryA && typeof entryA.sum_1M === 'number' ? entryA.sum_1M : Number.POSITIVE_INFINITY;
+      const bValue = entryB && typeof entryB.sum_1M === 'number' ? entryB.sum_1M : Number.POSITIVE_INFINITY;
+      if (aValue === bValue) {
+        return 0;
       }
-      return entries;
+      return aValue - bValue;
     }
 
     isCheaper(spec, candidate) {
@@ -166,11 +226,15 @@
 
     finalizeDecision(modelSpec, decision, tabId, taskType) {
       const chosenSpec = modelSpec || null;
-      const parsed = this.parseModelSpec(chosenSpec);
+      const parsed = this.aiCommon && typeof this.aiCommon.parseModelSpec === 'function'
+        ? this.aiCommon.parseModelSpec(chosenSpec)
+        : { id: '', tier: 'standard' };
       const result = {
         chosenModelSpec: chosenSpec,
         chosenModelId: parsed.id || null,
-        serviceTier: this.mapServiceTier(parsed.tier),
+        serviceTier: this.aiCommon && typeof this.aiCommon.mapServiceTier === 'function'
+          ? this.aiCommon.mapServiceTier(parsed.tier)
+          : 'default',
         decision: {
           ...decision,
           considered: decision.considered.map((item) => ({ ...item }))
@@ -181,6 +245,11 @@
         this.storeDecision(tabId, result, taskType);
       }
 
+      this.logEvent('info', 'chooser', 'Model decision finalized', {
+        source: 'background',
+        modelSpec: result.chosenModelSpec,
+        stage: decision.policy
+      });
       return result;
     }
 
@@ -195,7 +264,7 @@
         serviceTier: result.serviceTier,
         decision: result.decision,
         taskType: taskType || 'unknown',
-        updatedAt: Date.now()
+        updatedAt: this.now()
       };
 
       this.chromeApi.storage.local.get({ translationStatusByTab: {} }, (data) => {
@@ -209,25 +278,15 @@
       });
     }
 
-    parseModelSpec(modelSpec) {
-      const AiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
-      if (AiCommon && typeof AiCommon.parseModelSpec === 'function') {
-        return AiCommon.parseModelSpec(modelSpec);
-      }
-
-      const [idPart, tierPart] = String(modelSpec || '').split(':');
-      return { id: idPart || '', tier: tierPart || 'standard' };
+    now() {
+      return this.time && typeof this.time.now === 'function' ? this.time.now() : Date.now();
     }
 
-    mapServiceTier(tier) {
-      const normalized = String(tier || '').trim().toLowerCase();
-      if (normalized === 'flex') {
-        return 'flex';
+    logEvent(level, tag, message, meta) {
+      if (!this.eventLogger) {
+        return;
       }
-      if (normalized === 'priority') {
-        return 'priority';
-      }
-      return 'default';
+      this.eventLogger({ level, tag, message, meta });
     }
   }
 

@@ -21,7 +21,7 @@
 
       const payload = {
         model: modelId,
-        input: "Respond with a single '.' character.",
+        input: "Respond with a single '.'",
         max_output_tokens: 4,
         temperature: 0,
         store: false,
@@ -83,6 +83,15 @@
         const error = new Error('Responses API request failed');
         error.code = 'RESPONSES_API_ERROR';
         error.status = response ? response.status : null;
+        if (response && response.headers) {
+          const retryAfter = response.headers.get('retry-after');
+          if (retryAfter) {
+            const retrySeconds = Number(retryAfter);
+            if (!Number.isNaN(retrySeconds)) {
+              error.retryAfterMs = Math.max(0, retrySeconds * 1000);
+            }
+          }
+        }
         throw error;
       }
 

@@ -1,8 +1,9 @@
 (function initUiPortHub(global) {
   class UiPortHub {
-    constructor({ onCommand } = {}) {
+    constructor({ onCommand, onEvent } = {}) {
       this.subscribers = new Set();
       this.onCommand = typeof onCommand === 'function' ? onCommand : null;
+      this.onEvent = typeof onEvent === 'function' ? onEvent : null;
     }
 
     attachToRuntime() {
@@ -15,9 +16,11 @@
           return;
         }
 
+        this.logEvent('info', 'ui', 'Port connected', { source: port.name });
         port.onMessage.addListener((message) => this.handleMessage(port, message));
         port.onDisconnect.addListener(() => {
           this.subscribers.delete(port);
+          this.logEvent('warn', 'ui', 'Port disconnected', { source: port.name });
         });
       });
     }
@@ -31,16 +34,19 @@
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
 
       if (envelope.type === UiProtocol.UI_HELLO) {
+        this.logEvent('info', 'ui', 'UI hello', { source: port.name, stage: 'hello' });
         this.sendSnapshot(port, envelope.meta);
         return;
       }
 
       if (envelope.type === UiProtocol.UI_SUBSCRIBE) {
         this.subscribers.add(port);
+        this.logEvent('info', 'ui', 'UI subscribed', { source: port.name, stage: 'subscribe' });
         return;
       }
 
       if (envelope.type === UiProtocol.UI_COMMAND && this.onCommand) {
+        this.logEvent('info', 'ui', 'UI command received', { source: port.name, stage: 'command' });
         this.onCommand({ port, envelope });
       }
     }
@@ -57,6 +63,7 @@
           stage: 'snapshot',
           requestId: meta && meta.id ? meta.id : null
         });
+        this.logEvent('info', 'ui', 'Snapshot sent', { source: 'background', stage: 'snapshot' });
         this.safePost(port, envelope);
       });
     }
@@ -78,6 +85,7 @@
         const translationVisibilityByTab = result.translationVisibilityByTab || {};
         const modelBenchmarkStatus = result.modelBenchmarkStatus || null;
         const modelBenchmarks = result.modelBenchmarks || {};
+        const eventLog = result.eventLog || { seq: 0, items: [] };
         const tabId = this.resolveTabId(meta, result);
 
         callback({
@@ -86,7 +94,8 @@
           translationStatusByTab,
           translationVisibilityByTab,
           modelBenchmarkStatus,
-          modelBenchmarks
+          modelBenchmarks,
+          eventLog
         });
       });
     }
@@ -114,6 +123,7 @@
         stage: 'patch'
       });
 
+      this.logEvent('info', 'ui', 'Patch broadcast', { source: 'background', stage: 'patch' });
       this.subscribers.forEach((port) => this.safePost(port, envelope));
     }
 
@@ -131,6 +141,13 @@
         return null;
       }
       return MessageEnvelope.isEnvelope(message) ? message : null;
+    }
+
+    logEvent(level, tag, message, meta) {
+      if (!this.onEvent) {
+        return;
+      }
+      this.onEvent({ level, tag, message, meta });
     }
   }
 

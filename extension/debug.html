@@ -73,6 +73,77 @@
         font-weight: 600;
       }
 
+      .debug__controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px;
+      }
+
+      .debug__controls input,
+      .debug__controls select,
+      .debug__controls button {
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border: 1px solid #2a3144;
+        background: #0f1218;
+        color: #f5f7fb;
+      }
+
+      .debug__controls button {
+        cursor: pointer;
+      }
+
+      .debug__button {
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #2a3144;
+        background: #0f1218;
+        color: #f5f7fb;
+        cursor: pointer;
+        align-self: flex-start;
+      }
+
+      .debug__event-log {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 420px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 6px;
+      }
+
+      .event-row {
+        display: grid;
+        grid-template-columns: 72px 110px minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+      }
+
+      .event-message,
+      .event-meta {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        white-space: normal;
+      }
+
+      .event-meta {
+        color: #8fa0b7;
+        font-size: 11px;
+      }
+
+      .debug__event-card {
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid #222838;
+        background: #0f1218;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
       progress {
         width: 100%;
         height: 10px;
@@ -101,6 +172,13 @@
       </section>
 
       <section class="debug__status">
+        <div class="debug__label">Decision</div>
+        <div class="debug__row"><span>Policy</span><span data-field="decision-policy">—</span></div>
+        <div class="debug__row"><span>Chosen model</span><span data-field="decision-model">—</span></div>
+        <div class="debug__row"><span>Reason</span><span data-field="decision-reason">—</span></div>
+      </section>
+
+      <section class="debug__status">
         <div class="debug__label">Model Benchmarks</div>
         <div class="debug__row"><span>Status</span><span data-field="bench-status">—</span></div>
         <div class="debug__row"><span>Current model</span><span data-field="bench-current">—</span></div>
@@ -116,9 +194,32 @@
           <tbody data-field="bench-table"></tbody>
         </table>
       </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Event Log</div>
+        <div class="debug__controls">
+          <select data-field="event-level">
+            <option value="all">Level: all</option>
+            <option value="info">Level: info</option>
+            <option value="warn">Level: warn</option>
+            <option value="error">Level: error</option>
+          </select>
+          <select data-field="event-tag">
+            <option value="all">Tag: all</option>
+          </select>
+          <input type="text" placeholder="Search text" data-field="event-search">
+          <button type="button" data-action="event-copy">Copy JSON</button>
+          <button type="button" data-action="event-clear">Clear</button>
+        </div>
+        <div class="debug__event-log" data-field="event-log"></div>
+        <button type="button" class="debug__button" data-action="event-more">Load more</button>
+      </section>
     </main>
 
     <script src="core/nt-namespace.js"></script>
+    <script src="core/time.js"></script>
+    <script src="core/html.js"></script>
+    <script src="core/retry-loop.js"></script>
     <script src="core/message-envelope.js"></script>
     <script src="core/ui-protocol.js"></script>
     <script src="core/ui-port-client.js"></script>
