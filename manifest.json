@@ -9,9 +9,9 @@
     "activeTab"
   ],
   "background": {
-    "service_worker": "extension/background.js"
+    "service_worker": "extension/bg/background.js"
   },
   "action": {
-    "default_popup": "extension/popup.html"
+    "default_popup": "extension/ui/popup.html"
   }
 }

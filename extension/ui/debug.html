@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <title>Neuro Translate — Отладка</title>
+        <link rel="stylesheet" href="/ui/debug.css">
+  </head>
+  <body>
+    <main class="debug">
+      <header>
+        <h1 class="debug__title">Neuro Translate — Отладка</h1>
+        <p class="debug__subtitle" data-field="site">Сайт: —</p>
+      </header>
+
+      <section>
+        <div class="debug__label">Прогресс</div>
+        <progress value="0" max="100" data-field="progress"></progress>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Статус</div>
+        <div class="debug__row"><span>Completed</span><span data-field="completed">—</span></div>
+        <div class="debug__row"><span>Total</span><span data-field="total">—</span></div>
+        <div class="debug__row"><span>In progress</span><span data-field="inProgress">—</span></div>
+        <div class="debug__row"><span>Message</span><span data-field="message">нет данных</span></div>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Decision</div>
+        <div class="debug__row"><span>Policy</span><span data-field="decision-policy">—</span></div>
+        <div class="debug__row"><span>Chosen model</span><span data-field="decision-model">—</span></div>
+        <div class="debug__row"><span>Reason</span><span data-field="decision-reason">—</span></div>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Model Benchmarks</div>
+        <div class="debug__row"><span>Status</span><span data-field="bench-status">—</span></div>
+        <div class="debug__row"><span>Current model</span><span data-field="bench-current">—</span></div>
+        <div class="debug__row"><span>Message</span><span data-field="bench-message">—</span></div>
+        <table class="debug__table">
+          <thead>
+            <tr>
+              <th>Model spec</th>
+              <th>Median (ms)</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody data-field="bench-table"></tbody>
+        </table>
+      </section>
+
+      <section class="debug__status">
+        <div class="debug__label">Event Log</div>
+        <div class="debug__controls">
+          <select data-field="event-level">
+            <option value="all">Level: all</option>
+            <option value="info">Level: info</option>
+            <option value="warn">Level: warn</option>
+            <option value="error">Level: error</option>
+          </select>
+          <select data-field="event-tag">
+            <option value="all">Tag: all</option>
+          </select>
+          <input type="text" placeholder="Search text" data-field="event-search">
+          <button type="button" data-action="event-copy">Copy JSON</button>
+          <button type="button" data-action="event-clear">Clear</button>
+        </div>
+        <div class="debug__event-log" data-field="event-log"></div>
+        <button type="button" class="debug__button" data-action="event-more">Load more</button>
+      </section>
+    </main>
+
+    <script src="/core/nt-namespace.js"></script>
+    <script src="/core/time.js"></script>
+    <script src="/core/html.js"></script>
+    <script src="/core/retry-loop.js"></script>
+    <script src="/core/message-envelope.js"></script>
+    <script src="/core/ui-protocol.js"></script>
+    <script src="/core/ui-port-client.js"></script>
+    <script src="/ui/debug.js"></script>
+  </body>
+</html>

@@ -45,15 +45,15 @@ function checkSendResponse(files) {
 function checkRequiredSymbols() {
   const checks = [
     {
-      file: path.join(EXTENSION_DIR, 'background', 'llm-engine.js'),
-      symbols: ['class LlmEngine', 'getModelSpec(', 'request(']
+      file: path.join(EXTENSION_DIR, 'ai', 'llm-engine.js'),
+      symbols: ['class LlmEngine', 'global.NT.LlmEngine = LlmEngine']
     },
     {
-      file: path.join(EXTENSION_DIR, 'core', 'llm-client.js'),
+      file: path.join(EXTENSION_DIR, 'ai', 'llm-client.js'),
       symbols: ['generateResponseRaw(', 'generateMinimalPingRaw(']
     },
     {
-      file: path.join(EXTENSION_DIR, 'background', 'model-rate-limit-store.js'),
+      file: path.join(EXTENSION_DIR, 'ai', 'model-rate-limit-store.js'),
       symbols: ['class ModelRateLimitStore', 'upsertFromHeaders(', 'computeAvailability(']
     }
   ];
@@ -71,11 +71,31 @@ function checkRequiredSymbols() {
   return missing;
 }
 
+function checkBgImports() {
+  const bgFile = path.join(EXTENSION_DIR, 'bg', 'background.js');
+  const content = fs.existsSync(bgFile) ? fs.readFileSync(bgFile, 'utf8') : '';
+  const requiredSnippets = ["'/core/nt-namespace.js'", "'/core/message-envelope.js'", "'/ai/llm-engine.js'", "'/ai/llm-client.js'"];
+  return requiredSnippets
+    .filter((snippet) => !content.includes(snippet))
+    .map((snippet) => `${path.relative(ROOT, bgFile)} :: missing importScripts ${snippet}`);
+}
+
+function checkPopupScriptPath() {
+  const popupHtml = path.join(EXTENSION_DIR, 'ui', 'popup.html');
+  const content = fs.existsSync(popupHtml) ? fs.readFileSync(popupHtml, 'utf8') : '';
+  if (content.includes('src="/ui/popup.js"') || content.includes('src="ui/popup.js"')) {
+    return [];
+  }
+  return [`${path.relative(ROOT, popupHtml)} :: missing script src for ui/popup.js`];
+}
+
 const files = listJsFiles(EXTENSION_DIR);
 const issues = checkSendResponse(files);
 const missingSymbols = checkRequiredSymbols();
+const missingBgImports = checkBgImports();
+const missingPopupPath = checkPopupScriptPath();
 
-if (issues.length || missingSymbols.length) {
+if (issues.length || missingSymbols.length || missingBgImports.length || missingPopupPath.length) {
   if (issues.length) {
     console.error('Found onMessage listener with sendResponse missing return true:');
     issues.forEach((issue) => {
@@ -87,7 +107,18 @@ if (issues.length || missingSymbols.length) {
     console.error('Missing required symbols:');
     missingSymbols.forEach((entry) => console.error(`- ${entry}`));
   }
+
+  if (missingBgImports.length) {
+    console.error('Missing background importScripts entries:');
+    missingBgImports.forEach((entry) => console.error(`- ${entry}`));
+  }
+
+  if (missingPopupPath.length) {
+    console.error('Missing popup script path entries:');
+    missingPopupPath.forEach((entry) => console.error(`- ${entry}`));
+  }
+
   process.exit(1);
 }
 
-console.log('Smoke check passed: protocol guards and required LLM modules are present.');
+console.log('Smoke check passed: paths and module wiring are valid after refactor.');

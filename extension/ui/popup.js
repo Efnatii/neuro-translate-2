@@ -535,7 +535,7 @@
       const activeTab = await this.getActiveTab();
       const tabId = activeTab ? activeTab.id : '';
       const tabUrl = activeTab && activeTab.url ? activeTab.url : '';
-      const debugUrl = `${this.chromeApi.runtime.getURL('debug.html')}?tabId=${tabId}&url=${encodeURIComponent(tabUrl)}`;
+      const debugUrl = `${this.chromeApi.runtime.getURL('ui/debug.html')}?tabId=${tabId}&url=${encodeURIComponent(tabUrl)}`;
 
       this.chromeApi.tabs.create({ url: debugUrl });
     }

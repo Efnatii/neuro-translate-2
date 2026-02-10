@@ -23,7 +23,7 @@ function walkForManifestFiles(dir, results) {
 }
 
 function hasCanonicalExtensionSiblings(rootDir) {
-  const required = ['background.js', 'popup.html', 'debug.html'];
+  const required = ['bg/background.js', 'ui/popup.html', 'ui/debug.html'];
   return required.every((fileName) => fs.existsSync(path.join(rootDir, fileName)));
 }
 
