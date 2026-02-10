@@ -1,20 +1,20 @@
 importScripts(
-  'core/nt-namespace.js',
-  'core/time.js',
-  'core/rate-limiter.js',
-  'core/retry-loop.js',
-  'core/message-envelope.js',
-  'core/ui-protocol.js',
-  'core/ui-port-hub.js',
-  'core/llm-client.js',
-  'ai-common.js',
-  'background/event-log-store.js',
-  'background/load-scheduler.js',
-  'background/model-benchmark-store.js',
-  'background/model-benchmarker.js',
-  'background/model-chooser.js',
-  'background/model-rate-limit-store.js',
-  'background/llm-engine.js'
+  '/core/nt-namespace.js',
+  '/core/time.js',
+  '/core/rate-limiter.js',
+  '/core/retry-loop.js',
+  '/core/message-envelope.js',
+  '/core/ui-protocol.js',
+  '/bg/ui-port-hub.js',
+  '/ai/llm-client.js',
+  '/ai/ai-common.js',
+  '/bg/event-log-store.js',
+  '/bg/load-scheduler.js',
+  '/ai/model-benchmark-store.js',
+  '/ai/model-benchmarker.js',
+  '/ai/model-chooser.js',
+  '/ai/model-rate-limit-store.js',
+  '/ai/llm-engine.js'
 );
 
 (async function initBackground(global) {
