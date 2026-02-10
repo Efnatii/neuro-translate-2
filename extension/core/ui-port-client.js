@@ -1,9 +1,20 @@
+/**
+ * Resilient UI runtime-port client with reconnect handshake.
+ *
+ * `UiPortClient` connects popup/debug pages to background hub, performs
+ * HELLO/SUBSCRIBE handshake, and re-establishes the channel when MV3 ports are
+ * disconnected.
+ *
+ * The client accepts `getHelloPayload` so reconnects can include incremental
+ * sync hints (for example last known event sequence), reducing snapshot size.
+ */
 (function initUiPortClient(global) {
   class UiPortClient {
-    constructor({ portName, onSnapshot, onPatch }) {
+    constructor({ portName, onSnapshot, onPatch, getHelloPayload } = {}) {
       this.portName = portName;
       this.onSnapshot = onSnapshot;
       this.onPatch = onPatch;
+      this.getHelloPayload = typeof getHelloPayload === 'function' ? getHelloPayload : null;
       this.port = null;
       this.connected = false;
       this.retryController = null;
@@ -64,34 +75,34 @@
     startHandshake() {
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
       const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-
       if (!MessageEnvelope) {
         return;
       }
 
       const source = this.portName;
-      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_HELLO, {}, { source, stage: 'handshake' }));
+      const helloPayload = this.getHelloPayload ? this.getHelloPayload() : {};
+      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_HELLO, helloPayload || {}, { source, stage: 'handshake' }));
     }
 
-    sendCommand(name, payload) {
+    sendCommand(name, payload, meta = {}) {
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
       const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-
       if (!MessageEnvelope) {
         return;
       }
 
-      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_COMMAND, { name, payload }, { source: this.portName }));
+      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_COMMAND, { name, payload }, {
+        source: this.portName,
+        requestId: meta.requestId || null
+      }));
     }
 
     acknowledgeSnapshot() {
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
       const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-
       if (!MessageEnvelope) {
         return;
       }
-
       this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_SUBSCRIBE, {}, { source: this.portName }));
     }
 
@@ -99,7 +110,6 @@
       if (!this.port) {
         return;
       }
-
       try {
         this.port.postMessage(envelope);
       } catch (error) {

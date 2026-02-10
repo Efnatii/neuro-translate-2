@@ -1,9 +1,20 @@
+/**
+ * Debounced settings persistence adapter for UI/state modules.
+ *
+ * `SettingsStore` provides a small public API:
+ * - `get(keys)` reads settings with defaults and optional sanitize hook.
+ * - `set(payload)` writes values immediately.
+ * - `queuePatch(patch)` coalesces rapid updates with debounce.
+ *
+ * Storage writes go through `ChromeLocalStoreBase` so behavior remains consistent
+ * when MV3 runtime contexts are restarted and state must be restored.
+ */
 (function initSettingsStore(global) {
   const NT = global.NT || (global.NT = {});
 
-  class SettingsStore {
+  class SettingsStore extends NT.ChromeLocalStoreBase {
     constructor({ chromeApi, defaults = {}, sanitize = null, debounceMs = 400 } = {}) {
-      this.chromeApi = chromeApi;
+      super({ chromeApi });
       this.defaults = defaults;
       this.sanitize = typeof sanitize === 'function' ? sanitize : null;
       this.debounceMs = debounceMs;
@@ -11,28 +22,32 @@
       this.saveTimer = null;
     }
 
-    get(keys) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        const fallback = this.applyDefaults({}, keys);
-        return Promise.resolve(this.applySanitize(fallback));
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.get(keys, (result) => {
-          const merged = this.applyDefaults(result || {}, keys);
-          resolve(this.applySanitize(merged));
-        });
-      });
+    async get(keys) {
+      const fallback = this.applyDefaults({}, keys);
+      const data = await this.storageGet(fallback);
+      const merged = this.applyDefaults(data || {}, keys);
+      return this.applySanitize(merged);
     }
 
     set(payload) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return Promise.resolve();
-      }
+      return this.storageSet(payload);
+    }
 
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.set(payload, () => resolve());
-      });
+    async getPublicSnapshot() {
+      const data = await this.get([
+        'apiKey',
+        'translationModelList',
+        'modelSelection',
+        'modelSelectionPolicy'
+      ]);
+      const apiKey = typeof data.apiKey === 'string' ? data.apiKey : '';
+      return {
+        hasApiKey: Boolean(apiKey),
+        apiKeyLength: apiKey.length,
+        translationModelList: Array.isArray(data.translationModelList) ? data.translationModelList : [],
+        modelSelection: data.modelSelection || null,
+        modelSelectionPolicy: data.modelSelectionPolicy || null
+      };
     }
 
     queuePatch(patch, { finalize } = {}) {

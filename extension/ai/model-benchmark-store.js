@@ -1,12 +1,22 @@
+/**
+ * Persistent benchmark snapshot store for model performance metadata.
+ *
+ * The store keeps two datasets in `chrome.storage.local`:
+ * - `modelBenchmarks`: per-model latency samples and error state.
+ * - `modelBenchmarkStatus`: progress/lease state for active benchmark jobs.
+ *
+ * TTL and minimum-attempt interval policies are enforced here so callers can
+ * safely query freshness without duplicating storage logic.
+ */
 (function initModelBenchmarkStore(global) {
   const STORAGE_KEY_BENCHMARKS = 'modelBenchmarks';
   const STORAGE_KEY_STATUS = 'modelBenchmarkStatus';
   const TTL_MS = 24 * 60 * 60 * 1000;
   const MIN_INTERVAL_MS = 45 * 60 * 1000;
 
-  class ModelBenchmarkStore {
+  class ModelBenchmarkStore extends global.NT.ChromeLocalStoreBase {
     constructor({ chromeApi }) {
-      this.chromeApi = chromeApi;
+      super({ chromeApi });
     }
 
     async getAll() {
@@ -83,26 +93,6 @@
         return true;
       }
       return now - entry.lastAttemptAt >= MIN_INTERVAL_MS;
-    }
-
-    storageGet(defaults) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return Promise.resolve(defaults || {});
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.get(defaults, (result) => resolve(result || defaults || {}));
-      });
-    }
-
-    storageSet(payload) {
-      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local) {
-        return Promise.resolve();
-      }
-
-      return new Promise((resolve) => {
-        this.chromeApi.storage.local.set(payload, () => resolve());
-      });
     }
   }
 
