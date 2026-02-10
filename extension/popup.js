@@ -6,7 +6,7 @@
       this.state = {
         apiKey: '',
         translationModelList: [],
-        modelSelectionPolicy: 'fastest',
+        modelSelection: { speed: true, preference: null },
         translationVisible: true
       };
       this.activeTabId = null;
@@ -33,7 +33,8 @@
       this.apiKeyInput = this.doc.querySelector('[data-field="api-key"]');
       this.apiKeyToggle = this.doc.querySelector('[data-action="toggle-api"]');
       this.modelsRoot = this.doc.querySelector('[data-section="models"]');
-      this.policySelect = this.doc.querySelector('[data-field="selection-policy"]');
+      this.speedCheckbox = this.doc.querySelector('[data-field="selection-speed"]');
+      this.preferenceSelect = this.doc.querySelector('[data-field="selection-preference"]');
       this.statusText = this.doc.querySelector('[data-field="status-text"]');
       this.statusProgress = this.doc.querySelector('[data-field="status-progress"]');
       this.visibilityButton = this.doc.querySelector('[data-action="toggle-visibility"]');
@@ -56,14 +57,27 @@
         });
       }
 
-      if (this.policySelect) {
-        this.policySelect.addEventListener('change', (event) => {
-          const value = event.target.value;
-          this.state.modelSelectionPolicy = value;
-          this.scheduleSave({ modelSelectionPolicy: value });
-          if (value === 'fastest' && this.state.translationModelList.length) {
+      if (this.speedCheckbox) {
+        this.speedCheckbox.addEventListener('change', (event) => {
+          this.state.modelSelection = {
+            ...this.state.modelSelection,
+            speed: Boolean(event.target.checked)
+          };
+          this.scheduleSave({ modelSelection: this.state.modelSelection });
+          if (this.state.modelSelection.speed && this.state.translationModelList.length) {
             this.triggerBenchmarkSelectedModels();
           }
+        });
+      }
+
+      if (this.preferenceSelect) {
+        this.preferenceSelect.addEventListener('change', (event) => {
+          const value = event.target.value;
+          this.state.modelSelection = {
+            ...this.state.modelSelection,
+            preference: value === 'smartest' || value === 'cheapest' ? value : null
+          };
+          this.scheduleSave({ modelSelection: this.state.modelSelection });
         });
       }
 
@@ -144,7 +158,8 @@
         defaults: {
           apiKey: '',
           translationModelList: [],
-          modelSelectionPolicy: 'fastest',
+          modelSelection: { speed: true, preference: null },
+          modelSelectionPolicy: null,
           translationVisibilityByTab: {}
         }
       });
@@ -154,6 +169,7 @@
       const keys = [
         'apiKey',
         'translationModelList',
+        'modelSelection',
         'modelSelectionPolicy',
         'translationVisibilityByTab'
       ];
@@ -164,12 +180,16 @@
       this.state.translationModelList = Array.isArray(sanitized.translationModelList)
         ? sanitized.translationModelList
         : [];
-      this.state.modelSelectionPolicy = sanitized.modelSelectionPolicy || 'fastest';
+      this.state.modelSelection = this.normalizeModelSelection(sanitized.modelSelection, sanitized.modelSelectionPolicy);
       if (sanitized.translationVisibilityByTab && this.activeTabId !== null) {
         const visibility = sanitized.translationVisibilityByTab[this.activeTabId];
         if (typeof visibility === 'boolean') {
           this.state.translationVisible = visibility;
         }
+      }
+
+      if (!sanitized.modelSelection && this.state.modelSelection) {
+        this.scheduleSave({ modelSelection: this.state.modelSelection });
       }
     }
 
@@ -187,7 +207,7 @@
         this.state.translationModelList = Array.isArray(payload.settings.translationModelList)
           ? payload.settings.translationModelList
           : [];
-        this.state.modelSelectionPolicy = payload.settings.modelSelectionPolicy || 'fastest';
+        this.state.modelSelection = this.normalizeModelSelection(payload.settings.modelSelection, payload.settings.modelSelectionPolicy);
       }
 
       if (payload.translationVisibilityByTab && this.activeTabId !== null) {
@@ -221,8 +241,8 @@
           ? patch.translationModelList
           : [];
       }
-      if (patch.modelSelectionPolicy !== undefined) {
-        this.state.modelSelectionPolicy = patch.modelSelectionPolicy || 'fastest';
+      if (patch.modelSelection !== undefined) {
+        this.state.modelSelection = this.normalizeModelSelection(patch.modelSelection, null);
       }
       if (patch.translationVisibilityByTab && this.activeTabId !== null) {
         const visibility = patch.translationVisibilityByTab[this.activeTabId];
@@ -244,12 +264,34 @@
         this.apiKeyInput.value = this.state.apiKey;
       }
 
-      if (this.policySelect) {
-        this.policySelect.value = this.state.modelSelectionPolicy;
+      if (this.speedCheckbox) {
+        this.speedCheckbox.checked = Boolean(this.state.modelSelection.speed);
+      }
+
+      if (this.preferenceSelect) {
+        this.preferenceSelect.value = this.state.modelSelection.preference || 'none';
       }
 
       this.updateVisibilityIcon();
       this.syncModelSelections();
+    }
+
+    normalizeModelSelection(modelSelection, legacyPolicy) {
+      if (modelSelection && typeof modelSelection === 'object') {
+        const speed = modelSelection.speed !== false;
+        const preference = modelSelection.preference === 'smartest' || modelSelection.preference === 'cheapest'
+          ? modelSelection.preference
+          : null;
+        return { speed, preference };
+      }
+
+      if (legacyPolicy === 'smartest') {
+        return { speed: false, preference: 'smartest' };
+      }
+      if (legacyPolicy === 'cheapest') {
+        return { speed: false, preference: 'cheapest' };
+      }
+      return { speed: true, preference: null };
     }
 
     renderModels() {

@@ -201,3 +201,11 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.popup__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d8dee9;
+}
+

@@ -31,9 +31,13 @@
       </section>
 
       <section class="popup__section">
-        <label class="popup__label" for="selection-policy">Принцип выбора</label>
-        <select id="selection-policy" class="popup__select" data-field="selection-policy">
-          <option value="fastest">Самые быстрые</option>
+        <label class="popup__label popup__checkbox-row">
+          <input type="checkbox" data-field="selection-speed">
+          <span>Максимальная скорость</span>
+        </label>
+        <label class="popup__label" for="selection-preference">Приоритет</label>
+        <select id="selection-preference" class="popup__select" data-field="selection-preference">
+          <option value="none">Без приоритета</option>
           <option value="smartest">Самые умные</option>
           <option value="cheapest">Самые дешёвые</option>
         </select>

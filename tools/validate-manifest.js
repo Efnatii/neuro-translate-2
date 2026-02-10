@@ -28,6 +28,11 @@ function hasCanonicalExtensionSiblings(rootDir) {
 }
 
 function findManifest() {
+  const rootManifest = path.join(REPO_ROOT, 'manifest.json');
+  if (fs.existsSync(rootManifest)) {
+    return { manifestPath: rootManifest, rootDir: REPO_ROOT };
+  }
+
   const preferredRoot = path.join(REPO_ROOT, 'extension');
   const preferredManifest = path.join(preferredRoot, 'manifest.json');
 

@@ -12,7 +12,9 @@ importScripts(
   'background/load-scheduler.js',
   'background/model-benchmark-store.js',
   'background/model-benchmarker.js',
-  'background/model-chooser.js'
+  'background/model-chooser.js',
+  'background/model-rate-limit-store.js',
+  'background/llm-engine.js'
 );
 
 (async function initBackground(global) {
@@ -23,6 +25,7 @@ importScripts(
   const benchmarkStore = new global.NT.ModelBenchmarkStore({ chromeApi: global.chrome });
   const llmClient = new global.NT.LlmClient({ chromeApi: global.chrome, fetchFn: global.fetch });
   const eventLogStore = new global.NT.EventLogStore({ chromeApi: global.chrome, limit: 600 });
+  const rateLimitStore = new global.NT.ModelRateLimitStore({ chromeApi: global.chrome });
   await eventLogStore.load();
   const logEvent = (event) => {
     eventLogStore.append(event).catch(() => {});
@@ -37,11 +40,14 @@ importScripts(
     loadScheduler,
     eventLogger: logEvent
   });
-  const modelChooser = new global.NT.ModelChooser({
+  const llmEngine = new global.NT.LlmEngine({
     chromeApi: global.chrome,
+    llmClient,
     modelRegistry,
     benchmarkStore,
     benchmarker,
+    rateLimitStore,
+    loadScheduler,
     eventLogger: logEvent
   });
   const hub = new global.NT.UiPortHub({
@@ -54,10 +60,11 @@ importScripts(
   const services = global.NT.Services || (global.NT.Services = {});
   services.benchmarkStore = benchmarkStore;
   services.benchmarker = benchmarker;
-  services.modelChooser = modelChooser;
+  services.llmEngine = llmEngine;
   services.llmClient = llmClient;
   services.eventLogStore = eventLogStore;
   services.rateLimiter = rateLimiter;
+  services.rateLimitStore = rateLimitStore;
   services.loadScheduler = loadScheduler;
   services.logEvent = logEvent;
 
@@ -76,7 +83,7 @@ importScripts(
       const watchedKeys = [
         'apiKey',
         'translationModelList',
-        'modelSelectionPolicy',
+        'modelSelection',
         'translationStatusByTab',
         'translationVisibilityByTab',
         'modelBenchmarkStatus',
@@ -169,124 +176,75 @@ importScripts(
     });
   }
 
-  async function runLlmRequest({ tabId, taskType, policy, modelSpecs, request }) {
-    const decision = await modelChooser.choose({ tabId, taskType, policy, modelSpecs });
-    if (!decision.chosenModelId) {
-      const error = new Error('No model selected');
-      error.code = 'NO_MODEL_SELECTED';
-      throw error;
-    }
-
-    const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
-    const retryLoop = RetryLoop
-      ? new RetryLoop({
-        maxAttempts: 2,
-        maxTotalMs: 15000,
-        baseDelayMs: 1000,
-        maxDelayMs: 4000,
-        multiplier: 2,
-        jitterMs: 400
-      })
-      : null;
-
+  async function runLlmRequest({ tabId, taskType, request }) {
+    const settings = await readLlmSettings();
     const safeRequest = request && typeof request === 'object' ? request : {};
-    const requestStartedAt = Date.now();
-    logEvent({
-      level: 'info',
-      tag: 'llm',
-      message: 'LLM request started',
-      meta: {
-        source: 'background',
-        modelSpec: decision.chosenModelSpec,
-        stage: 'start'
-      }
+    return llmEngine.request({
+      tabId,
+      taskType,
+      selectedModelSpecs: settings.translationModelList,
+      modelSelection: settings.modelSelection,
+      input: safeRequest.input,
+      maxOutputTokens: safeRequest.maxOutputTokens,
+      temperature: safeRequest.temperature,
+      store: safeRequest.store,
+      background: safeRequest.background,
+      signal: safeRequest.signal
     });
-    const execute = async () => {
-      const estTokens = estimateTokens(safeRequest);
-      await loadScheduler.reserveSlot({
-        kind: 'LLM_REQUEST',
-        estTokens,
-        estRpm: 1,
-        priority: 'high'
-      });
-      return llmClient.generateResponse({
-        ...safeRequest,
-        modelId: decision.chosenModelId,
-        serviceTier: decision.serviceTier
-      });
-    };
-
-    try {
-      if (retryLoop) {
-        const response = await retryLoop.run(execute);
-        logEvent({
-          level: 'info',
-          tag: 'llm',
-          message: 'LLM request completed',
-          meta: {
-            source: 'background',
-            modelSpec: decision.chosenModelSpec,
-            stage: 'end',
-            latencyMs: Date.now() - requestStartedAt
-          }
-        });
-        return response;
-      }
-      const response = await execute();
-      logEvent({
-        level: 'info',
-        tag: 'llm',
-        message: 'LLM request completed',
-        meta: {
-          source: 'background',
-          modelSpec: decision.chosenModelSpec,
-          stage: 'end',
-          latencyMs: Date.now() - requestStartedAt
-        }
-      });
-      return response;
-    } catch (error) {
-      if (error && error.status === 429) {
-        loadScheduler.onRateLimited({ retryAfterMs: error.retryAfterMs, kind: 'LLM_REQUEST' });
-        logEvent({
-          level: 'warn',
-          tag: 'rate-limit',
-          message: 'LLM request rate-limited',
-          meta: { source: 'background', status: error.status, stage: 'rate-limit' }
-        });
-      }
-      logEvent({
-        level: 'error',
-        tag: 'llm',
-        message: error && error.message ? error.message : 'LLM request failed',
-        meta: {
-          source: 'background',
-          modelSpec: decision.chosenModelSpec,
-          stage: 'error',
-          status: error && error.status ? error.status : null
-        }
-      });
-      throw error;
-    }
   }
 
-  function estimateTokens(request) {
-    const input = request.input || '';
-    let promptLength = 0;
-    if (typeof input === 'string') {
-      promptLength = input.length;
-    } else {
-      try {
-        promptLength = JSON.stringify(input).length;
-      } catch (error) {
-        promptLength = 0;
-      }
+  async function readLlmSettings() {
+    if (!global.chrome || !global.chrome.storage || !global.chrome.storage.local) {
+      return {
+        translationModelList: [],
+        modelSelection: defaultModelSelection()
+      };
     }
 
-    const maxOutput = typeof request.maxOutputTokens === 'number'
-      ? request.maxOutputTokens
-      : (typeof request.max_output_tokens === 'number' ? request.max_output_tokens : 0);
-    return Math.ceil(promptLength / 4) + maxOutput;
+    const data = await new Promise((resolve) => {
+      global.chrome.storage.local.get(
+        {
+          translationModelList: [],
+          modelSelection: null,
+          modelSelectionPolicy: null
+        },
+        (result) => resolve(result || {})
+      );
+    });
+
+    const modelSelection = normalizeModelSelection(data.modelSelection, data.modelSelectionPolicy);
+    if (!data.modelSelection) {
+      await new Promise((resolve) => {
+        global.chrome.storage.local.set({ modelSelection }, () => resolve());
+      });
+    }
+
+    return {
+      translationModelList: Array.isArray(data.translationModelList) ? data.translationModelList : [],
+      modelSelection
+    };
+  }
+
+  function normalizeModelSelection(modelSelection, legacyPolicy) {
+    if (modelSelection && typeof modelSelection === 'object') {
+      const speed = modelSelection.speed !== false;
+      const preference = modelSelection.preference === 'smartest' || modelSelection.preference === 'cheapest'
+        ? modelSelection.preference
+        : null;
+      return { speed, preference };
+    }
+
+    if (legacyPolicy === 'smartest') {
+      return { speed: false, preference: 'smartest' };
+    }
+    if (legacyPolicy === 'cheapest') {
+      return { speed: false, preference: 'cheapest' };
+    }
+    return defaultModelSelection();
+  }
+
+  function defaultModelSelection() {
+    return { speed: true, preference: null };
   }
 
   async function preloadState() {
@@ -297,7 +255,9 @@ importScripts(
     const state = await new Promise((resolve) => {
       global.chrome.storage.local.get(
         {
-          modelBenchmarkStatus: null
+          modelBenchmarkStatus: null,
+          modelSelection: null,
+          modelSelectionPolicy: null
         },
         (result) => resolve(result || {})
       );
@@ -321,6 +281,13 @@ importScripts(
         tag: 'job',
         message: 'Benchmark lease expired',
         meta: { source: 'background', stage: 'lease' }
+      });
+    }
+
+    if (!state.modelSelection) {
+      const modelSelection = normalizeModelSelection(state.modelSelection, state.modelSelectionPolicy);
+      await new Promise((resolve) => {
+        global.chrome.storage.local.set({ modelSelection }, () => resolve());
       });
     }
   }
