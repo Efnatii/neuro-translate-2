@@ -1,4 +1,20 @@
+/**
+ * In-memory load scheduler for background request admission.
+ *
+ * `LoadScheduler` arbitrates high/low-priority work against local `RateLimiter`
+ * availability and bounded wait loops so MV3 worker tasks do not overrun.
+ *
+ * Contracts:
+ * - returns terminal reservation result or timeout failure;
+ * - emits optional diagnostic events through injected logger;
+ * - keeps no persistent state across worker restarts.
+ *
+ * It does not parse provider headers and does not touch UI/runtime ports.
+ */
 (function initLoadScheduler(global) {
+  const NT = global.NT;
+  const BG = NT.Internal.bg;
+
   class LoadScheduler {
     constructor({
       rateLimiter,
@@ -170,5 +186,5 @@
   if (!global.NT) {
     global.NT = {};
   }
-  global.NT.LoadScheduler = LoadScheduler;
+  BG.LoadScheduler = LoadScheduler;
 })(globalThis);

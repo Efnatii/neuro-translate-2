@@ -1,24 +1,22 @@
 /**
- * Persistent per-tab state store for background orchestration.
+ * Persistent per-tab state store for translation progress and visibility.
  *
- * `TabStateStore` is the single write path for tab-scoped state blobs used by
- * popup/debug views (`translationStatusByTab`, `translationVisibilityByTab`).
- * Keeping writes centralized prevents format drift and removes direct storage
- * access from AI orchestration code.
+ * Responsibilities:
+ * - centralize all writes to tab status/visibility maps in local storage;
+ * - preserve model-decision hints across MV3 service-worker restarts;
+ * - provide small helpers used by BackgroundApp orchestration.
  *
- * MV3 note: service workers are ephemeral, therefore model decisions and
- * visibility flags must be merged and persisted in `chrome.storage.local`.
- *
- * Public methods: `getAllStatus`, `upsertModelDecision`, `upsertStatusPatch`,
- * `upsertVisibility`, plus `getLastModelSpec`/`setLastModelSpec` used as a
- * soft hint for anti-thrash model stickiness in speed mode.
+ * Contracts:
+ * - no direct UI logic, no network calls, no AI benchmarking logic;
+ * - data is merged per-tab and persisted through LocalStore helpers.
  */
 (function initTabStateStore(global) {
-  const NT = global.NT || (global.NT = {});
+  const NT = global.NT;
+  const BG = NT.Internal.bg;
 
-  class TabStateStore extends NT.ChromeLocalStoreBase {
-    constructor({ chromeApi } = {}) {
-      super({ chromeApi });
+  class TabStateStore extends NT.LocalStore {
+    constructor({ chromeApi, time, eventSink } = {}) {
+      super({ chromeApi, time, eventSink, storeName: 'TabStateStore' });
     }
 
     async getAllStatus() {
@@ -99,5 +97,5 @@
     }
   }
 
-  NT.TabStateStore = TabStateStore;
+  BG.TabStateStore = TabStateStore;
 })(globalThis);

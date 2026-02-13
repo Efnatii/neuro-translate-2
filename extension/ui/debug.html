@@ -1,5 +1,15 @@
 <!doctype html>
 <html lang="ru">
+  <!--
+    Debug entrypoint for MV3 diagnostics view.
+    Responsibilities:
+    - renders static containers for snapshot/patch diagnostics;
+    - loads shared transport/runtime helpers before page controller;
+    - keeps layout resilient to long event/meta text without horizontal scroll.
+    Non-goals:
+    - no background business logic or direct persistent-state reads,
+    - no direct network/offscreen operations from the page.
+  -->
   <head>
     <meta charset="utf-8">
     <title>Neuro Translate — Отладка</title>
@@ -10,6 +20,8 @@
       <header>
         <h1 class="debug__title">Neuro Translate — Отладка</h1>
         <p class="debug__subtitle" data-field="site">Сайт: —</p>
+        <p class="debug__subtitle debug__transport" data-field="transport">Transport: —</p>
+        <p class="debug__subtitle debug__error" data-field="ui-error"></p>
       </header>
 
       <section>
@@ -84,12 +96,9 @@
     <script src="/core/time.js"></script>
     <script src="/core/html.js"></script>
     <script src="/core/retry-loop.js"></script>
-    <script src="/core/chrome-local-store-base.js"></script>
-    <script src="/core/model-selection.js"></script>
-    <script src="/core/event-types.js"></script>
-    <script src="/core/settings-store.js"></script>
     <script src="/core/message-envelope.js"></script>
     <script src="/core/ui-protocol.js"></script>
+    <script src="/core/message-bus.js"></script>
     <script src="/core/ui-port-client.js"></script>
     <script src="/ui/ui-module.js"></script>
     <script src="/ui/debug.js"></script>

@@ -1,3 +1,19 @@
+/**
+ * Local in-memory rate limiter for background scheduling pressure.
+ *
+ * This limiter is used by `LoadScheduler` to smooth request bursts using
+ * token-bucket style RPM/TPM capacities inside the current worker lifetime.
+ *
+ * Contract:
+ * - `updateLimits({ rpm, tpm })` updates capacities at runtime.
+ * - `tryConsume({ rpm, tokens })` returns `{ allowed, retryAfterMs }`.
+ * - `getAvailability()` returns current bucket state and fractions.
+ *
+ * Important boundaries:
+ * - this is NOT OpenAI header-based per-model limit state;
+ * - per-model server limits are handled by AI `ModelRateLimitStore`;
+ * - this limiter is non-persistent and resets on worker restart.
+ */
 (function initRateLimiter(global) {
   const NT = global.NT || (global.NT = {});
 

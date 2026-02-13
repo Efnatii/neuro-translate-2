@@ -1,17 +1,21 @@
 /**
- * Service-worker side executor for MV3 offscreen transport orchestration.
+ * Service-worker transport executor for MV3 OpenAI requests.
  *
- * `OffscreenExecutor` owns lifecycle of the offscreen document and provides a
- * single `execute` method for AI transport requests. It keeps offscreen creation
- * idempotent, applies bounded retries for startup races, and enforces timeout
- * wrappers so background orchestration never waits forever.
+ * `OffscreenExecutor` prefers offscreen document transport, but degrades to
+ * direct service-worker fetch when offscreen API or document creation is not
+ * available. This prevents silent deadlocks during misconfigured installs.
  *
- * MV3 note: service workers may terminate at any point. Offscreen messaging can
- * revive SW, while offscreen-side request-id caching ensures idempotent resend
- * after restart.
+ * Contracts:
+ * - public `execute` returns a terminal result object for each request;
+ * - `ensureDocument` never throws on capability issues, it switches mode;
+ * - direct fallback uses bounded timeout via AbortController;
+ * - secrets are never logged in diagnostic events.
+ *
+ * This module does not implement AI selection logic or persistent tab state.
  */
 (function initOffscreenExecutor(global) {
-  const NT = global.NT || (global.NT = {});
+  const NT = global.NT;
+  const BG = NT.Internal.bg;
 
   class OffscreenExecutor {
     constructor({ chromeApi, offscreenPath, eventFactory, eventLogFn } = {}) {
@@ -21,6 +25,8 @@
       this.log = typeof eventLogFn === 'function' ? eventLogFn : null;
       this.creating = null;
       this.didLogReady = false;
+      this.mode = 'offscreen';
+      this.disabledReason = null;
       this._bindListener();
     }
 
@@ -47,15 +53,29 @@
       this.log({ level, tag, message, meta });
     }
 
+    _switchToDirect(reason, errorLike) {
+      if (this.mode !== 'direct') {
+        this._emit('warn', 'OFFSCREEN_FALLBACK_DIRECT', 'Offscreen is unavailable, switched to direct SW fetch mode.', {
+          reason,
+          message: errorLike && errorLike.message ? errorLike.message : null
+        });
+      }
+      this.mode = 'direct';
+      this.disabledReason = reason || 'OFFSCREEN_DISABLED';
+    }
+
     async ensureDocument() {
       const chromeApi = this.chromeApi;
       if (!chromeApi || !chromeApi.runtime || !chromeApi.offscreen) {
-        throw new Error('OFFSCREEN_UNAVAILABLE');
+        this._switchToDirect('OFFSCREEN_UNAVAILABLE');
+        return;
       }
 
       const url = chromeApi.runtime.getURL(this.offscreenPath);
       const exists = await this._hasDocument(url);
       if (exists) {
+        this.mode = 'offscreen';
+        this.disabledReason = null;
         if (!this.didLogReady) {
           this._emit('info', 'bg.offscreen', 'Offscreen executor ready', { stage: 'existing' });
           this.didLogReady = true;
@@ -64,7 +84,13 @@
       }
 
       if (this.creating) {
-        await this.creating;
+        try {
+          await this.creating;
+          this.mode = 'offscreen';
+          this.disabledReason = null;
+        } catch (error) {
+          this._switchToDirect('OFFSCREEN_CREATE_FAILED', error);
+        }
         return;
       }
 
@@ -76,8 +102,12 @@
 
       try {
         await this.creating;
+        this.mode = 'offscreen';
+        this.disabledReason = null;
         this._emit('info', 'bg.offscreen', 'Offscreen document created', { stage: 'create' });
         this.didLogReady = true;
+      } catch (error) {
+        this._switchToDirect('OFFSCREEN_CREATE_FAILED', error);
       } finally {
         this.creating = null;
       }
@@ -112,12 +142,14 @@
       ]);
     }
 
-
     async getCachedResult(requestId) {
       if (!requestId) {
         return null;
       }
       await this.ensureDocument();
+      if (this.mode !== 'offscreen') {
+        return null;
+      }
       const cached = await this._sendWithTimeout({ type: 'OFFSCREEN_GET_RESULT', requestId }, 6000);
       if (!cached || cached.ok !== true) {
         return null;
@@ -133,16 +165,21 @@
       for (let attempt = 1; attempt <= attempts; attempt += 1) {
         try {
           await this.ensureDocument();
-          const cached = await this._sendWithTimeout({ type: 'OFFSCREEN_GET_RESULT', requestId }, 6000);
-          if (cached && cached.ok && cached.result) {
-            return cached.result;
+
+          if (this.mode === 'offscreen') {
+            const cached = await this._sendWithTimeout({ type: 'OFFSCREEN_GET_RESULT', requestId }, 6000);
+            if (cached && cached.ok && cached.result) {
+              return cached.result;
+            }
+
+            return await this._sendWithTimeout({
+              type: 'OFFSCREEN_EXECUTE',
+              requestId,
+              payload: { ...(payload || {}), timeoutMs: timeoutMs || (payload && payload.timeoutMs) || 90000 }
+            }, timeoutMs || 90000);
           }
 
-          return await this._sendWithTimeout({
-            type: 'OFFSCREEN_EXECUTE',
-            requestId,
-            payload: { ...(payload || {}), timeoutMs: timeoutMs || (payload && payload.timeoutMs) || 90000 }
-          }, timeoutMs || 90000);
+          return await this._directFetchExecute({ requestId, payload, timeoutMs });
         } catch (error) {
           if (attempt >= attempts) {
             throw error;
@@ -152,7 +189,57 @@
       }
       throw new Error('OFFSCREEN_EXECUTE_FAILED');
     }
+
+    async _directFetchExecute({ requestId, payload, timeoutMs } = {}) {
+      const safePayload = payload && typeof payload === 'object' ? payload : {};
+      const url = typeof safePayload.url === 'string' ? safePayload.url : '';
+      const method = typeof safePayload.method === 'string' ? safePayload.method : 'POST';
+      const headers = safePayload.headers && typeof safePayload.headers === 'object' ? safePayload.headers : {};
+      const body = safePayload.body === undefined ? undefined : safePayload.body;
+      if (!url) {
+        return {
+          ok: false,
+          requestId,
+          error: { code: 'DIRECT_FETCH_FAILED', message: 'Missing url in payload' }
+        };
+      }
+
+      const controller = new AbortController();
+      const bounded = Math.max(3000, Math.min(Number(timeoutMs || safePayload.timeoutMs || 90000), 180000));
+      const timer = global.setTimeout(() => controller.abort(), bounded);
+      try {
+        const response = await global.fetch(url, {
+          method,
+          headers,
+          body,
+          signal: controller.signal
+        });
+        const json = await response.json();
+        const headersObj = {};
+        response.headers.forEach((value, key) => {
+          headersObj[key] = value;
+        });
+        return {
+          ok: true,
+          requestId,
+          status: response.status,
+          json,
+          headers: headersObj
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          requestId,
+          error: {
+            code: 'DIRECT_FETCH_FAILED',
+            message: String(error && error.message ? error.message : error)
+          }
+        };
+      } finally {
+        global.clearTimeout(timer);
+      }
+    }
   }
 
-  NT.OffscreenExecutor = OffscreenExecutor;
+  BG.OffscreenExecutor = OffscreenExecutor;
 })(globalThis);

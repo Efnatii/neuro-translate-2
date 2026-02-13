@@ -1,23 +1,22 @@
 /**
- * Persistent lease-backed registry of in-flight LLM requests.
+ * Persistent lease-backed registry of in-flight AI requests.
  *
- * `InflightRequestStore` lets background recover after MV3 service-worker
- * restarts: each request attempt is written before network dispatch and removed
- * on terminal completion.
+ * Responsibilities:
+ * - persist each request attempt so recovery is possible after MV3 restarts;
+ * - track lease deadlines and expose expired rows for sweeper processing;
+ * - provide deterministic request-id keyed CRUD helpers.
  *
- * Leases (`leaseUntilTs`) ensure no entry can remain RUNNING forever. A sweeper
- * can list expired entries, attempt offscreen cached-result adoption, and then
- * requeue/fail safely.
- *
- * The `requestId` key is deterministic per attempt, so offscreen cache lookup
- * can adopt already-finished results idempotently without a second API call.
+ * Contracts:
+ * - no network execution, no tab rendering, no retry policy decisions;
+ * - all storage reads/writes are routed via LocalStore helpers.
  */
 (function initInflightRequestStore(global) {
-  const NT = global.NT || (global.NT = {});
+  const NT = global.NT;
+  const BG = NT.Internal.bg;
 
-  class InflightRequestStore extends NT.ChromeLocalStoreBase {
-    constructor({ chromeApi } = {}) {
-      super({ chromeApi });
+  class InflightRequestStore extends NT.LocalStore {
+    constructor({ chromeApi, time, eventSink } = {}) {
+      super({ chromeApi, time, eventSink, storeName: 'InflightRequestStore' });
       this.KEY = 'inflightRequests';
       this.DEFAULTS = { inflightRequests: {} };
       this.LEASE_MS = 2 * 60 * 1000;
@@ -81,5 +80,5 @@
     }
   }
 
-  NT.InflightRequestStore = InflightRequestStore;
+  BG.InflightRequestStore = InflightRequestStore;
 })(globalThis);

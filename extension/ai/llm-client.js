@@ -13,12 +13,15 @@
  * and are never emitted into event logs or error diagnostics.
  */
 (function initLlmClient(global) {
-  class LlmClient extends global.NT.ChromeLocalStoreBase {
+  const NT = global.NT;
+  const AI = NT.Internal.ai;
+
+  class LlmClient extends NT.LocalStore {
     constructor({ chromeApi, fetchFn, baseUrl, time, offscreenExecutor } = {}) {
-      super({ chromeApi });
+      super({ chromeApi, storeName: 'LlmClient' });
       this.fetchFn = fetchFn || global.fetch;
       this.baseUrl = baseUrl || 'https://api.openai.com/v1/responses';
-      this.time = time || (global.NT && global.NT.Time ? global.NT.Time : null);
+      this.time = time || (NT && NT.Time ? NT.Time : null);
       this.offscreen = offscreenExecutor || null;
     }
 
@@ -223,8 +226,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.LlmClient = LlmClient;
+  AI.LlmClient = LlmClient;
 })(globalThis);

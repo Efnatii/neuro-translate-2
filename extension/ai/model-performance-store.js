@@ -13,10 +13,11 @@
  */
 (function initModelPerformanceStore(global) {
   const NT = global.NT || (global.NT = {});
+  const AI = NT.Internal.ai;
 
-  class ModelPerformanceStore extends NT.ChromeLocalStoreBase {
+  class ModelPerformanceStore extends NT.LocalStore {
     constructor({ chromeApi } = {}) {
-      super({ chromeApi });
+      super({ chromeApi, storeName: 'ModelPerformanceStore' });
       this.KEY = 'modelPerformance';
       this.DEFAULTS = { [this.KEY]: {} };
       this.TTL_MS = 12 * 60 * 60 * 1000;
@@ -115,5 +116,5 @@
     }
   }
 
-  NT.ModelPerformanceStore = ModelPerformanceStore;
+  AI.ModelPerformanceStore = ModelPerformanceStore;
 })(globalThis);

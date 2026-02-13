@@ -14,6 +14,9 @@
  * while background owns persistence of decisions and user-visible status.
  */
 (function initLlmEngine(global) {
+  const NT = global.NT;
+  const AI = NT.Internal.ai;
+
   class LlmEngine {
     constructor({
       responseCall,
@@ -35,8 +38,8 @@
       this.loadScheduler = loadScheduler;
       this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
       this.eventFactory = eventFactory || null;
-      this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
-      const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
+      this.aiCommon = AI && AI.AiCommon ? AI.AiCommon : null;
+      const RetryLoop = NT && NT.RetryLoop ? NT.RetryLoop : null;
       this.retryLoop = RetryLoop
         ? new RetryLoop({
           maxAttempts: 2,
@@ -50,7 +53,7 @@
     }
 
     async getModelSpec({ tabId, taskType, selectedModelSpecs, modelSelection, estTokens, pressureTokens, hintPrevModelSpec }) {
-      const normalizedSelection = global.NT.ModelSelection.normalize(modelSelection, null);
+      const normalizedSelection = AI.AiModelSelection.normalize(modelSelection, null);
       const candidates = this.normalizeCandidates(selectedModelSpecs);
       if (!candidates.length) {
         const error = new Error('NO_MODELS_SELECTED');
@@ -494,8 +497,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.LlmEngine = LlmEngine;
+  AI.LlmEngine = LlmEngine;
 })(globalThis);

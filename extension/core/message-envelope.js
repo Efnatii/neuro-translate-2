@@ -1,3 +1,16 @@
+/**
+ * Canonical envelope builder/validator for cross-context messaging.
+ *
+ * `MessageEnvelope` standardizes message identity and metadata so Port and
+ * runtime transport layers can share one shape across UI, BG, and offscreen.
+ *
+ * Contracts:
+ * - every envelope has version, unique id, type, timestamp, meta, payload;
+ * - `wrap` preserves extra meta fields (for request/response hints);
+ * - `isEnvelope` performs minimal structural validation only.
+ *
+ * This module does not send messages and does not contain transport logic.
+ */
 (function initMessageEnvelope(global) {
   class MessageEnvelope {
     static v = 1;
@@ -19,6 +32,16 @@
 
     static wrap(type, payload, meta) {
       const safeMeta = meta && typeof meta === 'object' ? { ...meta } : {};
+      const baseMeta = {
+        source: safeMeta.source || 'unknown',
+        tabId: safeMeta.tabId ?? null,
+        stage: safeMeta.stage || 'unknown',
+        requestId: safeMeta.requestId || null
+      };
+      delete safeMeta.source;
+      delete safeMeta.tabId;
+      delete safeMeta.stage;
+      delete safeMeta.requestId;
 
       return {
         v: MessageEnvelope.v,
@@ -26,10 +49,8 @@
         type,
         ts: MessageEnvelope.now(),
         meta: {
-          source: safeMeta.source || 'unknown',
-          tabId: safeMeta.tabId ?? null,
-          stage: safeMeta.stage || 'unknown',
-          requestId: safeMeta.requestId || null
+          ...baseMeta,
+          ...safeMeta
         },
         payload
       };

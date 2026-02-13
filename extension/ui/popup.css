@@ -1,3 +1,14 @@
+/*
+ * Popup presentation styles for the extension control surface.
+ *
+ * The stylesheet is intentionally UI-only: no business logic, no persistence,
+ * and no transport side effects are encoded here.
+ *
+ * Key MV3 constraints reflected in styles:
+ * - compact width for action popup context;
+ * - wrapped diagnostics text for command failures;
+ * - predictable controls for snapshot/patch-driven updates.
+ */
 :root {
   color-scheme: light;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -209,3 +220,12 @@ body {
   color: #d8dee9;
 }
 
+
+
+.popup__error {
+  margin: 6px 0 0;
+  color: #ff7a7a;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

@@ -1,5 +1,19 @@
+/**
+ * AI model catalog and metadata helpers.
+ *
+ * This module defines immutable model registry entries, model-spec helpers,
+ * and UI-ready option builders used by `AiModule`.
+ *
+ * Contracts:
+ * - no storage/network/runtime side effects;
+ * - deterministic mapping between `modelSpec` and registry entries;
+ * - prices/capability labels are computed in one place for AI scope.
+ *
+ * It does not select models for requests and does not persist settings.
+ */
 (function initAiCommon(global) {
   const NT = global.NT || (global.NT = {});
+  const AI = NT.Internal.ai;
 
   const ModelTier = Object.freeze({
     FLEX: 'flex',
@@ -51,7 +65,7 @@
   function buildRegistryEntry({ id, tier, inputPrice, outputPrice, cachedInputPrice }) {
     const inputValue = typeof inputPrice === 'number' ? inputPrice : null;
     const outputValue = typeof outputPrice === 'number' ? outputPrice : null;
-    const CapabilityRank = NT.CapabilityRank || null;
+    const CapabilityRank = AI.CapabilityRank || null;
     const capabilityRank = CapabilityRank ? CapabilityRank.rank(id) : 0;
     const specialized = CapabilityRank ? CapabilityRank.isDeepResearch(id) : false;
 
@@ -144,7 +158,7 @@
 
   function resolveNotes(id, { specialized }) {
     const notes = [];
-    const CapabilityRank = NT.CapabilityRank || null;
+    const CapabilityRank = AI.CapabilityRank || null;
     const normalized = String(id || '').toLowerCase();
 
     if (normalized.startsWith('gpt-5.2')) {
@@ -190,7 +204,7 @@
     }));
   }
 
-  NT.AiCommon = {
+  AI.AiCommon = {
     ModelTier,
     parseModelSpec,
     formatModelSpec,

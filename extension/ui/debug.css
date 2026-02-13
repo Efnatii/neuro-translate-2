@@ -37,7 +37,9 @@ body {
 }
 
 .debug__title { margin: 0; font-size: 20px; }
-.debug__subtitle { margin: 0; color: #9aa3b2; }
+.debug__subtitle { margin: 0; color: #9aa3b2; overflow-wrap: anywhere; word-break: break-word; }
+.debug__transport { font-size: 12px; }
+.debug__error { color: #ff7a7a; font-size: 12px; }
 .debug__label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #8fa0b7; }
 .debug__status { display: grid; gap: 6px; }
 .debug__row { display: flex; justify-content: space-between; gap: 8px; }

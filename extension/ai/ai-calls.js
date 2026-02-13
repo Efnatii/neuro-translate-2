@@ -18,6 +18,7 @@
  */
 (function initAiCalls(global) {
   const NT = global.NT || (global.NT = {});
+  const AI = NT.Internal.ai;
 
   class AiCallBase {
     constructor({ llmClient, rateLimitStore, eventFactory, eventLogger, perfStore, time } = {}) {
@@ -296,7 +297,7 @@
     }
   }
 
-  NT.AiCallBase = AiCallBase;
-  NT.AiPingCall = AiPingCall;
-  NT.AiResponseCall = AiResponseCall;
+  AI.AiCallBase = AiCallBase;
+  AI.AiPingCall = AiPingCall;
+  AI.AiResponseCall = AiResponseCall;
 })(globalThis);

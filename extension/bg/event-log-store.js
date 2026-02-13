@@ -1,21 +1,28 @@
 /**
- * Persistent ring buffer for diagnostic events emitted by extension modules.
+ * Persistent ring buffer for background diagnostics with redaction.
  *
- * The store keeps monotonically increasing sequence numbers and bounded item
- * history in `chrome.storage.local` so UI clients can recover after MV3 worker
- * restarts and request historical pages by sequence range.
+ * Responsibilities:
+ * - keep bounded event history in local storage for debug recovery;
+ * - assign monotonic sequence numbers for paging and incremental patches;
+ * - redact sensitive payload fields before persistence.
  *
- * Public API includes append/clear plus paging helpers (`getTail`, `getBefore`)
- * used by snapshot/patch streaming and debug "load older" flows.
+ * MV3 note: service worker may restart at any time, so `load()` restores
+ * in-memory cursor (`seq`) and tail items from storage.
+ *
+ * This store does not decide event semantics; callers own event meaning.
  */
 (function initEventLogStore(global) {
+  const NT = global.NT;
+  const BG = NT.Internal.bg;
+
   const STORAGE_KEY = 'eventLog';
   const DEFAULT_LIMIT = 800;
 
-  class EventLogStore extends global.NT.ChromeLocalStoreBase {
-    constructor({ chromeApi, limit = DEFAULT_LIMIT } = {}) {
-      super({ chromeApi });
-      this.limit = limit;
+  class EventLogStore extends NT.LocalStore {
+    constructor({ chromeApi, limit = DEFAULT_LIMIT, time, eventSink, redactor } = {}) {
+      super({ chromeApi, time, eventSink, storeName: 'EventLogStore' });
+      this.limit = Number.isFinite(Number(limit)) ? Math.max(100, Number(limit)) : DEFAULT_LIMIT;
+      this.redactor = redactor || new NT.Redactor();
       this.loaded = false;
       this.seq = 0;
       this.items = [];
@@ -76,6 +83,15 @@
       };
     }
 
+    async persist() {
+      await this.storageSet({
+        [STORAGE_KEY]: {
+          seq: this.seq,
+          items: this.items
+        }
+      });
+    }
+
     clampLimit(limit) {
       const value = Number(limit);
       if (!Number.isFinite(value)) {
@@ -85,39 +101,17 @@
     }
 
     normalizeEvent(event) {
-      const safeEvent = event && typeof event === 'object' ? event : {};
-      const meta = safeEvent.meta && typeof safeEvent.meta === 'object' ? safeEvent.meta : {};
-      return {
-        ts: typeof safeEvent.ts === 'number' ? safeEvent.ts : Date.now(),
-        level: this.normalizeLevel(safeEvent.level),
-        tag: safeEvent.tag ? String(safeEvent.tag) : 'general',
-        message: safeEvent.message ? String(safeEvent.message) : '',
-        meta: {
-          source: meta.source || 'background',
-          tabId: meta.tabId ?? null,
-          requestId: meta.requestId || null,
-          stage: meta.stage || null,
-          modelSpec: meta.modelSpec || null,
-          status: meta.status || null,
-          latencyMs: typeof meta.latencyMs === 'number' ? meta.latencyMs : null
-        }
-      };
-    }
-
-    normalizeLevel(level) {
-      if (level === 'warn' || level === 'error') {
-        return level;
-      }
-      return 'info';
-    }
-
-    async persist() {
-      await this.storageSet({ [STORAGE_KEY]: { seq: this.seq, items: this.items } });
+      const src = event && typeof event === 'object' ? event : {};
+      const rawMeta = src.meta && typeof src.meta === 'object' ? src.meta : {};
+      return this.redactor.redactEventPayload({
+        ts: typeof src.ts === 'number' ? src.ts : Date.now(),
+        level: typeof src.level === 'string' ? src.level : 'info',
+        tag: typeof src.tag === 'string' ? src.tag : 'general',
+        message: typeof src.message === 'string' ? src.message : '',
+        meta: { ...rawMeta }
+      });
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.EventLogStore = EventLogStore;
+  BG.EventLogStore = EventLogStore;
 })(globalThis);
