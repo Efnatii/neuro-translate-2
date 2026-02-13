@@ -1,12 +1,15 @@
 /**
- * Resilient UI runtime-port client with reconnect handshake.
+ * Resilient UI runtime-port client with reconnect and command bus.
  *
- * `UiPortClient` connects popup/debug pages to background hub, performs
- * HELLO/SUBSCRIBE handshake, and re-establishes the channel when MV3 ports are
- * disconnected.
+ * `UiPortClient` owns Port lifecycle for popup/debug and exposes strict
+ * command request/response semantics through `MessageBus`.
  *
- * The client accepts `getHelloPayload` so reconnects can include incremental
- * sync hints (for example last known event sequence), reducing snapshot size.
+ * Contracts:
+ * - handshake stays HELLO -> SNAPSHOT -> SUBSCRIBE;
+ * - critical commands use ACK/RESPONSE with bounded timeouts;
+ * - reconnect is bounded and pending requests fail on disconnect.
+ *
+ * This file does not perform DOM rendering or storage access.
  */
 (function initUiPortClient(global) {
   class UiPortClient {
@@ -19,7 +22,28 @@
       this.connected = false;
       this.retryController = null;
       this.retryInFlight = null;
-      const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
+
+      const NT = global.NT || {};
+      const RetryLoop = NT.RetryLoop || null;
+      const MessageBus = NT.MessageBus || null;
+      this.bus = MessageBus ? new MessageBus({ source: this.portName || 'ui-port-client' }) : null;
+
+      if (this.bus) {
+        const UiProtocol = NT.UiProtocol || {};
+        this.bus.on(UiProtocol.UI_SNAPSHOT, (envelope) => {
+          if (this.onSnapshot) {
+            this.onSnapshot(envelope.payload || {});
+          }
+          return { received: true };
+        });
+        this.bus.on(UiProtocol.UI_PATCH, (envelope) => {
+          if (this.onPatch) {
+            this.onPatch(envelope.payload || {});
+          }
+          return { received: true };
+        });
+      }
+
       this.retryLoop = RetryLoop
         ? new RetryLoop({
           maxAttempts: 8,
@@ -40,29 +64,32 @@
       if (!skipAbort) {
         this.abortRetry();
       }
+
       this.port = global.chrome.runtime.connect({ name: this.portName });
       this.connected = true;
-      this.port.onMessage.addListener((message) => this.handleMessage(message));
-      this.port.onDisconnect.addListener(() => this.handleDisconnect());
+
+      if (this.bus) {
+        this.bus.attachPort(this.port);
+      } else {
+        this.port.onMessage.addListener((message) => this.handleMessage(message));
+        this.port.onDisconnect.addListener(() => this.handleDisconnect());
+      }
       this.startHandshake();
       return true;
     }
 
     handleMessage(message) {
-      const envelope = this.unwrapEnvelope(message);
-      if (!envelope) {
+      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
+      if (!MessageEnvelope || !MessageEnvelope.isEnvelope(message)) {
         return;
       }
-
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
-
-      if (envelope.type === UiProtocol.UI_SNAPSHOT && this.onSnapshot) {
-        this.onSnapshot(envelope.payload || {});
+      if (message.type === UiProtocol.UI_SNAPSHOT && this.onSnapshot) {
+        this.onSnapshot(message.payload || {});
         return;
       }
-
-      if (envelope.type === UiProtocol.UI_PATCH && this.onPatch) {
-        this.onPatch(envelope.payload || {});
+      if (message.type === UiProtocol.UI_PATCH && this.onPatch) {
+        this.onPatch(message.payload || {});
       }
     }
 
@@ -74,31 +101,37 @@
 
     startHandshake() {
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
+      const helloPayload = this.getHelloPayload ? this.getHelloPayload() : {};
+      if (this.bus) {
+        this.bus.send(UiProtocol.UI_HELLO, helloPayload || {}, { source: this.portName, stage: 'handshake' });
+        return;
+      }
       const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
       if (!MessageEnvelope) {
         return;
       }
-
-      const source = this.portName;
-      const helloPayload = this.getHelloPayload ? this.getHelloPayload() : {};
-      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_HELLO, helloPayload || {}, { source, stage: 'handshake' }));
+      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_HELLO, helloPayload || {}, { source: this.portName, stage: 'handshake' }));
     }
 
-    sendCommand(name, payload, meta = {}) {
+    async sendCommand(name, payload, { timeoutMs = 15000 } = {}) {
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
-      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-      if (!MessageEnvelope) {
-        return;
+      if (this.bus) {
+        return this.bus.request(
+          UiProtocol.UI_COMMAND,
+          { name, payload: payload || {} },
+          { source: this.portName, expectResponse: true },
+          { timeoutMs }
+        );
       }
-
-      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_COMMAND, { name, payload }, {
-        source: this.portName,
-        requestId: meta.requestId || null
-      }));
+      throw Object.assign(new Error('MessageBus unavailable'), { code: 'BUS_UNAVAILABLE' });
     }
 
     acknowledgeSnapshot() {
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
+      if (this.bus) {
+        this.bus.send(UiProtocol.UI_SUBSCRIBE, {}, { source: this.portName });
+        return;
+      }
       const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
       if (!MessageEnvelope) {
         return;
@@ -112,17 +145,9 @@
       }
       try {
         this.port.postMessage(envelope);
-      } catch (error) {
+      } catch (_) {
         // ignore post errors
       }
-    }
-
-    unwrapEnvelope(message) {
-      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
-      if (!MessageEnvelope || !MessageEnvelope.isEnvelope) {
-        return null;
-      }
-      return MessageEnvelope.isEnvelope(message) ? message : null;
     }
 
     scheduleReconnect() {

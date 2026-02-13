@@ -1,13 +1,15 @@
 /**
- * Popup UI controller for quick settings and status preview.
+ * Popup controller for settings and lightweight status visualization.
  *
- * This controller intentionally contains only view/state behavior. All external
- * interactions (tabs/runtime/port/settings persistence) are delegated to
- * `UiModule`, which acts as the UI narrow throat.
+ * Data flow is snapshot/patch driven; user actions are sent as strict
+ * request/response commands through `UiModule`.
  *
- * Snapshot + patch synchronization comes from `UiPortClient` via `UiModule`.
- * Persistent settings writes are debounced by `SettingsStore` inside the module,
- * so popup logic stays deterministic across MV3 reconnects.
+ * Contracts:
+ * - model list/options come from cached snapshot only;
+ * - settings updates are debounced in `UiModule` and acknowledged by BG;
+ * - command errors are displayed as non-fatal inline diagnostics.
+ *
+ * This file does not read chrome.storage directly and does not contain AI logic.
  */
 (function initPopup(global) {
   class PopupController {
@@ -16,12 +18,15 @@
       this.ui = ui;
       this.state = {
         apiKey: '',
+        hasApiKey: false,
+        apiKeyLength: 0,
         translationModelList: [],
         modelSelection: { speed: true, preference: null },
-        translationVisible: true
+        translationVisible: true,
+        modelOptions: []
       };
       this.activeTabId = null;
-      this.modelRegistry = { entries: [], byKey: {} };
+      this.apiKeyRequested = false;
     }
 
     async init() {
@@ -30,29 +35,39 @@
 
       const activeTab = await this.ui.getActiveTab();
       this.activeTabId = activeTab ? activeTab.id : null;
-      this.modelRegistry = this.ui.getModelRegistry();
 
-      const settings = await this.ui.getSettings([
-        'apiKey',
-        'translationModelList',
-        'modelSelection',
-        'modelSelectionPolicy',
-        'translationVisibilityByTab'
-      ]);
-
-      this.state.apiKey = settings.apiKey || '';
-      this.state.translationModelList = Array.isArray(settings.translationModelList) ? settings.translationModelList : [];
-      this.state.modelSelection = this.ui.normalizeSelection(settings.modelSelection, settings.modelSelectionPolicy);
-      const byTab = settings.translationVisibilityByTab || {};
-      this.state.translationVisible = this.activeTabId !== null ? byTab[this.activeTabId] !== false : true;
+      await this.ui.waitForFirstSnapshot();
+      this.hydrateFromUiCache();
 
       this.renderModels();
       this.renderSettings();
       this.renderStatus();
+      this.renderUiError();
+    }
+
+    hydrateFromUiCache() {
+      const settings = this.ui.getCachedSettings();
+      this.state.hasApiKey = Boolean(settings.hasApiKey);
+      this.state.apiKeyLength = Number(settings.apiKeyLength || 0);
+      this.state.translationModelList = Array.isArray(settings.translationModelList) ? settings.translationModelList : [];
+      this.state.modelSelection = this.normalizeSelection(settings.modelSelection);
+      this.state.modelOptions = this.ui.getCachedModelOptions();
+    }
+
+    normalizeSelection(modelSelection) {
+      const source = modelSelection && typeof modelSelection === 'object' ? modelSelection : {};
+      const preference = source.preference === 'smartest' || source.preference === 'cheapest'
+        ? source.preference
+        : null;
+      return {
+        speed: Boolean(source.speed),
+        preference
+      };
     }
 
     cacheElements() {
       this.debugButton = this.doc.querySelector('[data-action="open-debug"]');
+      this.uiErrorText = this.doc.querySelector('[data-field="ui-error"]');
       this.apiKeyInput = this.doc.querySelector('[data-field="api-key"]');
       this.apiKeyToggle = this.doc.querySelector('[data-action="toggle-api"]');
       this.modelsRoot = this.doc.querySelector('[data-section="models"]');
@@ -76,19 +91,25 @@
       if (this.apiKeyInput) {
         this.apiKeyInput.addEventListener('input', (event) => {
           this.state.apiKey = event.target.value || '';
-          this.scheduleSave({ apiKey: this.state.apiKey });
+          this.ui.queueSettingsPatch({ apiKey: this.state.apiKey });
+          this.renderUiError();
         });
       }
 
       if (this.speedCheckbox) {
-        this.speedCheckbox.addEventListener('change', (event) => {
+        this.speedCheckbox.addEventListener('change', async (event) => {
           this.state.modelSelection = {
             ...this.state.modelSelection,
             speed: Boolean(event.target.checked)
           };
-          this.scheduleSave({ modelSelection: this.state.modelSelection });
+          this.ui.queueSettingsPatch({ modelSelection: this.state.modelSelection });
           if (this.state.modelSelection.speed && this.state.translationModelList.length) {
-            this.ui.sendUiCommand('BENCHMARK_SELECTED_MODELS', {});
+            try {
+              await this.ui.sendUiCommand('BENCHMARK_SELECTED_MODELS', {});
+            } catch (_) {
+              // non-fatal, rendered below
+            }
+            this.renderUiError();
           }
         });
       }
@@ -100,7 +121,8 @@
             ...this.state.modelSelection,
             preference: value === 'smartest' || value === 'cheapest' ? value : null
           };
-          this.scheduleSave({ modelSelection: this.state.modelSelection });
+          this.ui.queueSettingsPatch({ modelSelection: this.state.modelSelection });
+          this.renderUiError();
         });
       }
 
@@ -117,7 +139,8 @@
             list.delete(target.value);
           }
           this.state.translationModelList = Array.from(list);
-          this.scheduleSave({ translationModelList: this.state.translationModelList });
+          this.ui.queueSettingsPatch({ translationModelList: this.state.translationModelList });
+          this.renderUiError();
         });
       }
 
@@ -131,17 +154,7 @@
         return;
       }
 
-      const settings = payload.settings || {};
-      if (Object.prototype.hasOwnProperty.call(settings, 'apiKey')) {
-        this.state.apiKey = settings.apiKey || '';
-      }
-      if (Array.isArray(settings.translationModelList)) {
-        this.state.translationModelList = settings.translationModelList;
-      }
-      if (Object.prototype.hasOwnProperty.call(settings, 'modelSelection') || Object.prototype.hasOwnProperty.call(settings, 'modelSelectionPolicy')) {
-        this.state.modelSelection = this.ui.normalizeSelection(settings.modelSelection, settings.modelSelectionPolicy);
-      }
-
+      this.hydrateFromUiCache();
       if (payload.tabId !== null && payload.tabId !== undefined) {
         this.activeTabId = payload.tabId;
       }
@@ -154,6 +167,7 @@
       this.renderSettings();
       this.renderModels();
       this.renderStatus(payload.translationStatusByTab || null);
+      this.renderUiError();
 
       if (this.ui.portClient && typeof this.ui.portClient.acknowledgeSnapshot === 'function') {
         this.ui.portClient.acknowledgeSnapshot();
@@ -161,20 +175,13 @@
     }
 
     applyPatch(payload) {
-      if (!payload || !payload.patch) {
+      if (!payload) {
         return;
       }
-      const patch = payload.patch;
 
-      if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {
-        this.state.apiKey = patch.apiKey || '';
-      }
-      if (Object.prototype.hasOwnProperty.call(patch, 'translationModelList') && Array.isArray(patch.translationModelList)) {
-        this.state.translationModelList = patch.translationModelList;
-      }
-      if (Object.prototype.hasOwnProperty.call(patch, 'modelSelection')) {
-        this.state.modelSelection = this.ui.normalizeSelection(patch.modelSelection, null);
-      }
+      this.hydrateFromUiCache();
+
+      const patch = payload.patch || {};
       if (Object.prototype.hasOwnProperty.call(patch, 'translationVisibilityByTab') && this.activeTabId !== null) {
         const map = patch.translationVisibilityByTab || {};
         if (Object.prototype.hasOwnProperty.call(map, this.activeTabId)) {
@@ -184,17 +191,8 @@
 
       this.renderSettings();
       this.renderModels();
-      this.renderStatus(patch.translationStatusByTab || null);
-    }
-
-    scheduleSave(patch) {
-      this.ui.queueSettingsPatch(patch, {
-        finalize: (payload) => {
-          if (payload.translationVisibilityByTab && this.activeTabId !== null) {
-            payload.translationVisibilityByTab = { [this.activeTabId]: this.state.translationVisible };
-          }
-        }
-      });
+      this.renderStatus(patch.translationStatusByTab || payload.translationStatusByTab || null);
+      this.renderUiError();
     }
 
     async toggleVisibility() {
@@ -214,13 +212,25 @@
       });
     }
 
-    toggleApiKeyVisibility() {
+    async toggleApiKeyVisibility() {
       if (!this.apiKeyInput || !this.apiKeyToggle) {
         return;
       }
+
       const isPassword = this.apiKeyInput.type === 'password';
+      if (isPassword && !this.state.apiKey && !this.apiKeyRequested) {
+        this.apiKeyRequested = true;
+        try {
+          const response = await this.ui.requestApiKey();
+          this.state.apiKey = response && typeof response.apiKey === 'string' ? response.apiKey : '';
+          this.apiKeyInput.value = this.state.apiKey;
+        } catch (_) {
+          // non-fatal, shown in ui error line
+        }
+      }
       this.apiKeyInput.type = isPassword ? 'text' : 'password';
       this.apiKeyToggle.textContent = isPassword ? 'Скрыть' : 'Показать';
+      this.renderUiError();
     }
 
     renderModels() {
@@ -230,9 +240,12 @@
 
       const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       this.modelsRoot.innerHTML = '';
-      const options = this.modelRegistry.entries || [];
-      options.forEach((entry) => {
-        const modelSpec = `${entry.id}:${entry.tier}`;
+      const options = Array.isArray(this.state.modelOptions) ? this.state.modelOptions : [];
+      options.forEach((option) => {
+        const modelSpec = typeof option.value === 'string' ? option.value : '';
+        if (!modelSpec) {
+          return;
+        }
         const label = this.doc.createElement('label');
         label.className = 'popup__checkbox';
 
@@ -242,8 +255,9 @@
         input.checked = this.state.translationModelList.includes(modelSpec);
 
         const text = this.doc.createElement('span');
-        const tier = entry.tier ? String(entry.tier).toUpperCase() : 'STANDARD';
-        const safe = Html ? Html.safeText(`${entry.id} (${tier})`, '—') : `${entry.id} (${tier})`;
+        const baseLabel = option.label || modelSpec;
+        const price = this.formatPrice(option.sum_1M);
+        const safe = Html ? Html.safeText(`${baseLabel} — ${price}`, '—') : `${baseLabel} — ${price}`;
         text.textContent = safe;
 
         label.appendChild(input);
@@ -252,16 +266,32 @@
       });
     }
 
+    formatPrice(sum1M) {
+      if (typeof sum1M !== 'number' || !Number.isFinite(sum1M)) {
+        return '— / 1M';
+      }
+      return `$${sum1M.toFixed(3)} / 1M`;
+    }
+
     renderSettings() {
       if (this.apiKeyInput) {
-        this.apiKeyInput.value = this.state.apiKey;
+        if (this.state.apiKey) {
+          this.apiKeyInput.value = this.state.apiKey;
+          this.apiKeyInput.placeholder = 'sk-...';
+        } else if (this.state.hasApiKey) {
+          this.apiKeyInput.value = '';
+          this.apiKeyInput.placeholder = `Saved (len=${this.state.apiKeyLength || 0})`;
+        } else {
+          this.apiKeyInput.value = '';
+          this.apiKeyInput.placeholder = 'sk-...';
+        }
       }
       if (this.speedCheckbox) {
         this.speedCheckbox.checked = Boolean(this.state.modelSelection.speed);
       }
       if (this.preferenceSelect) {
         const value = this.state.modelSelection.preference;
-        this.preferenceSelect.value = value === 'smartest' || value === 'cheapest' ? value : '';
+        this.preferenceSelect.value = value === 'smartest' || value === 'cheapest' ? value : 'none';
       }
       this.updateVisibilityIcon();
     }
@@ -291,6 +321,14 @@
       }
     }
 
+    renderUiError() {
+      if (!this.uiErrorText) {
+        return;
+      }
+      const error = this.ui.getLastUiError();
+      this.uiErrorText.textContent = error ? `Command failed: ${error.code} — ${error.message}` : '';
+    }
+
     updateVisibilityIcon() {
       if (!this.visibilityIcon) {
         return;
@@ -307,7 +345,8 @@
   const controller = new PopupController({ doc: global.document, ui });
   ui.setHandlers({
     onSnapshot: (payload) => controller.applySnapshot(payload),
-    onPatch: (payload) => controller.applyPatch(payload)
+    onPatch: (payload) => controller.applyPatch(payload),
+    onUiError: () => controller.renderUiError()
   });
   controller.init();
 })(globalThis);

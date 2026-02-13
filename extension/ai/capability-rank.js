@@ -1,4 +1,18 @@
+/**
+ * Capability ranking heuristics for AI model identifiers.
+ *
+ * This module provides deterministic rank/feature helpers used by registry and
+ * model selection scoring. It is intentionally static and side-effect free.
+ *
+ * Contracts:
+ * - input is model id string, output is normalized capability hints;
+ * - no persistence, network requests, or browser API access;
+ * - only AI-internal consumers should depend on this ranking surface.
+ */
 (function initCapabilityRank(global) {
+  const NT = global.NT;
+  const AI = NT.Internal.ai;
+
   class CapabilityRank {
     static normalizeId(modelId) {
       return String(modelId || '').trim().toLowerCase();
@@ -79,8 +93,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.CapabilityRank = CapabilityRank;
+  AI.CapabilityRank = CapabilityRank;
 })(globalThis);

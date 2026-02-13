@@ -13,6 +13,9 @@
  * repeated bench pressure on temporarily throttled models.
  */
 (function initModelBenchmarker(global) {
+  const NT = global.NT;
+  const AI = NT.Internal.ai;
+
   const DEFAULT_SAMPLES = 3;
   const TIMEOUT_MS = 20000;
   const MAX_ATTEMPTS = 2;
@@ -28,15 +31,15 @@
       this.benchmarkStore = benchmarkStore;
       this.responseCall = responseCall || null;
       this.modelRegistry = modelRegistry;
-      this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
-      this.time = global.NT && global.NT.Time ? global.NT.Time : null;
+      this.aiCommon = AI && AI.AiCommon ? AI.AiCommon : null;
+      this.time = NT && NT.Time ? NT.Time : null;
       this.loadScheduler = loadScheduler;
       this.rateLimitStore = rateLimitStore || null;
       this.perfStore = perfStore || null;
       this.eventFactory = eventFactory || null;
       this.benchPrompt = "Respond with a single '.'";
       this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
-      const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
+      const RetryLoop = NT && NT.RetryLoop ? NT.RetryLoop : null;
       this.retryLoop = RetryLoop
         ? new RetryLoop({
           maxAttempts: MAX_ATTEMPTS,
@@ -552,8 +555,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.ModelBenchmarker = ModelBenchmarker;
+  AI.ModelBenchmarker = ModelBenchmarker;
 })(globalThis);

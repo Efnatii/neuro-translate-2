@@ -9,14 +9,17 @@
  * safely query freshness without duplicating storage logic.
  */
 (function initModelBenchmarkStore(global) {
+  const NT = global.NT;
+  const AI = NT.Internal.ai;
+
   const STORAGE_KEY_BENCHMARKS = 'modelBenchmarks';
   const STORAGE_KEY_STATUS = 'modelBenchmarkStatus';
   const TTL_MS = 24 * 60 * 60 * 1000;
   const MIN_INTERVAL_MS = 45 * 60 * 1000;
 
-  class ModelBenchmarkStore extends global.NT.ChromeLocalStoreBase {
+  class ModelBenchmarkStore extends NT.LocalStore {
     constructor({ chromeApi }) {
-      super({ chromeApi });
+      super({ chromeApi, storeName: 'ModelBenchmarkStore' });
     }
 
     async getAll() {
@@ -81,6 +84,11 @@
       await this.storageSet({ [STORAGE_KEY_STATUS]: statusObj || null });
     }
 
+    async getStatus() {
+      const data = await this.storageGet({ [STORAGE_KEY_STATUS]: null });
+      return data[STORAGE_KEY_STATUS] || null;
+    }
+
     isFresh(entry, now) {
       if (!entry || typeof entry.updatedAt !== 'number') {
         return false;
@@ -96,8 +104,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.ModelBenchmarkStore = ModelBenchmarkStore;
+  AI.ModelBenchmarkStore = ModelBenchmarkStore;
 })(globalThis);

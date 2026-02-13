@@ -10,12 +10,15 @@
  * reservation leases self-heal automatically via expiration cleanup.
  */
 (function initModelRateLimitStore(global) {
+  const NT = global.NT;
+  const AI = NT.Internal.ai;
+
   const STORAGE_KEY = 'modelRateLimits';
   const FAIRNESS_WINDOW_MS = 60000;
 
-  class ModelRateLimitStore extends global.NT.ChromeLocalStoreBase {
+  class ModelRateLimitStore extends NT.LocalStore {
     constructor({ chromeApi } = {}) {
-      super({ chromeApi });
+      super({ chromeApi, storeName: 'ModelRateLimitStore' });
     }
 
     async get(modelSpec) {
@@ -127,6 +130,10 @@
         return item.leaseUntilTs > ts;
       });
       return current;
+    }
+
+    summarizeReservations(snapshot, now) {
+      return this._sumReservations(snapshot, now);
     }
 
     _sumReservations(snapshot, now) {
@@ -241,7 +248,7 @@
     }
 
     computeResetAt(resetRaw, receivedAt) {
-      const Duration = global.NT.Duration;
+      const Duration = NT.Duration;
       const durationMs = Duration.parseMs(resetRaw);
       if (durationMs === null) {
         return null;
@@ -258,8 +265,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.ModelRateLimitStore = ModelRateLimitStore;
+  AI.ModelRateLimitStore = ModelRateLimitStore;
 })(globalThis);

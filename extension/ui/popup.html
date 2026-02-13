@@ -1,5 +1,15 @@
 <!doctype html>
 <html lang="ru">
+  <!--
+    Popup entrypoint for MV3 action UI.
+    Responsibilities:
+    - renders controls and state placeholders only;
+    - loads core/ui scripts in deterministic dependency order;
+    - delegates storage/network/AI actions to UiModule + runtime Port.
+    Non-goals:
+    - no business logic, no direct chrome.storage calls,
+    - no hidden globals beyond NT namespace modules.
+  -->
   <head>
     <meta charset="utf-8">
     <title>Neuro Translate</title>
@@ -13,6 +23,7 @@
           <p class="popup__subtitle">by Efnatii</p>
         </div>
         <button class="popup__debug" type="button" data-action="open-debug">Отладка ↗</button>
+        <p class="popup__error" data-field="ui-error"></p>
       </header>
 
       <section class="popup__section">
@@ -70,16 +81,11 @@
     <script src="/core/time.js"></script>
     <script src="/core/html.js"></script>
     <script src="/core/retry-loop.js"></script>
-    <script src="/core/chrome-local-store-base.js"></script>
-    <script src="/core/model-selection.js"></script>
-    <script src="/core/event-types.js"></script>
-    <script src="/core/settings-store.js"></script>
     <script src="/core/message-envelope.js"></script>
     <script src="/core/ui-protocol.js"></script>
+    <script src="/core/message-bus.js"></script>
     <script src="/core/ui-port-client.js"></script>
     <script src="/ui/ui-module.js"></script>
-    <script src="/ai/capability-rank.js"></script>
-    <script src="/ai/ai-common.js"></script>
     <script src="/ui/popup.js"></script>
   </body>
 </html>

@@ -10,6 +10,7 @@
  *
  * The page also renders compact per-model rate-limit state from snapshot/patch
  * (`modelLimitsBySpec`) to explain cooldown/reservation waits in real time.
+ * It additionally shows runtime transport mode (offscreen/direct) for install diagnostics.
  */
 (function initDebugPage(global) {
   class DebugPage {
@@ -24,6 +25,7 @@
         benchmarkStatus: null,
         benchmarks: {},
         modelLimitsBySpec: {},
+        env: { offscreenMode: 'unknown', offscreenDisabledReason: null },
         eventLog: { seq: 0, items: [] },
         filters: { level: 'all', q: '', tag: 'all' },
         oldestSeq: null
@@ -42,6 +44,8 @@
 
     cacheElements() {
       this.fields.site = this.doc.querySelector('[data-field="site"]');
+      this.fields.transport = this.doc.querySelector('[data-field="transport"]');
+      this.fields.uiError = this.doc.querySelector('[data-field="ui-error"]');
       this.fields.progress = this.doc.querySelector('[data-field="progress"]');
       this.fields.completed = this.doc.querySelector('[data-field="completed"]');
       this.fields.total = this.doc.querySelector('[data-field="total"]');
@@ -87,6 +91,13 @@
       if (payload.tabId !== null && payload.tabId !== undefined) {
         this.state.tabId = payload.tabId;
       }
+      if (payload.env && typeof payload.env === 'object') {
+        this.state.env = {
+          offscreenMode: payload.env.offscreenMode || this.state.env.offscreenMode || 'unknown',
+          offscreenDisabledReason: payload.env.offscreenDisabledReason || null
+        };
+      }
+
       if (payload.translationStatusByTab) {
         this.state.status = this.state.tabId !== null ? payload.translationStatusByTab[this.state.tabId] || null : null;
       }
@@ -113,6 +124,13 @@
     applyPatch(payload) {
       if (!payload) {
         return;
+      }
+
+      if (payload.env && typeof payload.env === 'object') {
+        this.state.env = {
+          offscreenMode: payload.env.offscreenMode || this.state.env.offscreenMode || 'unknown',
+          offscreenDisabledReason: payload.env.offscreenDisabledReason || null
+        };
       }
 
       if (payload.translationStatusByTab) {
@@ -147,21 +165,6 @@
       if (payload.eventLogReset) {
         this.state.eventLog = { seq: this.state.eventLog.seq || 0, items: [] };
         this.state.oldestSeq = null;
-        this.scheduleEventRender();
-      }
-
-      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
-      if (payload.type === UiProtocol.UI_EVENT_LOG_PAGE_RESULT) {
-        if (!this.pendingLoadOlderRequestId || payload.requestId !== this.pendingLoadOlderRequestId) {
-          return;
-        }
-        this.pendingLoadOlderRequestId = null;
-        const incoming = Array.isArray(payload.items) ? payload.items : [];
-        const existing = new Set(this.state.eventLog.items.map((item) => item.seq));
-        const merged = incoming.filter((item) => item && !existing.has(item.seq)).concat(this.state.eventLog.items);
-        merged.sort((a, b) => (a.seq || 0) - (b.seq || 0));
-        this.state.eventLog.items = merged;
-        this.state.oldestSeq = merged.length ? merged[0].seq : null;
         this.scheduleEventRender();
       }
 
@@ -210,8 +213,12 @@
         this.fields.eventCopy.addEventListener('click', () => this.copyEventJson());
       }
       if (this.fields.eventClear) {
-        this.fields.eventClear.addEventListener('click', () => {
-          this.ui.sendUiCommand('CLEAR_EVENT_LOG', {});
+        this.fields.eventClear.addEventListener('click', async () => {
+          try {
+            await this.ui.sendUiCommand('CLEAR_EVENT_LOG', {}, { timeoutMs: 8000 });
+          } catch (_) {
+            this.renderUiError();
+          }
         });
       }
       if (this.fields.eventOlder) {
@@ -219,21 +226,46 @@
       }
     }
 
-    loadOlderEvents() {
+    async loadOlderEvents() {
       const oldest = this.state.oldestSeq || (this.state.eventLog.items.length ? this.state.eventLog.items[0].seq : null);
-      const requestId = this.ui.sendUiCommand('EVENT_LOG_PAGE', { beforeSeq: oldest, limit: 200 }, {});
-      this.pendingLoadOlderRequestId = requestId;
+      try {
+        const response = await this.ui.sendUiCommand('LOAD_OLDER_EVENTS', { beforeSeq: oldest, limit: 200 }, { timeoutMs: 15000 });
+        const incoming = Array.isArray(response && response.items) ? response.items : [];
+        const existing = new Set(this.state.eventLog.items.map((item) => item.seq));
+        const merged = incoming.filter((item) => item && !existing.has(item.seq)).concat(this.state.eventLog.items);
+        merged.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+        this.state.eventLog.items = merged;
+        this.state.oldestSeq = merged.length ? merged[0].seq : null;
+        this.scheduleEventRender();
+      } catch (_) {
+        this.renderUiError();
+      }
     }
 
     render() {
       if (this.fields.site) {
         this.fields.site.textContent = `Сайт: ${this.state.origin || '—'}`;
       }
+      if (this.fields.transport) {
+        const mode = this.state.env && this.state.env.offscreenMode ? this.state.env.offscreenMode : 'unknown';
+        const reason = this.state.env && this.state.env.offscreenDisabledReason
+          ? ` (reason: ${this.state.env.offscreenDisabledReason})`
+          : '';
+        this.fields.transport.textContent = `Transport: ${mode}${reason}`;
+      }
       this.renderStatus();
       this.renderBenchmarks();
       this.renderRateLimits();
-      this.renderRateLimits();
       this.renderEventLog();
+      this.renderUiError();
+    }
+
+    renderUiError() {
+      if (!this.fields.uiError) {
+        return;
+      }
+      const error = this.ui.getLastUiError();
+      this.fields.uiError.textContent = error ? `Command failed: ${error.code} — ${error.message}` : '';
     }
 
     renderStatus() {
@@ -539,7 +571,8 @@
   const page = new DebugPage({ doc: global.document, ui });
   ui.setHandlers({
     onSnapshot: (payload) => page.applySnapshot(payload),
-    onPatch: (payload) => page.applyPatch(payload)
+    onPatch: (payload) => page.applyPatch(payload),
+    onUiError: () => page.renderUiError()
   });
   page.init();
 })(globalThis);

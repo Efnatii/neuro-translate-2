@@ -1,20 +1,23 @@
 /**
- * Main background-module facade for the MV3 service worker.
+ * Файл реализует центральный класс service worker для MV3-расширения.
  *
- * `BackgroundApp` is the single narrow entry point for background-side external
- * integration: runtime messages, UI ports, storage change notifications, and
- * lifecycle orchestration of AI requests.
+ * Классы внутри:
+ * - `BackgroundApp` — главный оркестратор background-слоя: поднимает сторы,
+ *   подключает AI-модуль, обслуживает runtime/UI команды и рассылает patch-события.
  *
- * MV3 workers are ephemeral, so critical state is persisted in stores
- * (`EventLogStore`, `TabStateStore`, `InflightRequestStore`, rate-limit store).
- * This class reconstructs dependencies on startup and sweeps stale leases.
+ * За что отвечает:
+ * - восстановление устойчивого состояния после перезапуска воркера;
+ * - обработка команд UI (`SETTINGS_PATCH`, `GET_API_KEY`, benchmark и т.д.);
+ * - безопасная публикация snapshot/patch через `UiPortHub`;
+ * - интеграция с offscreen transport, rate limits и event log.
  *
- * Long OpenAI fetches are delegated to offscreen transport; this class also
- * attempts idempotent adoption of offscreen cached results when in-flight leases
- * expire, preventing permanent RUNNING states after worker restarts.
+ * Что НЕ делает:
+ * - не рендерит UI и не хранит секреты в snapshot/broadcast;
+ * - не переносит бизнес-логику в popup/debug, оставляя UI тонким клиентом.
  */
 (function initBackgroundApp(global) {
   const NT = global.NT;
+  const BG = NT.Internal.bg;
 
   class BackgroundApp {
     constructor({ chromeApi, fetchFn } = {}) {
@@ -25,21 +28,20 @@
       this.settingsStore = null;
       this.tabStateStore = null;
       this.inflightStore = null;
-      this.benchmarkStore = null;
-      this.rateLimitStore = null;
-      this.perfStore = null;
       this.rateLimiter = null;
       this.loadScheduler = null;
       this.uiHub = null;
       this.eventFactory = null;
       this.ai = null;
       this.offscreenExecutor = null;
+      this.installGuard = null;
+      this.redactor = null;
+      this.migrations = null;
 
       this._inflightSweepTimer = null;
       this._lastLimitsBroadcastAt = 0;
 
       this._onStorageChanged = this._onStorageChanged.bind(this);
-      this._onRuntimeMessage = this._onRuntimeMessage.bind(this);
       this._handleUiCommand = this._handleUiCommand.bind(this);
       this._runInflightSweepTick = this._runInflightSweepTick.bind(this);
     }
@@ -47,31 +49,41 @@
     async start() {
       this._initServices();
       await this.eventLogStore.load();
+      if (this.migrations) {
+        await this.migrations.run();
+      }
       await this._preloadState();
+      if (this.installGuard && typeof this.installGuard.runChecks === 'function') {
+        await this.installGuard.runChecks({
+          offscreenExecutor: this.offscreenExecutor,
+          requireOpenAiHost: true
+        });
+      }
+      this._logEvent(this.eventFactory.info('INSTALL_CHECK_COMPLETE', 'Install checks finished', {
+        mode: this.offscreenExecutor ? this.offscreenExecutor.mode : 'unknown',
+        disabledReason: this.offscreenExecutor ? this.offscreenExecutor.disabledReason : null
+      }));
       this._startInflightSweeper();
       this._attachListeners();
       this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BG_START, 'Background started', { source: 'background' }));
     }
 
     _initServices() {
-      this.eventLogStore = new NT.EventLogStore({ chromeApi: this.chromeApi, limit: 800 });
       this.eventFactory = new NT.EventFactory({ time: NT.Time, source: 'bg' });
+      this.redactor = new NT.Redactor();
+      this.eventLogStore = new BG.EventLogStore({
+        chromeApi: this.chromeApi,
+        limit: 800,
+        redactor: this.redactor
+      });
       this.settingsStore = new NT.SettingsStore({
         chromeApi: this.chromeApi,
-        defaults: {
-          translationModelList: [],
-          modelSelection: null,
-          modelSelectionPolicy: null,
-          modelBenchmarkStatus: null
-        }
+        eventSink: (event) => this._logEvent(event)
       });
-      this.tabStateStore = new NT.TabStateStore({ chromeApi: this.chromeApi });
-      this.inflightStore = new NT.InflightRequestStore({ chromeApi: this.chromeApi });
-      this.benchmarkStore = new NT.ModelBenchmarkStore({ chromeApi: this.chromeApi });
-      this.rateLimitStore = new NT.ModelRateLimitStore({ chromeApi: this.chromeApi });
-      this.perfStore = new NT.ModelPerformanceStore({ chromeApi: this.chromeApi });
+      this.tabStateStore = new BG.TabStateStore({ chromeApi: this.chromeApi });
+      this.inflightStore = new BG.InflightRequestStore({ chromeApi: this.chromeApi });
 
-      this.offscreenExecutor = new NT.OffscreenExecutor({
+      this.offscreenExecutor = new BG.OffscreenExecutor({
         chromeApi: this.chromeApi,
         offscreenPath: 'offscreen/offscreen.html',
         eventFactory: this.eventFactory,
@@ -79,7 +91,7 @@
       });
 
       this.rateLimiter = new NT.RateLimiter({ rpm: 60, tpm: 60000 });
-      this.loadScheduler = new NT.LoadScheduler({
+      this.loadScheduler = new BG.LoadScheduler({
         rateLimiter: this.rateLimiter,
         eventLogger: (event) => this._logEvent(event)
       });
@@ -89,52 +101,42 @@
         fetchFn: this.fetchFn,
         loadScheduler: this.loadScheduler,
         eventLogger: (event) => this._logEvent(event),
-        benchmarkStore: this.benchmarkStore,
-        rateLimitStore: this.rateLimitStore,
-        perfStore: this.perfStore,
         offscreenExecutor: this.offscreenExecutor
       }).init();
 
-      this.uiHub = new NT.UiPortHub({
+      this.uiHub = new BG.UiPortHub({
         settingsStore: this.settingsStore,
         tabStateStore: this.tabStateStore,
         eventLogStore: this.eventLogStore,
-        benchmarkStore: this.benchmarkStore,
-        rateLimitStore: this.rateLimitStore,
-        onCommand: ({ envelope }) => this._handleUiCommand(envelope),
+        aiFacade: this.ai,
+        offscreenExecutor: this.offscreenExecutor,
+        redactor: this.redactor,
+        onCommand: (ctx) => this._handleUiCommand(ctx),
         onEvent: (event) => this._logEvent(event)
+      });
+
+      this.installGuard = new BG.InstallGuard({
+        chromeApi: this.chromeApi,
+        eventFactory: this.eventFactory,
+        emitEventFn: (event) => this._logEvent(event)
+      });
+
+      this.migrations = new BG.MigrationManager({
+        settingsStore: this.settingsStore,
+        aiStores: [this.ai && this.ai.benchmarkStore, this.ai && this.ai.rateLimitStore, this.ai && this.ai.perfStore],
+        bgStores: [this.tabStateStore, this.inflightStore, this.eventLogStore],
+        eventSink: (event) => this._logEvent(event)
       });
     }
 
     async _preloadState() {
-      const state = await this.settingsStore.get(['modelBenchmarkStatus', 'modelSelection', 'modelSelectionPolicy']);
-      const status = state.modelBenchmarkStatus || null;
-      const now = Date.now();
-      if (status && status.status === 'running' && typeof status.leaseUntilTs === 'number' && status.leaseUntilTs < now) {
-        await this.settingsStore.set({
-          modelBenchmarkStatus: {
-            status: 'failed',
-            reason: 'LEASE_EXPIRED',
-            total: status.total || 0,
-            completed: status.completed || 0,
-            updatedAt: now,
-            finishedAt: now,
-            currentModelSpec: status.currentModelSpec || null,
-            leaseUntilTs: null
-          }
-        });
-      }
-      if (!state.modelSelection) {
-        const modelSelection = NT.ModelSelection.normalize(state.modelSelection, state.modelSelectionPolicy);
-        await this.settingsStore.set({ modelSelection });
+      if (this.ai && typeof this.ai.sweepBenchmarkLeaseIfExpired === 'function') {
+        await this.ai.sweepBenchmarkLeaseIfExpired();
       }
     }
 
     _attachListeners() {
       this.uiHub.attachToRuntime();
-      if (this.chromeApi && this.chromeApi.runtime && this.chromeApi.runtime.onMessage) {
-        this.chromeApi.runtime.onMessage.addListener(this._onRuntimeMessage);
-      }
       if (this.chromeApi && this.chromeApi.storage && this.chromeApi.storage.onChanged) {
         this.chromeApi.storage.onChanged.addListener(this._onStorageChanged);
       }
@@ -201,13 +203,8 @@
       if (!result || typeof result !== 'object') {
         return;
       }
-      if (result.ok && row && row.modelSpec && result.headers && this.rateLimitStore) {
-        try {
-          const headers = this._toHeaderAccessor(result.headers);
-          await this.rateLimitStore.upsertFromHeaders(row.modelSpec, headers, { receivedAt: Date.now() });
-        } catch (_) {
-          // ignore best-effort header adoption
-        }
+      if (result.ok && row && row.modelSpec && result.headers && this.ai) {
+        await this.ai.adoptRateLimitHeaders(row.modelSpec, result.headers, { receivedAt: Date.now() });
       }
 
       this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.AI_RESPONSE, result.ok ? 'Adopted cached offscreen result' : 'Adopted cached offscreen error', {
@@ -218,64 +215,11 @@
       }));
     }
 
-    _toHeaderAccessor(rawHeaders) {
-      return {
-        get(name) {
-          if (!rawHeaders || typeof rawHeaders !== 'object') {
-            return null;
-          }
-          const key = String(name || '').toLowerCase();
-          const keys = Object.keys(rawHeaders);
-          for (const item of keys) {
-            if (String(item).toLowerCase() === key) {
-              return rawHeaders[item];
-            }
-          }
-          return null;
-        }
-      };
-    }
-
     async _releaseReservation(modelSpec, requestId) {
-      if (!this.rateLimitStore || !modelSpec || !requestId) {
+      if (!this.ai || !modelSpec || !requestId) {
         return;
       }
-      try {
-        await this.rateLimitStore.release(modelSpec, requestId);
-      } catch (_) {
-        // best-effort cleanup
-      }
-    }
-
-    _estimateRequestTokens(input, maxOutputTokens) {
-      let promptLength = 0;
-      if (typeof input === 'string') {
-        promptLength = input.length;
-      } else {
-        try {
-          promptLength = JSON.stringify(input || '').length;
-        } catch (_) {
-          promptLength = 0;
-        }
-      }
-      const maxOutput = typeof maxOutputTokens === 'number' ? maxOutputTokens : 512;
-      return Math.ceil(promptLength / 4) + maxOutput;
-    }
-
-    _buildDeterministicRequestMeta({ tabId, taskType, request }) {
-      const src = request && typeof request === 'object' ? request : {};
-      const attempt = Number.isFinite(Number(src.attempt)) ? Number(src.attempt) : 1;
-      const jobId = src.jobId || `tab${tabId === null || tabId === undefined ? 'na' : String(tabId)}`;
-      const blockId = src.blockId || src.blockIndex || 'block0';
-      const safeTask = taskType || 'unknown';
-      const requestId = src.requestId || `${jobId}:${blockId}:${attempt}:${safeTask}`;
-      return {
-        requestId,
-        jobId,
-        blockId,
-        attempt,
-        timeoutMs: Number.isFinite(Number(src.timeoutMs)) ? Number(src.timeoutMs) : 90000
-      };
+      await this.ai.releaseReservation(modelSpec, requestId);
     }
 
     async _runLlmRequest({ tabId, taskType, request }) {
@@ -352,62 +296,127 @@
 
     async _readLlmSettings() {
       const data = await this.settingsStore.get(['translationModelList', 'modelSelection', 'modelSelectionPolicy']);
-      const modelSelection = NT.ModelSelection.normalize(data.modelSelection, data.modelSelectionPolicy);
-      if (!data.modelSelection) {
-        await this.settingsStore.set({ modelSelection });
-      }
+      const modelSelection = this._resolveModelSelection(data);
       return {
         translationModelList: Array.isArray(data.translationModelList) ? data.translationModelList : [],
         modelSelection
       };
     }
 
-    _handleUiCommand(envelope) {
-      if (!envelope || !envelope.payload) {
-        return;
+    _resolveModelSelection(state) {
+      if (state && state.modelSelection && typeof state.modelSelection === 'object') {
+        const preference = state.modelSelection.preference === 'smartest' || state.modelSelection.preference === 'cheapest'
+          ? state.modelSelection.preference
+          : null;
+        return {
+          speed: state.modelSelection.speed !== false,
+          preference
+        };
       }
-      const payload = envelope.payload || {};
-      if (payload.name === 'LOG_EVENT') {
-        const event = payload.payload && typeof payload.payload === 'object' ? payload.payload : null;
+
+      const legacyPolicy = state && typeof state.modelSelectionPolicy === 'string'
+        ? state.modelSelectionPolicy
+        : null;
+      if (legacyPolicy === 'smartest') {
+        return { speed: false, preference: 'smartest' };
+      }
+      if (legacyPolicy === 'cheapest') {
+        return { speed: false, preference: 'cheapest' };
+      }
+      if (legacyPolicy === 'fastest') {
+        return { speed: true, preference: null };
+      }
+      return { speed: true, preference: null };
+    }
+
+    async _handleUiCommand({ name, payload, env, port } = {}) {
+      const commandName = typeof name === 'string' ? name : '';
+      const commandPayload = payload && typeof payload === 'object' ? payload : {};
+      if (!commandName) {
+        const error = new Error('Missing command name');
+        error.code = 'BAD_COMMAND';
+        throw error;
+      }
+
+      if (commandName === 'LOG_EVENT') {
+        const event = commandPayload && typeof commandPayload === 'object' ? commandPayload : null;
         if (event) {
           this._logEvent({ ...event, meta: { ...(event.meta || {}), source: 'ui' } });
         }
-        return;
+        return { logged: true };
       }
 
-      if (payload.name === 'CLEAR_EVENT_LOG') {
-        this.eventLogStore.clear().then(() => this.uiHub.broadcastEventReset()).catch(() => {});
+      if (commandName === 'CLEAR_EVENT_LOG') {
+        await this.eventLogStore.clear();
+        this.uiHub.broadcastEventReset();
         this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Event log cleared', { source: 'ui' }));
-        return;
+        return { cleared: true };
       }
 
-      if (payload.name !== 'BENCHMARK_SELECTED_MODELS') {
-        return;
+      if (commandName === 'LOAD_OLDER_EVENTS') {
+        const beforeSeq = typeof commandPayload.beforeSeq === 'number' ? commandPayload.beforeSeq : null;
+        const limit = this._clampEventPageLimit(commandPayload.limit);
+        const result = beforeSeq
+          ? await this.eventLogStore.getBefore(beforeSeq, limit)
+          : await this.eventLogStore.getTail(limit);
+        return {
+          items: Array.isArray(result.items) ? result.items : [],
+          seq: typeof result.seq === 'number' ? result.seq : 0,
+          hasMore: beforeSeq ? Array.isArray(result.items) && result.items.length >= limit : false
+        };
       }
 
-      this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BENCH_START, 'Benchmark request received', { source: 'ui' }));
-      this._loadSelectedModels()
-        .then((modelSpecs) => this.ai.benchmarkSelected(modelSpecs, { force: Boolean(payload.payload && payload.payload.force) }))
-        .catch(() => this.settingsStore.set({
-          modelBenchmarkStatus: { status: 'failed', errorCode: 'BENCHMARK_START_FAILED', updatedAt: Date.now() }
+      if (commandName === 'SETTINGS_PATCH') {
+        const incomingPatch = commandPayload && typeof commandPayload.patch === 'object' ? commandPayload.patch : null;
+        if (!incomingPatch) {
+          const error = new Error('Invalid SETTINGS_PATCH payload');
+          error.code = 'BAD_SETTINGS_PATCH';
+          throw error;
+        }
+        const allowedKeys = ['apiKey', 'translationModelList', 'modelSelection', 'modelSelectionPolicy'];
+        const patch = {};
+        allowedKeys.forEach((key) => {
+          if (Object.prototype.hasOwnProperty.call(incomingPatch, key)) {
+            patch[key] = incomingPatch[key];
+          }
+        });
+        if (!Object.keys(patch).length) {
+          const error = new Error('SETTINGS_PATCH has no allowed keys');
+          error.code = 'EMPTY_SETTINGS_PATCH';
+          throw error;
+        }
+        await this.settingsStore.applyPatch(patch);
+        this._logEvent(this.eventFactory.info('UI_SETTINGS_PATCH_APPLIED', 'Applied settings patch from UI', {
+          source: 'ui',
+          keys: Object.keys(patch)
         }));
+        return { applied: true };
+      }
+
+      if (commandName === 'GET_API_KEY') {
+        const data = await this.settingsStore.get(['apiKey']);
+        return { apiKey: data && typeof data.apiKey === 'string' ? data.apiKey : '' };
+      }
+
+      if (commandName === 'BENCHMARK_SELECTED_MODELS') {
+        this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BENCH_START, 'Benchmark request received', { source: 'ui' }));
+        this._loadSelectedModels()
+          .then((modelSpecs) => this.ai.benchmarkSelected(modelSpecs, { force: Boolean(commandPayload.force) }))
+          .catch(() => this.ai.setBenchmarkFailed('BENCHMARK_START_FAILED'));
+        return { started: true };
+      }
+
+      const error = new Error(`Unknown command: ${commandName}`);
+      error.code = 'UNKNOWN_UI_COMMAND';
+      throw error;
     }
 
-    _onRuntimeMessage(message, sender, sendResponse) {
-      const MessageEnvelope = NT && NT.MessageEnvelope ? NT.MessageEnvelope : null;
-      const UiProtocol = NT && NT.UiProtocol ? NT.UiProtocol : null;
-      if (!MessageEnvelope || !UiProtocol || !MessageEnvelope.isEnvelope(message)) {
-        return false;
+    _clampEventPageLimit(limit) {
+      const value = Number(limit);
+      if (!Number.isFinite(value)) {
+        return 200;
       }
-
-      if (message.type === UiProtocol.UI_COMMAND) {
-        this._handleUiCommand(message);
-        if (message.payload && (message.payload.name === 'LOG_EVENT' || message.payload.name === 'CLEAR_EVENT_LOG')) {
-          this._respondWithTimeout(sendResponse, { ok: true });
-          return true;
-        }
-      }
-      return false;
+      return Math.max(50, Math.min(400, Math.floor(value)));
     }
 
     _onStorageChanged(changes, areaName) {
@@ -453,9 +462,18 @@
         return;
       }
       this._lastLimitsBroadcastAt = now;
-      this.uiHub.buildModelLimitsSnapshot().then((modelLimitsBySpec) => {
-        this.uiHub.broadcastPatch({ modelLimitsBySpec });
-      }).catch(() => {});
+      this.settingsStore.get(['translationModelList'])
+        .then((settings) => {
+          const selected = Array.isArray(settings.translationModelList) ? settings.translationModelList : [];
+          if (!this.ai || typeof this.ai.buildModelLimitsSnapshot !== 'function') {
+            return {};
+          }
+          return this.ai.buildModelLimitsSnapshot({ selectedModelSpecs: selected, maxModels: 20 });
+        })
+        .then((modelLimitsBySpec) => {
+          this.uiHub.broadcastPatch({ modelLimitsBySpec: modelLimitsBySpec || {} });
+        })
+        .catch(() => {});
     }
 
     _respondWithTimeout(sendResponse, payload, timeoutMs = 2000) {
