@@ -1,20 +1,36 @@
 /**
  * AI request engine focused on model selection and retry orchestration.
  *
- * `LlmEngine` is the narrow throat for request-time model choice. It combines
- * throughput EWMA from real requests, latency fallback benchmarks,
- * capability/cost preferences, real-time rate-limit state, cooldown windows,
- * and fairness penalties from recent usage.
+ * Role:
+ * - Select the best model per request and execute response calls under
+ *   scheduler/rate-limit constraints.
  *
- * Request token estimates power both availability checks and transport budget
- * reservations, while `hintBatchSize` increases pressure-aware risk penalties
- * for backlog-heavy translation batches.
+ * Public contract:
+ * - `request(...)` returns `{json, decision}`.
+ * - `getModelSpec(...)` returns deterministic decision metadata for chosen model.
  *
- * The engine never writes tab/UI state directly. It returns `{json, decision}`
- * while background owns persistence of decisions and user-visible status.
+ * Dependencies:
+ * - `AiRuntimeBase` shared runtime helpers, benchmark/performance/rate-limit
+ *   stores, `AiLoadScheduler`, and `AiResponseCall`.
+ *
+ * Side effects:
+ * - Schedules benchmark tasks, marks chosen model fairness windows, applies
+ *   cooldowns on 429, and emits diagnostic events.
+ *
+ * Boundary:
+ * - This class does not persist tab/UI state directly; background orchestration
+ *   remains owner of tab-scoped status writes.
  */
 (function initLlmEngine(global) {
-  class LlmEngine {
+  const NT = global.NT || (global.NT = {});
+  const AiRuntimeBase = NT.AiRuntimeBase || class {
+    now() { return Date.now(); }
+    logEvent() {}
+    parseModelSpec() { return { id: '', tier: 'standard' }; }
+    mapServiceTier() { return 'default'; }
+  };
+
+  class LlmEngine extends AiRuntimeBase {
     constructor({
       responseCall,
       modelRegistry,
@@ -26,6 +42,12 @@
       eventLogger,
       eventFactory
     } = {}) {
+      super({
+        time: NT.Time,
+        eventFactory,
+        eventLogger,
+        aiCommon: NT.AiCommon || null
+      });
       this.responseCall = responseCall;
       this.modelRegistry = modelRegistry || { byKey: {} };
       this.benchmarkStore = benchmarkStore;
@@ -33,9 +55,6 @@
       this.rateLimitStore = rateLimitStore;
       this.perfStore = perfStore || null;
       this.loadScheduler = loadScheduler;
-      this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
-      this.eventFactory = eventFactory || null;
-      this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
       const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
       this.retryLoop = RetryLoop
         ? new RetryLoop({
@@ -50,7 +69,10 @@
     }
 
     async getModelSpec({ tabId, taskType, selectedModelSpecs, modelSelection, estTokens, pressureTokens, hintPrevModelSpec }) {
-      const normalizedSelection = global.NT.ModelSelection.normalize(modelSelection, null);
+      const SelectionPolicy = NT.AiModelSelection || NT.ModelSelection;
+      const normalizedSelection = SelectionPolicy && typeof SelectionPolicy.normalize === 'function'
+        ? SelectionPolicy.normalize(modelSelection, null)
+        : { speed: true, preference: null };
       const candidates = this.normalizeCandidates(selectedModelSpecs);
       if (!candidates.length) {
         const error = new Error('NO_MODELS_SELECTED');
@@ -436,13 +458,6 @@
       return preference || 'speed';
     }
 
-    mapServiceTier(tier) {
-      if (this.aiCommon && typeof this.aiCommon.mapServiceTier === 'function') {
-        return this.aiCommon.mapServiceTier(tier);
-      }
-      return 'default';
-    }
-
     estimateTokens({ input, maxOutputTokens }) {
       let promptLength = 0;
       if (typeof input === 'string') {
@@ -475,22 +490,6 @@
       const safeBlock = meta.blockId || meta.blockIndex || 'block0';
       const safeAttempt = Number.isFinite(Number(meta.attempt)) ? Number(meta.attempt) : 1;
       return `${safeJob}:${safeBlock}:${safeAttempt}:${safeTask}`;
-    }
-
-    logEvent(level, tag, message, meta) {
-      if (!this.eventLogger) {
-        return;
-      }
-      if (this.eventFactory) {
-        const event = level === 'error'
-          ? this.eventFactory.error(tag, message, meta)
-          : level === 'warn'
-            ? this.eventFactory.warn(tag, message, meta)
-            : this.eventFactory.info(tag, message, meta);
-        this.eventLogger(event);
-        return;
-      }
-      this.eventLogger({ level, tag, message, meta });
     }
   }
 

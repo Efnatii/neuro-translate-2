@@ -1,20 +1,25 @@
 /**
- * Main AI facade consumed by background orchestration.
+ * Main AI module facade consumed by background orchestration.
  *
- * Public API remains intentionally narrow: `request`, `benchmarkSelected`, and
- * `getRegistry`. Internal services (stores/client/calls/engine/benchmarker) are
- * composed here and hidden from external modules.
+ * Role:
+ * - Serve as the AI narrow throat: background and UI bridge code call this
+ *   class instead of touching AI stores and transport internals directly.
  *
- * This module also builds AI-scoped event factory instances so emitted events
- * share taxonomy/shape across request and benchmark flows.
+ * Public contract:
+ * - Runtime actions: `request`, `benchmarkSelected`.
+ * - Policy normalization: `normalizeSelection`.
+ * - Read models: `getRegistry`.
+ * - Read diagnostics: `getBenchmarkSnapshot`, `getModelLimitsSnapshot`.
+ * - Best-effort maintenance: `adoptRateLimitHeaders`, `releaseReservation`.
  *
- * Model performance snapshots are encapsulated behind `ModelPerformanceStore`
- * and injected into the engine/benchmarker. The store remains internal to keep
- * `AiModule` as a narrow facade and avoid leaking persistence internals.
+ * Dependencies:
+ * - Composes AI internals (`ModelBenchmarkStore`, `ModelRateLimitStore`,
+ *   `ModelPerformanceStore`, `LlmClient`, `AiPingCall`, `AiResponseCall`,
+ *   `ModelBenchmarker`, `LlmEngine`) and optional `OffscreenExecutor`.
  *
- * Batch hints (`hintBatchSize`) and offscreen transport wiring are also threaded
- * here so downstream selection can account for backlog pressure without widening
- * public contracts in unrelated modules.
+ * Side effects:
+ * - Reads/writes benchmark and rate-limit persistence via owned stores.
+ * - Emits AI events through injected logger and AI-scoped `EventFactory`.
  */
 (function initAiModule(global) {
   const NT = global.NT || (global.NT = {});
@@ -106,7 +111,102 @@
     }
 
     getRegistry() {
-      return this.modelRegistry;
+      return this.modelRegistry || { entries: [], byKey: {} };
+    }
+
+    normalizeSelection(modelSelection, legacyPolicy) {
+      const Policy = NT.AiModelSelection || NT.ModelSelection || null;
+      if (Policy && typeof Policy.normalize === 'function') {
+        return Policy.normalize(modelSelection, legacyPolicy);
+      }
+      return { speed: true, preference: null };
+    }
+
+    async getBenchmarkSnapshot() {
+      if (!this.benchmarkStore) {
+        return { modelBenchmarkStatus: null, modelBenchmarks: {} };
+      }
+      if (typeof this.benchmarkStore.getSnapshot === 'function') {
+        return this.benchmarkStore.getSnapshot();
+      }
+      const modelBenchmarks = typeof this.benchmarkStore.getAllEntries === 'function'
+        ? await this.benchmarkStore.getAllEntries()
+        : {};
+      const modelBenchmarkStatus = typeof this.benchmarkStore.getStatus === 'function'
+        ? await this.benchmarkStore.getStatus()
+        : null;
+      return { modelBenchmarkStatus, modelBenchmarks };
+    }
+
+    async getModelLimitsSnapshot({ selectedModelSpecs = [], limit = 20, now } = {}) {
+      if (!this.rateLimitStore || typeof this.rateLimitStore.getAll !== 'function') {
+        return {};
+      }
+      const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(50, Math.floor(Number(limit)))) : 20;
+      const nowTs = typeof now === 'number' ? now : Date.now();
+      const all = await this.rateLimitStore.getAll();
+      const fromSelected = Array.isArray(selectedModelSpecs)
+        ? selectedModelSpecs.filter((spec) => typeof spec === 'string' && spec)
+        : [];
+      const keys = fromSelected.length
+        ? fromSelected.slice(0, safeLimit)
+        : Object.keys(all).slice(0, safeLimit);
+
+      const out = {};
+      keys.forEach((modelSpec) => {
+        const snapshot = all[modelSpec];
+        if (!snapshot || typeof snapshot !== 'object') {
+          return;
+        }
+
+        const reservations = Array.isArray(snapshot.reservations)
+          ? snapshot.reservations.filter((item) => item && item.id && typeof item.leaseUntilTs === 'number' && item.leaseUntilTs > nowTs)
+          : [];
+        const reserved = reservations.reduce((acc, item) => {
+          const requests = Number.isFinite(Number(item.requests)) ? Math.max(0, Number(item.requests)) : 0;
+          const tokens = Number.isFinite(Number(item.tokens)) ? Math.max(0, Number(item.tokens)) : 0;
+          return {
+            requests: acc.requests + requests,
+            tokens: acc.tokens + tokens
+          };
+        }, { requests: 0, tokens: 0 });
+
+        out[modelSpec] = {
+          cooldownUntilTs: typeof snapshot.cooldownUntilTs === 'number' ? snapshot.cooldownUntilTs : null,
+          remainingRequests: snapshot.remainingRequests === undefined ? null : snapshot.remainingRequests,
+          remainingTokens: snapshot.remainingTokens === undefined ? null : snapshot.remainingTokens,
+          limitRequests: snapshot.limitRequests === undefined ? null : snapshot.limitRequests,
+          limitTokens: snapshot.limitTokens === undefined ? null : snapshot.limitTokens,
+          resetRequestsAt: snapshot.resetRequestsAt || null,
+          resetTokensAt: snapshot.resetTokensAt || null,
+          reservedRequests: reserved.requests,
+          reservedTokens: reserved.tokens
+        };
+      });
+
+      return out;
+    }
+
+    async adoptRateLimitHeaders(modelSpec, headers, { receivedAt } = {}) {
+      if (!this.rateLimitStore || !modelSpec || !headers || typeof headers.get !== 'function') {
+        return;
+      }
+      try {
+        await this.rateLimitStore.upsertFromHeaders(modelSpec, headers, { receivedAt });
+      } catch (_) {
+        // best-effort adoption
+      }
+    }
+
+    async releaseReservation(modelSpec, requestId) {
+      if (!this.rateLimitStore || !modelSpec || !requestId) {
+        return;
+      }
+      try {
+        await this.rateLimitStore.release(modelSpec, requestId);
+      } catch (_) {
+        // best-effort cleanup
+      }
     }
 
     benchmarkSelected(modelSpecs, { force } = {}) {
@@ -118,7 +218,7 @@
         tabId,
         taskType,
         selectedModelSpecs,
-        modelSelection,
+        modelSelection: this.normalizeSelection(modelSelection, null),
         input,
         maxOutputTokens,
         temperature,

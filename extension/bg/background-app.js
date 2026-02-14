@@ -1,17 +1,28 @@
 /**
- * Main background-module facade for the MV3 service worker.
+ * Main background-module facade for MV3 service-worker orchestration.
  *
- * `BackgroundApp` is the single narrow entry point for background-side external
- * integration: runtime messages, UI ports, storage change notifications, and
- * lifecycle orchestration of AI requests.
+ * Role:
+ * - Be the only background-side integration point for runtime messages, UI
+ *   ports, storage change notifications, and request lifecycle control.
  *
- * MV3 workers are ephemeral, so critical state is persisted in stores
- * (`EventLogStore`, `TabStateStore`, `InflightRequestStore`, rate-limit store).
- * This class reconstructs dependencies on startup and sweeps stale leases.
+ * Public contract:
+ * - `start()` wires all services and listeners.
+ * - Runtime/UI flows keep message protocol stable (`UiProtocol` envelopes).
  *
- * Long OpenAI fetches are delegated to offscreen transport; this class also
- * attempts idempotent adoption of offscreen cached results when in-flight leases
- * expire, preventing permanent RUNNING states after worker restarts.
+ * Dependencies:
+ * - Local stores (`EventLogStore`, `SettingsStore`, `TabStateStore`,
+ *   `InflightRequestStore`), background scheduler (`AiLoadScheduler`), UI hub
+ *   (`UiPortHub`), AI facade (`AiModule`), and
+ *   offscreen transport executor (`OffscreenExecutor`).
+ *
+ * Side effects:
+ * - Reads/writes extension state in `chrome.storage.local`.
+ * - Attaches runtime/storage listeners and periodic in-flight sweep timers.
+ * - Emits persistent event-log entries for BG/AI/UI diagnostics.
+ *
+ * MV3 notes:
+ * - Service workers are ephemeral; in-flight requests are lease-backed and can
+ *   adopt offscreen cached results after restart to avoid stuck RUNNING states.
  */
 (function initBackgroundApp(global) {
   const NT = global.NT;
@@ -25,10 +36,6 @@
       this.settingsStore = null;
       this.tabStateStore = null;
       this.inflightStore = null;
-      this.benchmarkStore = null;
-      this.rateLimitStore = null;
-      this.perfStore = null;
-      this.rateLimiter = null;
       this.loadScheduler = null;
       this.uiHub = null;
       this.eventFactory = null;
@@ -67,9 +74,6 @@
       });
       this.tabStateStore = new NT.TabStateStore({ chromeApi: this.chromeApi });
       this.inflightStore = new NT.InflightRequestStore({ chromeApi: this.chromeApi });
-      this.benchmarkStore = new NT.ModelBenchmarkStore({ chromeApi: this.chromeApi });
-      this.rateLimitStore = new NT.ModelRateLimitStore({ chromeApi: this.chromeApi });
-      this.perfStore = new NT.ModelPerformanceStore({ chromeApi: this.chromeApi });
 
       this.offscreenExecutor = new NT.OffscreenExecutor({
         chromeApi: this.chromeApi,
@@ -78,9 +82,9 @@
         eventLogFn: (event) => this._logEvent(event)
       });
 
-      this.rateLimiter = new NT.RateLimiter({ rpm: 60, tpm: 60000 });
-      this.loadScheduler = new NT.LoadScheduler({
-        rateLimiter: this.rateLimiter,
+      this.loadScheduler = new NT.AiLoadScheduler({
+        rpm: 60,
+        tpm: 60000,
         eventLogger: (event) => this._logEvent(event)
       });
 
@@ -89,9 +93,6 @@
         fetchFn: this.fetchFn,
         loadScheduler: this.loadScheduler,
         eventLogger: (event) => this._logEvent(event),
-        benchmarkStore: this.benchmarkStore,
-        rateLimitStore: this.rateLimitStore,
-        perfStore: this.perfStore,
         offscreenExecutor: this.offscreenExecutor
       }).init();
 
@@ -99,8 +100,7 @@
         settingsStore: this.settingsStore,
         tabStateStore: this.tabStateStore,
         eventLogStore: this.eventLogStore,
-        benchmarkStore: this.benchmarkStore,
-        rateLimitStore: this.rateLimitStore,
+        aiModule: this.ai,
         onCommand: ({ envelope }) => this._handleUiCommand(envelope),
         onEvent: (event) => this._logEvent(event)
       });
@@ -125,7 +125,7 @@
         });
       }
       if (!state.modelSelection) {
-        const modelSelection = NT.ModelSelection.normalize(state.modelSelection, state.modelSelectionPolicy);
+        const modelSelection = this.ai.normalizeSelection(state.modelSelection, state.modelSelectionPolicy);
         await this.settingsStore.set({ modelSelection });
       }
     }
@@ -201,10 +201,10 @@
       if (!result || typeof result !== 'object') {
         return;
       }
-      if (result.ok && row && row.modelSpec && result.headers && this.rateLimitStore) {
+      if (result.ok && row && row.modelSpec && result.headers && this.ai && typeof this.ai.adoptRateLimitHeaders === 'function') {
         try {
           const headers = this._toHeaderAccessor(result.headers);
-          await this.rateLimitStore.upsertFromHeaders(row.modelSpec, headers, { receivedAt: Date.now() });
+          await this.ai.adoptRateLimitHeaders(row.modelSpec, headers, { receivedAt: Date.now() });
         } catch (_) {
           // ignore best-effort header adoption
         }
@@ -237,14 +237,10 @@
     }
 
     async _releaseReservation(modelSpec, requestId) {
-      if (!this.rateLimitStore || !modelSpec || !requestId) {
+      if (!this.ai || typeof this.ai.releaseReservation !== 'function' || !modelSpec || !requestId) {
         return;
       }
-      try {
-        await this.rateLimitStore.release(modelSpec, requestId);
-      } catch (_) {
-        // best-effort cleanup
-      }
+      await this.ai.releaseReservation(modelSpec, requestId);
     }
 
     _estimateRequestTokens(input, maxOutputTokens) {
@@ -352,7 +348,7 @@
 
     async _readLlmSettings() {
       const data = await this.settingsStore.get(['translationModelList', 'modelSelection', 'modelSelectionPolicy']);
-      const modelSelection = NT.ModelSelection.normalize(data.modelSelection, data.modelSelectionPolicy);
+      const modelSelection = this.ai.normalizeSelection(data.modelSelection, data.modelSelectionPolicy);
       if (!data.modelSelection) {
         await this.settingsStore.set({ modelSelection });
       }

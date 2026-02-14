@@ -1,12 +1,20 @@
 /**
  * Persistent benchmark snapshot store for model performance metadata.
  *
- * The store keeps two datasets in `chrome.storage.local`:
- * - `modelBenchmarks`: per-model latency samples and error state.
- * - `modelBenchmarkStatus`: progress/lease state for active benchmark jobs.
+ * Role:
+ * - Own all benchmark persistence in `chrome.storage.local`.
  *
- * TTL and minimum-attempt interval policies are enforced here so callers can
- * safely query freshness without duplicating storage logic.
+ * Public contract:
+ * - Bench entries API: `getAll`, `getAllEntries`, `get`, `getEntry`, `upsert`.
+ * - Status API: `getStatus`, `setStatus`.
+ * - Combined snapshot API: `getSnapshot`.
+ * - Policy helpers: `isFresh`, `canAttempt`.
+ *
+ * Dependencies:
+ * - `ChromeLocalStoreBase` storage wrappers.
+ *
+ * Side effects:
+ * - Reads and writes `modelBenchmarks` and `modelBenchmarkStatus`.
  */
 (function initModelBenchmarkStore(global) {
   const STORAGE_KEY_BENCHMARKS = 'modelBenchmarks';
@@ -79,6 +87,18 @@
 
     async setStatus(statusObj) {
       await this.storageSet({ [STORAGE_KEY_STATUS]: statusObj || null });
+    }
+
+    async getStatus() {
+      const data = await this.storageGet({ [STORAGE_KEY_STATUS]: null });
+      return data[STORAGE_KEY_STATUS] || null;
+    }
+
+    async getSnapshot() {
+      return {
+        modelBenchmarkStatus: await this.getStatus(),
+        modelBenchmarks: await this.getAllEntries()
+      };
     }
 
     isFresh(entry, now) {

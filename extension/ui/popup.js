@@ -1,13 +1,20 @@
 /**
  * Popup UI controller for quick settings and status preview.
  *
- * This controller intentionally contains only view/state behavior. All external
- * interactions (tabs/runtime/port/settings persistence) are delegated to
- * `UiModule`, which acts as the UI narrow throat.
+ * Role:
+ * - Keep popup rendering/state logic local while delegating all browser/runtime
+ *   interaction to `UiModule`.
  *
- * Snapshot + patch synchronization comes from `UiPortClient` via `UiModule`.
- * Persistent settings writes are debounced by `SettingsStore` inside the module,
- * so popup logic stays deterministic across MV3 reconnects.
+ * Public contract:
+ * - Controller owns DOM updates and user interaction handlers only.
+ * - Model list/options are read from `UiModule` snapshot cache (`modelRegistry`)
+ *   instead of direct AI utility imports.
+ *
+ * Dependencies:
+ * - `UiModule`, `Html`, and optional `Time` helper.
+ *
+ * Side effects:
+ * - Writes settings patches through `UiModule` and dispatches UI commands.
  */
 (function initPopup(global) {
   class PopupController {
@@ -130,6 +137,7 @@
       if (!payload) {
         return;
       }
+      this.modelRegistry = this.ui.getModelRegistry();
 
       const settings = payload.settings || {};
       if (Object.prototype.hasOwnProperty.call(settings, 'apiKey')) {
@@ -164,6 +172,7 @@
       if (!payload || !payload.patch) {
         return;
       }
+      this.modelRegistry = this.ui.getModelRegistry();
       const patch = payload.patch;
 
       if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {

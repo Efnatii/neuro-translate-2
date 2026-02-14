@@ -1,14 +1,44 @@
-(function initLoadScheduler(global) {
-  class LoadScheduler {
+/**
+ * Unified AI load scheduler with built-in token-bucket budget.
+ *
+ * Role:
+ * - Coordinate high/low priority AI work queues and rate-limit backoff policy.
+ * - Own RPM/TPM budgeting directly to avoid extra class fragmentation.
+ *
+ * Public contract:
+ * - `reserveSlot(task)` reserves execution slot or waits in queue.
+ * - `onRateLimited({ retryAfterMs, kind })` applies global backoff and bench
+ *   freeze windows.
+ * - `getAvailability()` returns current budget fractions for diagnostics.
+ *
+ * Dependencies:
+ * - Optional `eventLogger` callback for compact scheduler diagnostics.
+ *
+ * Side effects:
+ * - Uses timer scheduling (`setTimeout`/`clearTimeout`) to process queues.
+ * - Emits best-effort events through injected logger callback.
+ */
+(function initAiLoadScheduler(global) {
+  const NT = global.NT || (global.NT = {});
+
+  class AiLoadScheduler {
     constructor({
-      rateLimiter,
+      rpm = 60,
+      tpm = 60000,
+      windowMs = 60000,
       minLowRpmFraction = 0.15,
       minLowTpmFraction = 0.1,
       highBacklogLimit = 2,
       benchFreezeMs = 20 * 60 * 1000,
       eventLogger = null
     } = {}) {
-      this.rateLimiter = rateLimiter;
+      this.rpmCapacity = Number.isFinite(Number(rpm)) ? Math.max(1, Number(rpm)) : 60;
+      this.tpmCapacity = Number.isFinite(Number(tpm)) ? Math.max(1, Number(tpm)) : 60000;
+      this.windowMs = Number.isFinite(Number(windowMs)) ? Math.max(1000, Number(windowMs)) : 60000;
+      this.rpmTokens = this.rpmCapacity;
+      this.tpmTokens = this.tpmCapacity;
+      this.lastRefillAt = Date.now();
+
       this.minLowRpmFraction = minLowRpmFraction;
       this.minLowTpmFraction = minLowTpmFraction;
       this.highBacklogLimit = highBacklogLimit;
@@ -24,7 +54,7 @@
 
     reserveSlot(task) {
       if (!task || !task.kind) {
-        return Promise.reject(new Error('LoadScheduler task is missing kind'));
+        return Promise.reject(new Error('AiLoadScheduler task is missing kind'));
       }
 
       return new Promise((resolve, reject) => {
@@ -62,14 +92,23 @@
       this.scheduleNext();
     }
 
+    getAvailability() {
+      this.refill();
+      const rpmFraction = this.rpmCapacity ? this.rpmTokens / this.rpmCapacity : 0;
+      const tpmFraction = this.tpmCapacity ? this.tpmTokens / this.tpmCapacity : 0;
+      return {
+        rpmRemaining: this.rpmTokens,
+        tpmRemaining: this.tpmTokens,
+        rpmFraction,
+        tpmFraction
+      };
+    }
+
     canRunLow() {
       if (this.queueHigh.length > this.highBacklogLimit) {
         return false;
       }
-      if (!this.rateLimiter) {
-        return true;
-      }
-      const availability = this.rateLimiter.getAvailability();
+      const availability = this.getAvailability();
       return availability.rpmFraction >= this.minLowRpmFraction && availability.tpmFraction >= this.minLowTpmFraction;
     }
 
@@ -89,8 +128,12 @@
 
       while (this.queueHigh.length) {
         const entry = this.queueHigh[0];
-        const attempt = this.tryReserve(entry.task);
+        const attempt = this.tryConsume({
+          rpm: entry.task.estRpm || 1,
+          tokens: entry.task.estTokens || 0
+        });
         if (!attempt.allowed) {
+          this.logLimit(entry.task, attempt.retryAfterMs);
           this.scheduleNext(attempt.retryAfterMs);
           return;
         }
@@ -105,8 +148,12 @@
           return;
         }
         const entry = this.queueLow[0];
-        const attempt = this.tryReserve(entry.task);
+        const attempt = this.tryConsume({
+          rpm: entry.task.estRpm || 1,
+          tokens: entry.task.estTokens || 0
+        });
         if (!attempt.allowed) {
+          this.logLimit(entry.task, attempt.retryAfterMs);
           this.scheduleNext(attempt.retryAfterMs);
           return;
         }
@@ -120,15 +167,43 @@
       }
     }
 
-    tryReserve(task) {
-      if (!this.rateLimiter) {
+    tryConsume({ rpm = 1, tokens = 0 } = {}) {
+      this.refill();
+      const safeRpm = Number.isFinite(Number(rpm)) ? Math.max(1, Number(rpm)) : 1;
+      const safeTokens = Number.isFinite(Number(tokens)) ? Math.max(0, Number(tokens)) : 0;
+
+      if (this.rpmTokens >= safeRpm && this.tpmTokens >= safeTokens) {
+        this.rpmTokens -= safeRpm;
+        this.tpmTokens -= safeTokens;
         return { allowed: true, retryAfterMs: 0 };
       }
-      const result = this.rateLimiter.tryConsume({ rpm: task.estRpm || 1, tokens: task.estTokens || 0 });
-      if (!result.allowed) {
-        this.logLimit(task, result.retryAfterMs);
+
+      const rpmDeficit = Math.max(0, safeRpm - this.rpmTokens);
+      const tpmDeficit = Math.max(0, safeTokens - this.tpmTokens);
+      const rpmWait = this.estimateWait(rpmDeficit, this.rpmCapacity);
+      const tpmWait = this.estimateWait(tpmDeficit, this.tpmCapacity);
+      return { allowed: false, retryAfterMs: Math.max(rpmWait, tpmWait) };
+    }
+
+    refill() {
+      const now = Date.now();
+      const elapsed = Math.max(0, now - this.lastRefillAt);
+      if (!elapsed) {
+        return;
       }
-      return result;
+
+      const rpmRefill = (elapsed / this.windowMs) * this.rpmCapacity;
+      const tpmRefill = (elapsed / this.windowMs) * this.tpmCapacity;
+      this.rpmTokens = Math.min(this.rpmCapacity, this.rpmTokens + rpmRefill);
+      this.tpmTokens = Math.min(this.tpmCapacity, this.tpmTokens + tpmRefill);
+      this.lastRefillAt = now;
+    }
+
+    estimateWait(deficit, capacity) {
+      if (!deficit || !capacity) {
+        return 0;
+      }
+      return Math.ceil((deficit / capacity) * this.windowMs);
     }
 
     scheduleNext(delayMs = 1000) {
@@ -167,8 +242,5 @@
     }
   }
 
-  if (!global.NT) {
-    global.NT = {};
-  }
-  global.NT.LoadScheduler = LoadScheduler;
+  NT.AiLoadScheduler = AiLoadScheduler;
 })(globalThis);

@@ -1,27 +1,32 @@
 /**
  * Background runtime-port hub for popup/debug synchronization.
  *
- * `UiPortHub` handles unstable MV3 port lifecycle, serves HELLO snapshots from
- * dedicated stores (without wide full-storage reads), and broadcasts incremental
- * patches to subscribers.
+ * Role:
+ * - Own MV3 runtime-port lifecycle and deliver stable HELLO/SNAPSHOT/SUBSCRIBE/
+ *   PATCH flows for UI clients.
  *
- * Event log transport is delta-based: snapshot returns tail/delta, patch emits
- * append/reset notifications, and older pages are fetched via command replies
- * targeted only to requesting port.
+ * Public contract:
+ * - `attachToRuntime`, `broadcastPatch`, `broadcastEventAppend`,
+ *   `broadcastEventReset`.
+ * - Snapshot payload remains backward compatible and now also carries
+ *   `modelRegistry`.
  *
- * Snapshot also includes compact per-model limit state (`modelLimitsBySpec`) so
- * debug UI can show cooldown/reservations/waiting context without direct store
- * reads in UI controllers.
+ * Dependencies:
+ * - Settings/tab/event stores and AI facade (`AiModule`) as the only source of
+ *   AI benchmark/rate-limit/model-registry data.
+ *
+ * Side effects:
+ * - Subscribes to `chrome.runtime.onConnect`, posts runtime messages to ports,
+ *   and relays command/event callbacks to background app.
  */
 (function initUiPortHub(global) {
   class UiPortHub {
-    constructor({ settingsStore, tabStateStore, eventLogStore, benchmarkStore, rateLimitStore, onCommand, onEvent } = {}) {
+    constructor({ settingsStore, tabStateStore, eventLogStore, aiModule, onCommand, onEvent } = {}) {
       this.subscribers = new Set();
       this.settingsStore = settingsStore || null;
       this.tabStateStore = tabStateStore || null;
       this.eventLogStore = eventLogStore || null;
-      this.benchmarkStore = benchmarkStore || null;
-      this.rateLimitStore = rateLimitStore || null;
+      this.aiModule = aiModule || null;
       this.onCommand = typeof onCommand === 'function' ? onCommand : null;
       this.onEvent = typeof onEvent === 'function' ? onEvent : null;
     }
@@ -87,17 +92,31 @@
     }
 
     async loadSnapshot(envelope) {
-      if (!this.settingsStore || !this.tabStateStore || !this.eventLogStore || !this.benchmarkStore) {
-        return { settings: {}, tabId: null, translationStatusByTab: {}, eventLog: { seq: 0, items: [] } };
+      if (!this.settingsStore || !this.tabStateStore || !this.eventLogStore) {
+        return {
+          settings: {},
+          tabId: null,
+          translationStatusByTab: {},
+          eventLog: { seq: 0, items: [] },
+          modelBenchmarkStatus: null,
+          modelBenchmarks: {},
+          modelLimitsBySpec: {},
+          modelRegistry: { entries: [], byKey: {} }
+        };
       }
       const helloPayload = envelope && envelope.payload && typeof envelope.payload === 'object' ? envelope.payload : {};
       const lastEventSeq = typeof helloPayload.lastEventSeq === 'number' ? helloPayload.lastEventSeq : null;
       const settings = await this.settingsStore.getPublicSnapshot();
       const visibilityData = await this.settingsStore.get(['translationVisibilityByTab', 'activeTabId']);
       const translationStatusByTab = await this.tabStateStore.getAllStatus();
-      const benchmarkData = await this.benchmarkStore.storageGet({ modelBenchmarkStatus: null, modelBenchmarks: {} });
+      const benchmarkData = this.aiModule && typeof this.aiModule.getBenchmarkSnapshot === 'function'
+        ? await this.aiModule.getBenchmarkSnapshot()
+        : { modelBenchmarkStatus: null, modelBenchmarks: {} };
       const eventLog = await this.loadEventLogForHello(lastEventSeq);
       const modelLimitsBySpec = await this.buildModelLimitsSnapshot();
+      const modelRegistry = this.aiModule && typeof this.aiModule.getRegistry === 'function'
+        ? this.aiModule.getRegistry()
+        : { entries: [], byKey: {} };
       const tabId = this.resolveTabId(envelope && envelope.meta ? envelope.meta : null, visibilityData);
 
       return {
@@ -108,41 +127,22 @@
         modelBenchmarkStatus: benchmarkData.modelBenchmarkStatus || null,
         modelBenchmarks: benchmarkData.modelBenchmarks || {},
         modelLimitsBySpec,
+        modelRegistry,
         eventLog
       };
     }
 
     async buildModelLimitsSnapshot() {
-      if (!this.rateLimitStore) {
+      if (!this.aiModule || typeof this.aiModule.getModelLimitsSnapshot !== 'function' || !this.settingsStore) {
         return {};
       }
-      const now = Date.now();
-      const all = await this.rateLimitStore.getAll();
       const settings = await this.settingsStore.get(['translationModelList']);
       const modelList = Array.isArray(settings.translationModelList) ? settings.translationModelList.slice(0, 20) : [];
-      const keys = modelList.length ? modelList : Object.keys(all).slice(0, 20);
-      const out = {};
-      keys.forEach((modelSpec) => {
-        const snapshot = all[modelSpec] || null;
-        if (!snapshot) {
-          return;
-        }
-        const reserved = typeof this.rateLimitStore._sumReservations === 'function'
-          ? this.rateLimitStore._sumReservations(snapshot, now)
-          : { tokens: 0, requests: 0 };
-        out[modelSpec] = {
-          cooldownUntilTs: snapshot.cooldownUntilTs || null,
-          remainingRequests: snapshot.remainingRequests === undefined ? null : snapshot.remainingRequests,
-          remainingTokens: snapshot.remainingTokens === undefined ? null : snapshot.remainingTokens,
-          limitRequests: snapshot.limitRequests === undefined ? null : snapshot.limitRequests,
-          limitTokens: snapshot.limitTokens === undefined ? null : snapshot.limitTokens,
-          resetRequestsAt: snapshot.resetRequestsAt || null,
-          resetTokensAt: snapshot.resetTokensAt || null,
-          reservedRequests: reserved.requests || 0,
-          reservedTokens: reserved.tokens || 0
-        };
+      return this.aiModule.getModelLimitsSnapshot({
+        selectedModelSpecs: modelList,
+        limit: 20,
+        now: Date.now()
       });
-      return out;
     }
 
     async loadEventLogForHello(lastEventSeq) {

@@ -74,19 +74,49 @@ function checkRequiredSymbols() {
 function checkBgImports() {
   const bgFile = path.join(EXTENSION_DIR, 'bg', 'background.js');
   const content = fs.existsSync(bgFile) ? fs.readFileSync(bgFile, 'utf8') : '';
-  const requiredSnippets = ["'/core/nt-namespace.js'", "'/core/message-envelope.js'", "'/ai/llm-engine.js'", "'/ai/llm-client.js'"];
-  return requiredSnippets
+  const requiredSnippets = [
+    "'/core/nt-namespace.js'",
+    "'/core/message-envelope.js'",
+    "'/ai/llm-engine.js'",
+    "'/ai/llm-client.js'",
+    "'/ai/model-selection-policy.js'",
+    "'/ai/ai-load-scheduler.js'"
+  ];
+  const forbiddenSnippets = [
+    "'/core/rate-limiter.js'",
+    "'/bg/load-scheduler.js'"
+  ];
+
+  const missing = requiredSnippets
     .filter((snippet) => !content.includes(snippet))
     .map((snippet) => `${path.relative(ROOT, bgFile)} :: missing importScripts ${snippet}`);
+  const forbidden = forbiddenSnippets
+    .filter((snippet) => content.includes(snippet))
+    .map((snippet) => `${path.relative(ROOT, bgFile)} :: forbidden importScripts ${snippet}`);
+
+  return missing.concat(forbidden);
 }
 
 function checkPopupScriptPath() {
   const popupHtml = path.join(EXTENSION_DIR, 'ui', 'popup.html');
   const content = fs.existsSync(popupHtml) ? fs.readFileSync(popupHtml, 'utf8') : '';
-  if (content.includes('src="/ui/popup.js"') || content.includes('src="ui/popup.js"')) {
+  const issues = [];
+  if (!(content.includes('src="/ui/popup.js"') || content.includes('src="ui/popup.js"'))) {
+    issues.push(`${path.relative(ROOT, popupHtml)} :: missing script src for ui/popup.js`);
+  }
+  if (content.includes('/core/model-selection.js')) {
+    issues.push(`${path.relative(ROOT, popupHtml)} :: forbidden script src for /core/model-selection.js`);
+  }
+  return issues;
+}
+
+function checkDebugScriptPath() {
+  const debugHtml = path.join(EXTENSION_DIR, 'ui', 'debug.html');
+  const content = fs.existsSync(debugHtml) ? fs.readFileSync(debugHtml, 'utf8') : '';
+  if (!content.includes('/core/model-selection.js')) {
     return [];
   }
-  return [`${path.relative(ROOT, popupHtml)} :: missing script src for ui/popup.js`];
+  return [`${path.relative(ROOT, debugHtml)} :: forbidden script src for /core/model-selection.js`];
 }
 
 const files = listJsFiles(EXTENSION_DIR);
@@ -94,8 +124,9 @@ const issues = checkSendResponse(files);
 const missingSymbols = checkRequiredSymbols();
 const missingBgImports = checkBgImports();
 const missingPopupPath = checkPopupScriptPath();
+const missingDebugPath = checkDebugScriptPath();
 
-if (issues.length || missingSymbols.length || missingBgImports.length || missingPopupPath.length) {
+if (issues.length || missingSymbols.length || missingBgImports.length || missingPopupPath.length || missingDebugPath.length) {
   if (issues.length) {
     console.error('Found onMessage listener with sendResponse missing return true:');
     issues.forEach((issue) => {
@@ -114,8 +145,12 @@ if (issues.length || missingSymbols.length || missingBgImports.length || missing
   }
 
   if (missingPopupPath.length) {
-    console.error('Missing popup script path entries:');
+    console.error('Popup script path issues:');
     missingPopupPath.forEach((entry) => console.error(`- ${entry}`));
+  }
+  if (missingDebugPath.length) {
+    console.error('Debug script path issues:');
+    missingDebugPath.forEach((entry) => console.error(`- ${entry}`));
   }
 
   process.exit(1);

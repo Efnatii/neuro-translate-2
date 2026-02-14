@@ -1,12 +1,23 @@
 /**
  * Unified UI facade for popup/debug controllers.
  *
- * `UiModule` hides browser APIs behind a small contract: settings reads/writes,
- * runtime/tab actions, and port messaging. Controllers receive snapshot/patch
- * callbacks and stay focused on rendering.
+ * Role:
+ * - Provide one UI-side narrow throat for settings, tab/runtime actions, and
+ *   runtime-port command/snapshot flows.
  *
- * The module tracks last known event sequence to support incremental HELLO
- * payloads and command requestIds (for paged event-log responses).
+ * Public contract:
+ * - Settings API: `getSettings`, `queueSettingsPatch`, `normalizeSelection`.
+ * - Runtime/tab API: `getActiveTab`, `openDebug`, `setVisibility`.
+ * - Command API: `sendUiCommand`.
+ * - Model registry API: `getModelRegistry` from cached snapshot payloads.
+ *
+ * Dependencies:
+ * - `SettingsStore`, `UiPortClient`, and protocol helpers (`UiProtocol`,
+ *   `MessageEnvelope`).
+ *
+ * Side effects:
+ * - Connects runtime port, dispatches UI commands, and writes debounced settings
+ *   patches to `chrome.storage.local` through store abstractions.
  */
 (function initUiModule(global) {
   const NT = global.NT || (global.NT = {});
@@ -20,8 +31,8 @@
 
       this.settingsStore = null;
       this.portClient = null;
-      this.ModelSelection = NT.ModelSelection || null;
       this._lastEventSeq = 0;
+      this.modelRegistry = { entries: [], byKey: {} };
     }
 
     init() {
@@ -44,12 +55,14 @@
           getHelloPayload: () => ({ lastEventSeq: this._lastEventSeq || 0 }),
           onSnapshot: (payload) => {
             this._trackEventSeq(payload);
+            this._trackModelRegistry(payload);
             if (this.onSnapshot) {
               this.onSnapshot(payload);
             }
           },
           onPatch: (payload) => {
             this._trackEventSeq(payload);
+            this._trackModelRegistry(payload);
             if (this.onPatch) {
               this.onPatch(payload);
             }
@@ -78,10 +91,47 @@
       }
     }
 
+    _trackModelRegistry(payload) {
+      if (!payload || typeof payload !== 'object') {
+        return;
+      }
+      const direct = payload.modelRegistry;
+      const fromPatch = payload.patch && typeof payload.patch === 'object'
+        ? payload.patch.modelRegistry
+        : null;
+      const next = direct || fromPatch;
+      if (!next || typeof next !== 'object') {
+        return;
+      }
+      const entries = Array.isArray(next.entries) ? next.entries : [];
+      const byKey = next.byKey && typeof next.byKey === 'object' ? next.byKey : {};
+      this.modelRegistry = {
+        entries: entries.slice(),
+        byKey: { ...byKey }
+      };
+    }
+
     normalizeSelection(modelSelection, legacyPolicy) {
-      return this.ModelSelection
-        ? this.ModelSelection.normalize(modelSelection, legacyPolicy)
-        : { speed: true, preference: null };
+      return this._normalizeSelection(modelSelection, legacyPolicy);
+    }
+
+    _normalizeSelection(modelSelection, legacyPolicy) {
+      if (modelSelection && typeof modelSelection === 'object') {
+        const preference = modelSelection.preference === 'smartest' || modelSelection.preference === 'cheapest'
+          ? modelSelection.preference
+          : null;
+        return {
+          speed: modelSelection.speed !== false,
+          preference
+        };
+      }
+      if (legacyPolicy === 'smartest') {
+        return { speed: false, preference: 'smartest' };
+      }
+      if (legacyPolicy === 'cheapest') {
+        return { speed: false, preference: 'cheapest' };
+      }
+      return { speed: true, preference: null };
     }
 
     getActiveTab() {
@@ -176,11 +226,7 @@
     }
 
     getModelRegistry() {
-      const AiCommon = NT.AiCommon || null;
-      if (!AiCommon || typeof AiCommon.createModelRegistry !== 'function') {
-        return { entries: [], byKey: {} };
-      }
-      return AiCommon.createModelRegistry();
+      return this.modelRegistry || { entries: [], byKey: {} };
     }
   }
 

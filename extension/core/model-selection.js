@@ -1,22 +1,30 @@
 /**
- * Shared normalization helper for model selection settings.
+ * Compatibility shim for legacy `NT.ModelSelection` consumers.
  *
- * This file centralizes the legacy-to-modern mapping of user selection policy
- * so background, UI bridge, and other runtime modules do not duplicate the same
- * fallback logic. The helper is intentionally stateless: MV3 service workers can
- * be suspended and restarted at any time, therefore the canonical value always
- * comes from storage and is normalized on read.
+ * Role:
+ * - Preserve backward-compatible symbol/path while AI policy logic lives in
+ *   `NT.AiModelSelection` (`extension/ai/model-selection-policy.js`).
  *
- * Contract:
- * - `ModelSelection.default()` returns the canonical default value.
- * - `ModelSelection.normalize(modelSelection, legacyPolicy)` accepts either the
- *   modern object shape or legacy policy string and always returns a safe object.
- * - `ModelSelection.isValidPreference(x)` validates supported preference values.
+ * Public contract:
+ * - Exposes `NT.ModelSelection` for old callers.
+ * - Uses `NT.AiModelSelection` when available.
+ * - Falls back to inline-safe implementation when load order is different.
+ *
+ * Dependencies:
+ * - Optional `NT.AiModelSelection`.
+ *
+ * Side effects:
+ * - Assigns `NT.ModelSelection` only; no storage/runtime side effects.
  */
 (function initModelSelection(global) {
   const NT = global.NT || (global.NT = {});
 
-  class ModelSelection {
+  if (NT.AiModelSelection) {
+    NT.ModelSelection = NT.AiModelSelection;
+    return;
+  }
+
+  class ModelSelectionFallback {
     static default() {
       return { speed: true, preference: null };
     }
@@ -25,7 +33,7 @@
       if (modelSelection && typeof modelSelection === 'object') {
         return {
           speed: modelSelection.speed !== false,
-          preference: ModelSelection.isValidPreference(modelSelection.preference)
+          preference: ModelSelectionFallback.isValidPreference(modelSelection.preference)
             ? modelSelection.preference
             : null
         };
@@ -38,7 +46,7 @@
         return { speed: false, preference: 'cheapest' };
       }
 
-      return ModelSelection.default();
+      return ModelSelectionFallback.default();
     }
 
     static isValidPreference(x) {
@@ -46,5 +54,5 @@
     }
   }
 
-  NT.ModelSelection = ModelSelection;
+  NT.ModelSelection = ModelSelectionFallback;
 })(globalThis);

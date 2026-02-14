@@ -1,18 +1,23 @@
 /**
  * Background benchmark runner for latency snapshots.
  *
- * Benchmarker measures model latency with bounded retries/timeouts and persists
- * benchmark/status data. Bench calls use `AiPingCall`, so rate-limit headers are
- * captured consistently with request flow.
+ * Role:
+ * - Execute latency and optional throughput benchmarks for selected models.
  *
- * It also provides optional throughput calibration for speed mode. Calibration
- * runs rarely (TTL/min-interval guarded), uses low-priority scheduler slots,
- * and records EWMA samples via `ModelPerformanceStore`.
+ * Public contract:
+ * - `benchmarkSelected`, `scheduleBenchmarks`, `quickPrebench`,
+ *   `maybeCalibrateThroughput`.
  *
- * On 429 it also applies short cooldown in `ModelRateLimitStore` to prevent
- * repeated bench pressure on temporarily throttled models.
+ * Dependencies:
+ * - `AiRuntimeBase` runtime helpers, `AiPingCall`, optional `AiResponseCall`,
+ *   benchmark/performance/rate-limit stores, and `AiLoadScheduler`.
+ *
+ * Side effects:
+ * - Writes benchmark/status snapshots, schedules low/high priority slots, emits
+ *   benchmark diagnostics, and applies cooldown on provider rate-limit signals.
  */
 (function initModelBenchmarker(global) {
+  const NT = global.NT || (global.NT = {});
   const DEFAULT_SAMPLES = 3;
   const TIMEOUT_MS = 20000;
   const MAX_ATTEMPTS = 2;
@@ -20,22 +25,30 @@
   const JITTER_MAX_MS = 350;
   const QUICK_SAMPLE_TIMEOUT_MS = 1200;
   const LEASE_MS = 5 * 60 * 1000;
+  const AiRuntimeBase = NT.AiRuntimeBase || class {
+    now() { return Date.now(); }
+    logEvent() {}
+    parseModelSpec() { return { id: '', tier: 'standard' }; }
+    mapServiceTier() { return 'default'; }
+  };
 
-  class ModelBenchmarker {
+  class ModelBenchmarker extends AiRuntimeBase {
     constructor({ chromeApi, pingCall, responseCall, benchmarkStore, modelRegistry, loadScheduler, rateLimitStore, perfStore, eventLogger, eventFactory }) {
+      super({
+        time: NT.Time,
+        eventFactory,
+        eventLogger,
+        aiCommon: NT.AiCommon || null
+      });
       this.chromeApi = chromeApi;
       this.pingCall = pingCall;
       this.benchmarkStore = benchmarkStore;
       this.responseCall = responseCall || null;
       this.modelRegistry = modelRegistry;
-      this.aiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
-      this.time = global.NT && global.NT.Time ? global.NT.Time : null;
       this.loadScheduler = loadScheduler;
       this.rateLimitStore = rateLimitStore || null;
       this.perfStore = perfStore || null;
-      this.eventFactory = eventFactory || null;
       this.benchPrompt = "Respond with a single '.'";
-      this.eventLogger = typeof eventLogger === 'function' ? eventLogger : null;
       const RetryLoop = global.NT && global.NT.RetryLoop ? global.NT.RetryLoop : null;
       this.retryLoop = RetryLoop
         ? new RetryLoop({
@@ -460,20 +473,6 @@
       return JITTER_MIN_MS + Math.floor(Math.random() * (JITTER_MAX_MS - JITTER_MIN_MS + 1));
     }
 
-    parseModelSpec(modelSpec) {
-      if (this.aiCommon && typeof this.aiCommon.parseModelSpec === 'function') {
-        return this.aiCommon.parseModelSpec(modelSpec);
-      }
-      return { id: '', tier: 'standard' };
-    }
-
-    mapServiceTier(tier) {
-      if (this.aiCommon && typeof this.aiCommon.mapServiceTier === 'function') {
-        return this.aiCommon.mapServiceTier(tier);
-      }
-      return 'default';
-    }
-
     estimateBenchTokens() {
       return Math.ceil(this.benchPrompt.length / 4) + 4;
     }
@@ -521,22 +520,6 @@
       }
     }
 
-    logEvent(level, tag, message, meta) {
-      if (!this.eventLogger) {
-        return;
-      }
-      if (this.eventFactory) {
-        const event = level === 'error'
-          ? this.eventFactory.error(tag, message, meta)
-          : level === 'warn'
-            ? this.eventFactory.warn(tag, message, meta)
-            : this.eventFactory.info(tag, message, meta);
-        this.eventLogger(event);
-        return;
-      }
-      this.eventLogger({ level, tag, message, meta });
-    }
-
     withLease(status) {
       if (status.status !== 'running') {
         return status;
@@ -545,10 +528,6 @@
         ...status,
         leaseUntilTs: this.now() + LEASE_MS
       };
-    }
-
-    now() {
-      return this.time && typeof this.time.now === 'function' ? this.time.now() : Date.now();
     }
   }
 
