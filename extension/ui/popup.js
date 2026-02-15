@@ -77,7 +77,8 @@
       this.startButton = this.doc.querySelector('[data-action="start-translation"]');
       this.cancelButton = this.doc.querySelector('[data-action="cancel-translation"]');
       this.visibilityButton = this.doc.querySelector('[data-action="toggle-visibility"]');
-      this.visibilityIcon = this.doc.querySelector('[data-field="visibility-icon"]');
+      this.visibilityIconOn = this.doc.querySelector('[data-field="visibility-on"]');
+      this.visibilityIconOff = this.doc.querySelector('[data-field="visibility-off"]');
     }
 
     bindEvents() {
@@ -326,25 +327,82 @@
         this.modelsRoot.appendChild(empty);
         return;
       }
+      const grouped = {
+        flex: [],
+        standard: [],
+        priority: [],
+        other: []
+      };
+
       options.forEach((entry) => {
-        const modelSpec = `${entry.id}:${entry.tier}`;
-        const label = this.doc.createElement('label');
-        label.className = 'popup__checkbox';
-
-        const input = this.doc.createElement('input');
-        input.type = 'checkbox';
-        input.value = modelSpec;
-        input.checked = this.state.translationModelList.includes(modelSpec);
-
-        const text = this.doc.createElement('span');
-        const tier = entry.tier ? String(entry.tier).toUpperCase() : 'STANDARD';
-        const safe = Html ? Html.safeText(`${entry.id} (${tier})`, '—') : `${entry.id} (${tier})`;
-        text.textContent = safe;
-
-        label.appendChild(input);
-        label.appendChild(text);
-        this.modelsRoot.appendChild(label);
+        if (!entry || typeof entry.id !== 'string' || !entry.id) {
+          return;
+        }
+        const rawTier = entry && typeof entry.tier === 'string' ? entry.tier.toLowerCase() : 'standard';
+        const targetTier = rawTier === 'flex' || rawTier === 'priority' || rawTier === 'standard'
+          ? rawTier
+          : 'other';
+        grouped[targetTier].push({
+          id: entry.id,
+          rawTier
+        });
       });
+
+      const sections = [
+        { key: 'flex', title: 'FLEX' },
+        { key: 'standard', title: 'STANDARD' },
+        { key: 'priority', title: 'PRIORITY' },
+        { key: 'other', title: 'OTHER' }
+      ];
+
+      let renderedGroupCount = 0;
+      sections.forEach((section) => {
+        const items = grouped[section.key];
+        if (!items.length) {
+          return;
+        }
+        renderedGroupCount += 1;
+
+        const group = this.doc.createElement('section');
+        group.className = 'popup__models-group';
+
+        const header = this.doc.createElement('h3');
+        header.className = 'popup__models-group-title';
+        header.textContent = section.title;
+        group.appendChild(header);
+
+        const list = this.doc.createElement('div');
+        list.className = 'popup__models-group-list';
+
+        items.forEach((entry) => {
+          const modelSpec = `${entry.id}:${entry.rawTier || 'standard'}`;
+          const label = this.doc.createElement('label');
+          label.className = 'popup__checkbox';
+
+          const input = this.doc.createElement('input');
+          input.type = 'checkbox';
+          input.value = modelSpec;
+          input.checked = this.state.translationModelList.includes(modelSpec);
+
+          const text = this.doc.createElement('span');
+          const safe = Html ? Html.safeText(entry.id, '—') : entry.id;
+          text.textContent = safe;
+
+          label.appendChild(input);
+          label.appendChild(text);
+          list.appendChild(label);
+        });
+
+        group.appendChild(list);
+        this.modelsRoot.appendChild(group);
+      });
+
+      if (!renderedGroupCount) {
+        const empty = this.doc.createElement('div');
+        empty.className = 'popup__models-empty';
+        empty.textContent = 'Нет доступных моделей';
+        this.modelsRoot.appendChild(empty);
+      }
     }
 
     resolveModelEntries() {
@@ -428,10 +486,20 @@
     }
 
     updateVisibilityIcon() {
-      if (!this.visibilityIcon) {
+      if (!this.visibilityButton) {
         return;
       }
-      this.visibilityIcon.textContent = this.state.translationVisible ? '👁️' : '🙈';
+      const visible = this.state.translationVisible !== false;
+      this.visibilityButton.setAttribute('aria-label', visible ? 'Скрыть перевод' : 'Показать перевод');
+      this.visibilityButton.setAttribute('title', visible ? 'Скрыть перевод' : 'Показать перевод');
+      this.visibilityButton.setAttribute('data-state', visible ? 'visible' : 'hidden');
+
+      if (this.visibilityIconOn) {
+        this.visibilityIconOn.hidden = !visible;
+      }
+      if (this.visibilityIconOff) {
+        this.visibilityIconOff.hidden = visible;
+      }
     }
 
     updateActionButtons() {
