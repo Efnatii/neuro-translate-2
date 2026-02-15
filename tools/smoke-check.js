@@ -83,21 +83,24 @@ function checkBgImports() {
   const bgFile = path.join(EXTENSION_DIR, 'bg', 'background.js');
   const content = fs.existsSync(bgFile) ? fs.readFileSync(bgFile, 'utf8') : '';
   const requiredSnippets = [
-    "'/core/nt-namespace.js'",
-    "'/core/message-envelope.js'",
-    "'/core/translation-protocol.js'",
-    "'/ai/llm-engine.js'",
-    "'/ai/llm-client.js'",
-    "'/ai/model-chooser.js'",
-    "'/ai/translation-call.js'",
-    "'/ai/model-selection-policy.js'",
-    "'/ai/ai-load-scheduler.js'",
-    "'/bg/translation-orchestrator.js'",
-    "'/bg/translation-job-store.js'"
+    "'../core/nt-namespace.js'",
+    "'../core/message-envelope.js'",
+    "'../core/translation-protocol.js'",
+    "'../core/runtime-paths.js'",
+    "'../ai/llm-engine.js'",
+    "'../ai/llm-client.js'",
+    "'../ai/model-chooser.js'",
+    "'../ai/translation-call.js'",
+    "'../ai/model-selection-policy.js'",
+    "'../ai/ai-load-scheduler.js'",
+    "'./translation-orchestrator.js'",
+    "'./translation-job-store.js'"
   ];
   const forbiddenSnippets = [
     "'/core/rate-limiter.js'",
-    "'/bg/load-scheduler.js'"
+    "'/bg/load-scheduler.js'",
+    "'../core/rate-limiter.js'",
+    "'./load-scheduler.js'"
   ];
 
   const missing = requiredSnippets
@@ -114,8 +117,14 @@ function checkPopupScriptPath() {
   const popupHtml = path.join(EXTENSION_DIR, 'ui', 'popup.html');
   const content = fs.existsSync(popupHtml) ? fs.readFileSync(popupHtml, 'utf8') : '';
   const issues = [];
-  if (!(content.includes('src="/ui/popup.js"') || content.includes('src="ui/popup.js"'))) {
+  if (!content.includes('src="./popup.js"')) {
     issues.push(`${path.relative(ROOT, popupHtml)} :: missing script src for ui/popup.js`);
+  }
+  if (!content.includes('src="./ui-module.js"')) {
+    issues.push(`${path.relative(ROOT, popupHtml)} :: missing script src for ui/ui-module.js`);
+  }
+  if (!content.includes('src="../core/runtime-paths.js"')) {
+    issues.push(`${path.relative(ROOT, popupHtml)} :: missing script src for ../core/runtime-paths.js`);
   }
   if (content.includes('/core/model-selection.js')) {
     issues.push(`${path.relative(ROOT, popupHtml)} :: forbidden script src for /core/model-selection.js`);

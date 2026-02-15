@@ -559,15 +559,21 @@
       if (!this.chromeApi || !this.chromeApi.scripting || typeof this.chromeApi.scripting.executeScript !== 'function') {
         return { ok: false, error: { code: 'SCRIPTING_UNAVAILABLE', message: 'chrome.scripting is unavailable' } };
       }
+      const RuntimePaths = NT.RuntimePaths || null;
+      const resolvePath = (relativePath) => (
+        RuntimePaths && typeof RuntimePaths.withPrefix === 'function'
+          ? RuntimePaths.withPrefix(this.chromeApi, relativePath)
+          : relativePath
+      );
       try {
         await this.chromeApi.scripting.executeScript({
           target: { tabId },
           files: [
-            'extension/core/nt-namespace.js',
-            'extension/core/translation-protocol.js',
-            'extension/content/dom-indexer.js',
-            'extension/content/dom-applier.js',
-            'extension/content/content-runtime.js'
+            resolvePath('core/nt-namespace.js'),
+            resolvePath('core/translation-protocol.js'),
+            resolvePath('content/dom-indexer.js'),
+            resolvePath('content/dom-applier.js'),
+            resolvePath('content/content-runtime.js')
           ]
         });
         return { ok: true };

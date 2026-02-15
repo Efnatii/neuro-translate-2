@@ -84,9 +84,14 @@
       this.translationJobStore = new NT.TranslationJobStore({ chromeApi: this.chromeApi });
       this.inflightStore = new NT.InflightRequestStore({ chromeApi: this.chromeApi });
 
+      const RuntimePaths = NT.RuntimePaths || null;
+      const offscreenPath = RuntimePaths && typeof RuntimePaths.withPrefix === 'function'
+        ? RuntimePaths.withPrefix(this.chromeApi, 'offscreen/offscreen.html')
+        : 'offscreen/offscreen.html';
+
       this.offscreenExecutor = new NT.OffscreenExecutor({
         chromeApi: this.chromeApi,
-        offscreenPath: 'offscreen/offscreen.html',
+        offscreenPath,
         eventFactory: this.eventFactory,
         eventLogFn: (event) => this._logEvent(event)
       });

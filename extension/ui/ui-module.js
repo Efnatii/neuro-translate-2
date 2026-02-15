@@ -153,7 +153,11 @@
       }
       const safeTabId = tabId === null || tabId === undefined ? '' : tabId;
       const safeUrl = url || '';
-      const debugUrl = `${this.chromeApi.runtime.getURL('ui/debug.html')}?tabId=${safeTabId}&url=${encodeURIComponent(safeUrl)}`;
+      const RuntimePaths = NT.RuntimePaths || null;
+      const debugPath = RuntimePaths && typeof RuntimePaths.withPrefix === 'function'
+        ? RuntimePaths.withPrefix(this.chromeApi, 'ui/debug.html')
+        : 'ui/debug.html';
+      const debugUrl = `${this.chromeApi.runtime.getURL(debugPath)}?tabId=${safeTabId}&url=${encodeURIComponent(safeUrl)}`;
       this.chromeApi.tabs.create({ url: debugUrl });
     }
 
