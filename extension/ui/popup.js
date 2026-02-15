@@ -318,7 +318,14 @@
 
       const Html = global.NT && global.NT.Html ? global.NT.Html : null;
       this.modelsRoot.innerHTML = '';
-      const options = this.modelRegistry.entries || [];
+      const options = this.resolveModelEntries();
+      if (!options.length) {
+        const empty = this.doc.createElement('div');
+        empty.className = 'popup__models-empty';
+        empty.textContent = 'Нет доступных моделей';
+        this.modelsRoot.appendChild(empty);
+        return;
+      }
       options.forEach((entry) => {
         const modelSpec = `${entry.id}:${entry.tier}`;
         const label = this.doc.createElement('label');
@@ -338,6 +345,39 @@
         label.appendChild(text);
         this.modelsRoot.appendChild(label);
       });
+    }
+
+    resolveModelEntries() {
+      const fromRegistry = this.modelRegistry && Array.isArray(this.modelRegistry.entries)
+        ? this.modelRegistry.entries
+        : [];
+      if (fromRegistry.length) {
+        return fromRegistry;
+      }
+
+      const AiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
+      if (AiCommon && typeof AiCommon.createModelRegistry === 'function') {
+        const fallback = AiCommon.createModelRegistry();
+        if (fallback && Array.isArray(fallback.entries) && fallback.entries.length) {
+          return fallback.entries;
+        }
+      }
+
+      const bySelected = (this.state.translationModelList || [])
+        .map((modelSpec) => {
+          if (typeof modelSpec !== 'string' || !modelSpec.includes(':')) {
+            return null;
+          }
+          const parts = modelSpec.split(':');
+          const id = parts[0] || '';
+          const tier = parts[1] || 'standard';
+          if (!id) {
+            return null;
+          }
+          return { id, tier };
+        })
+        .filter(Boolean);
+      return bySelected;
     }
 
     renderSettings() {
