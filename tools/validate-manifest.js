@@ -109,6 +109,17 @@ function collectManifestPaths(manifest) {
 }
 
 function validateManifest() {
+  const rootManifestPath = path.join(REPO_ROOT, 'manifest.json');
+  const duplicateManifestPath = path.join(REPO_ROOT, 'extension', 'manifest.json');
+  if (fs.existsSync(rootManifestPath) && fs.existsSync(duplicateManifestPath)) {
+    console.error('FAIL');
+    console.error('Duplicate manifests detected:');
+    console.error(`- ${path.relative(REPO_ROOT, rootManifestPath)}`);
+    console.error(`- ${path.relative(REPO_ROOT, duplicateManifestPath)}`);
+    console.error('Use repository root manifest.json as single source of truth.');
+    process.exit(1);
+  }
+
   const found = findManifest();
   if (!found) {
     console.error('FAIL');

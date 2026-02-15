@@ -24,6 +24,10 @@
         benchmarkStatus: null,
         benchmarks: {},
         modelLimitsBySpec: {},
+        translationJob: null,
+        translationProgress: 0,
+        failedBlocksCount: 0,
+        lastError: null,
         eventLog: { seq: 0, items: [] },
         filters: { level: 'all', q: '', tag: 'all' },
         oldestSeq: null
@@ -50,6 +54,11 @@
       this.fields.decisionPolicy = this.doc.querySelector('[data-field="decision-policy"]');
       this.fields.decisionModel = this.doc.querySelector('[data-field="decision-model"]');
       this.fields.decisionReason = this.doc.querySelector('[data-field="decision-reason"]');
+      this.fields.translationJobId = this.doc.querySelector('[data-field="translation-job-id"]');
+      this.fields.translationJobStatus = this.doc.querySelector('[data-field="translation-job-status"]');
+      this.fields.translationProgress = this.doc.querySelector('[data-field="translation-progress"]');
+      this.fields.translationFailedCount = this.doc.querySelector('[data-field="translation-failed-count"]');
+      this.fields.translationLastError = this.doc.querySelector('[data-field="translation-last-error"]');
       this.fields.benchStatus = this.doc.querySelector('[data-field="bench-status"]');
       this.fields.benchCurrent = this.doc.querySelector('[data-field="bench-current"]');
       this.fields.benchMessage = this.doc.querySelector('[data-field="bench-message"]');
@@ -99,6 +108,18 @@
       if (payload.modelLimitsBySpec) {
         this.state.modelLimitsBySpec = payload.modelLimitsBySpec || {};
       }
+      if (Object.prototype.hasOwnProperty.call(payload, 'translationJob')) {
+        this.state.translationJob = payload.translationJob || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'translationProgress')) {
+        this.state.translationProgress = Number(payload.translationProgress || 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'failedBlocksCount')) {
+        this.state.failedBlocksCount = Number(payload.failedBlocksCount || 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'lastError')) {
+        this.state.lastError = payload.lastError || null;
+      }
       if (payload.eventLog) {
         this._mergeEventLogSnapshot(payload.eventLog.items || []);
         this.state.eventLog.seq = typeof payload.eventLog.seq === 'number' ? payload.eventLog.seq : this.state.eventLog.seq;
@@ -114,23 +135,38 @@
       if (!payload) {
         return;
       }
+      const patch = payload.patch && typeof payload.patch === 'object'
+        ? payload.patch
+        : payload;
 
-      if (payload.translationStatusByTab) {
-        this.state.status = this.state.tabId !== null ? payload.translationStatusByTab[this.state.tabId] || null : null;
+      if (patch.translationStatusByTab) {
+        this.state.status = this.state.tabId !== null ? patch.translationStatusByTab[this.state.tabId] || null : null;
       }
-      if (Object.prototype.hasOwnProperty.call(payload, 'modelBenchmarkStatus')) {
-        this.state.benchmarkStatus = payload.modelBenchmarkStatus || null;
+      if (Object.prototype.hasOwnProperty.call(patch, 'modelBenchmarkStatus')) {
+        this.state.benchmarkStatus = patch.modelBenchmarkStatus || null;
       }
-      if (Object.prototype.hasOwnProperty.call(payload, 'modelBenchmarks')) {
-        this.state.benchmarks = payload.modelBenchmarks || {};
-      }
-
-      if (payload.modelLimitsBySpec) {
-        this.state.modelLimitsBySpec = payload.modelLimitsBySpec || {};
+      if (Object.prototype.hasOwnProperty.call(patch, 'modelBenchmarks')) {
+        this.state.benchmarks = patch.modelBenchmarks || {};
       }
 
-      if (payload.eventLogAppend && payload.eventLogAppend.item) {
-        const entry = payload.eventLogAppend.item;
+      if (patch.modelLimitsBySpec) {
+        this.state.modelLimitsBySpec = patch.modelLimitsBySpec || {};
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationJob')) {
+        this.state.translationJob = patch.translationJob || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationProgress')) {
+        this.state.translationProgress = Number(patch.translationProgress || 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'failedBlocksCount')) {
+        this.state.failedBlocksCount = Number(patch.failedBlocksCount || 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'lastError')) {
+        this.state.lastError = patch.lastError || null;
+      }
+
+      if (patch.eventLogAppend && patch.eventLogAppend.item) {
+        const entry = patch.eventLogAppend.item;
         const exists = this.state.eventLog.items.some((item) => item && item.seq === entry.seq);
         if (!exists) {
           this.state.eventLog.items.push(entry);
@@ -140,11 +176,11 @@
           }
           this.state.oldestSeq = this.state.eventLog.items.length ? this.state.eventLog.items[0].seq : null;
         }
-        this.state.eventLog.seq = Math.max(this.state.eventLog.seq || 0, payload.eventLogAppend.seq || 0);
+        this.state.eventLog.seq = Math.max(this.state.eventLog.seq || 0, patch.eventLogAppend.seq || 0);
         this.scheduleEventRender();
       }
 
-      if (payload.eventLogReset) {
+      if (patch.eventLogReset) {
         this.state.eventLog = { seq: this.state.eventLog.seq || 0, items: [] };
         this.state.oldestSeq = null;
         this.scheduleEventRender();
@@ -166,6 +202,7 @@
       }
 
       this.renderStatus();
+      this.renderTranslationJob();
       this.renderBenchmarks();
       this.renderRateLimits();
     }
@@ -211,7 +248,11 @@
       }
       if (this.fields.eventClear) {
         this.fields.eventClear.addEventListener('click', () => {
-          this.ui.sendUiCommand('CLEAR_EVENT_LOG', {});
+          const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+          const command = UiProtocol && UiProtocol.Commands
+            ? UiProtocol.Commands.CLEAR_EVENT_LOG
+            : 'CLEAR_EVENT_LOG';
+          this.ui.sendUiCommand(command, {});
         });
       }
       if (this.fields.eventOlder) {
@@ -221,7 +262,11 @@
 
     loadOlderEvents() {
       const oldest = this.state.oldestSeq || (this.state.eventLog.items.length ? this.state.eventLog.items[0].seq : null);
-      const requestId = this.ui.sendUiCommand('EVENT_LOG_PAGE', { beforeSeq: oldest, limit: 200 }, {});
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.EVENT_LOG_PAGE
+        : 'EVENT_LOG_PAGE';
+      const requestId = this.ui.sendUiCommand(command, { beforeSeq: oldest, limit: 200 }, {});
       this.pendingLoadOlderRequestId = requestId;
     }
 
@@ -230,6 +275,7 @@
         this.fields.site.textContent = `Сайт: ${this.state.origin || '—'}`;
       }
       this.renderStatus();
+      this.renderTranslationJob();
       this.renderBenchmarks();
       this.renderRateLimits();
       this.renderRateLimits();
@@ -262,6 +308,28 @@
       }
       if (this.fields.decisionReason) {
         this.fields.decisionReason.textContent = md.decision && md.decision.reason ? md.decision.reason : '—';
+      }
+    }
+
+    renderTranslationJob() {
+      const job = this.state.translationJob || null;
+      if (this.fields.translationJobId) {
+        this.fields.translationJobId.textContent = job && job.id ? job.id : '—';
+      }
+      if (this.fields.translationJobStatus) {
+        this.fields.translationJobStatus.textContent = job && job.status ? job.status : '—';
+      }
+      if (this.fields.translationProgress) {
+        const progress = Number.isFinite(Number(this.state.translationProgress)) ? Number(this.state.translationProgress) : 0;
+        this.fields.translationProgress.textContent = `${Math.max(0, Math.min(100, Math.round(progress)))}%`;
+      }
+      if (this.fields.translationFailedCount) {
+        this.fields.translationFailedCount.textContent = String(this.state.failedBlocksCount || 0);
+      }
+      if (this.fields.translationLastError) {
+        this.fields.translationLastError.textContent = this.state.lastError && this.state.lastError.message
+          ? this.state.lastError.message
+          : '—';
       }
     }
 

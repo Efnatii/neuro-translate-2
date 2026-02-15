@@ -38,7 +38,8 @@
         'apiKey',
         'translationModelList',
         'modelSelection',
-        'modelSelectionPolicy'
+        'modelSelectionPolicy',
+        'translationPipelineEnabled'
       ]);
       const apiKey = typeof data.apiKey === 'string' ? data.apiKey : '';
       return {
@@ -46,7 +47,8 @@
         apiKeyLength: apiKey.length,
         translationModelList: Array.isArray(data.translationModelList) ? data.translationModelList : [],
         modelSelection: data.modelSelection || null,
-        modelSelectionPolicy: data.modelSelectionPolicy || null
+        modelSelectionPolicy: data.modelSelectionPolicy || null,
+        translationPipelineEnabled: Boolean(data.translationPipelineEnabled)
       };
     }
 

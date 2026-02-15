@@ -35,12 +35,15 @@
       this.eventLogStore = null;
       this.settingsStore = null;
       this.tabStateStore = null;
+      this.translationJobStore = null;
       this.inflightStore = null;
       this.loadScheduler = null;
       this.uiHub = null;
       this.eventFactory = null;
       this.ai = null;
       this.offscreenExecutor = null;
+      this.translationCall = null;
+      this.translationOrchestrator = null;
 
       this._inflightSweepTimer = null;
       this._lastLimitsBroadcastAt = 0;
@@ -48,6 +51,7 @@
       this._onStorageChanged = this._onStorageChanged.bind(this);
       this._onRuntimeMessage = this._onRuntimeMessage.bind(this);
       this._handleUiCommand = this._handleUiCommand.bind(this);
+      this._handleContentMessage = this._handleContentMessage.bind(this);
       this._runInflightSweepTick = this._runInflightSweepTick.bind(this);
     }
 
@@ -55,6 +59,9 @@
       this._initServices();
       await this.eventLogStore.load();
       await this._preloadState();
+      if (this.translationOrchestrator && typeof this.translationOrchestrator.restoreStateAfterRestart === 'function') {
+        await this.translationOrchestrator.restoreStateAfterRestart();
+      }
       this._startInflightSweeper();
       this._attachListeners();
       this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BG_START, 'Background started', { source: 'background' }));
@@ -69,10 +76,12 @@
           translationModelList: [],
           modelSelection: null,
           modelSelectionPolicy: null,
-          modelBenchmarkStatus: null
+          modelBenchmarkStatus: null,
+          translationPipelineEnabled: false
         }
       });
       this.tabStateStore = new NT.TabStateStore({ chromeApi: this.chromeApi });
+      this.translationJobStore = new NT.TranslationJobStore({ chromeApi: this.chromeApi });
       this.inflightStore = new NT.InflightRequestStore({ chromeApi: this.chromeApi });
 
       this.offscreenExecutor = new NT.OffscreenExecutor({
@@ -96,18 +105,45 @@
         offscreenExecutor: this.offscreenExecutor
       }).init();
 
+      this.translationCall = new NT.TranslationCall({
+        runLlmRequest: (args) => this._runLlmRequest(args)
+      });
+
+      this.translationOrchestrator = new NT.TranslationOrchestrator({
+        chromeApi: this.chromeApi,
+        settingsStore: this.settingsStore,
+        tabStateStore: this.tabStateStore,
+        jobStore: this.translationJobStore,
+        translationCall: this.translationCall,
+        eventFactory: this.eventFactory,
+        eventLogFn: (event) => this._logEvent(event),
+        onUiPatch: (patch) => {
+          if (this.uiHub) {
+            this.uiHub.broadcastPatch(patch);
+          }
+        }
+      });
+
       this.uiHub = new NT.UiPortHub({
         settingsStore: this.settingsStore,
         tabStateStore: this.tabStateStore,
+        translationJobStore: this.translationJobStore,
         eventLogStore: this.eventLogStore,
         aiModule: this.ai,
-        onCommand: ({ envelope }) => this._handleUiCommand(envelope),
+        onCommand: ({ envelope }) => {
+          this._handleUiCommand(envelope).catch((error) => {
+            this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'UI command failed', {
+              source: 'ui',
+              message: error && error.message ? error.message : 'unknown'
+            }));
+          });
+        },
         onEvent: (event) => this._logEvent(event)
       });
     }
 
     async _preloadState() {
-      const state = await this.settingsStore.get(['modelBenchmarkStatus', 'modelSelection', 'modelSelectionPolicy']);
+      const state = await this.settingsStore.get(['modelBenchmarkStatus', 'modelSelection', 'modelSelectionPolicy', 'translationPipelineEnabled']);
       const status = state.modelBenchmarkStatus || null;
       const now = Date.now();
       if (status && status.status === 'running' && typeof status.leaseUntilTs === 'number' && status.leaseUntilTs < now) {
@@ -127,6 +163,9 @@
       if (!state.modelSelection) {
         const modelSelection = this.ai.normalizeSelection(state.modelSelection, state.modelSelectionPolicy);
         await this.settingsStore.set({ modelSelection });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationPipelineEnabled')) {
+        await this.settingsStore.set({ translationPipelineEnabled: false });
       }
     }
 
@@ -358,38 +397,115 @@
       };
     }
 
-    _handleUiCommand(envelope) {
+    async _handleUiCommand(envelope) {
       if (!envelope || !envelope.payload) {
-        return;
+        return { ok: false, error: { code: 'INVALID_UI_COMMAND', message: 'Missing envelope payload' } };
       }
+      const UiProtocol = NT && NT.UiProtocol ? NT.UiProtocol : null;
       const payload = envelope.payload || {};
-      if (payload.name === 'LOG_EVENT') {
-        const event = payload.payload && typeof payload.payload === 'object' ? payload.payload : null;
+      const commandName = payload.name;
+      const commandPayload = payload.payload && typeof payload.payload === 'object' ? payload.payload : {};
+
+      if (commandName === 'LOG_EVENT') {
+        const event = commandPayload && typeof commandPayload === 'object' ? commandPayload : null;
         if (event) {
           this._logEvent({ ...event, meta: { ...(event.meta || {}), source: 'ui' } });
         }
-        return;
+        return { ok: true };
       }
 
-      if (payload.name === 'CLEAR_EVENT_LOG') {
-        this.eventLogStore.clear().then(() => this.uiHub.broadcastEventReset()).catch(() => {});
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.CLEAR_EVENT_LOG : 'CLEAR_EVENT_LOG')) {
+        await this.eventLogStore.clear();
+        this.uiHub.broadcastEventReset();
         this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Event log cleared', { source: 'ui' }));
-        return;
+        return { ok: true };
       }
 
-      if (payload.name !== 'BENCHMARK_SELECTED_MODELS') {
-        return;
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BENCHMARK_SELECTED_MODELS : 'BENCHMARK_SELECTED_MODELS')) {
+        this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BENCH_START, 'Benchmark request received', { source: 'ui' }));
+        try {
+          const modelSpecs = await this._loadSelectedModels();
+          await this.ai.benchmarkSelected(modelSpecs, { force: Boolean(commandPayload.force) });
+          return { ok: true };
+        } catch (_) {
+          await this.settingsStore.set({
+            modelBenchmarkStatus: { status: 'failed', errorCode: 'BENCHMARK_START_FAILED', updatedAt: Date.now() }
+          });
+          return { ok: false, error: { code: 'BENCHMARK_START_FAILED', message: 'Benchmark start failed' } };
+        }
       }
 
-      this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BENCH_START, 'Benchmark request received', { source: 'ui' }));
-      this._loadSelectedModels()
-        .then((modelSpecs) => this.ai.benchmarkSelected(modelSpecs, { force: Boolean(payload.payload && payload.payload.force) }))
-        .catch(() => this.settingsStore.set({
-          modelBenchmarkStatus: { status: 'failed', errorCode: 'BENCHMARK_START_FAILED', updatedAt: Date.now() }
-        }));
+      if (!this.translationOrchestrator) {
+        return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Translation orchestrator is unavailable' } };
+      }
+
+      const tabId = this._resolveCommandTabId(envelope, commandPayload);
+      const commands = UiProtocol && UiProtocol.Commands ? UiProtocol.Commands : {};
+      if (commandName === commands.START_TRANSLATION || commandName === 'START_TRANSLATION') {
+        const result = await this.translationOrchestrator.startJob({
+          tabId,
+          url: commandPayload.url || '',
+          targetLang: commandPayload.targetLang || 'ru',
+          force: Boolean(commandPayload.force)
+        });
+        if (!result.ok) {
+          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.TRANSLATION_FAIL, 'Start translation rejected', {
+            source: 'ui',
+            tabId,
+            reason: result.error && result.error.code ? result.error.code : 'unknown'
+          }));
+        }
+        return result;
+      }
+
+      if (commandName === commands.CANCEL_TRANSLATION || commandName === 'CANCEL_TRANSLATION') {
+        return this.translationOrchestrator.cancelJob({ tabId, reason: 'USER_CANCELLED' });
+      }
+
+      if (commandName === commands.SET_TRANSLATION_VISIBILITY || commandName === 'SET_TRANSLATION_VISIBILITY') {
+        return this.translationOrchestrator.setVisibility({ tabId, visible: Boolean(commandPayload.visible) });
+      }
+
+      if (commandName === commands.RETRY_FAILED_BLOCKS || commandName === 'RETRY_FAILED_BLOCKS') {
+        return this.translationOrchestrator.retryFailed({ tabId, jobId: commandPayload.jobId || null });
+      }
+
+      this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Unknown UI command', {
+        source: 'ui',
+        stage: commandName || 'unknown'
+      }));
+      return { ok: false, error: { code: 'UNKNOWN_UI_COMMAND', message: String(commandName || 'unknown') } };
+    }
+
+    _resolveCommandTabId(envelope, commandPayload) {
+      if (commandPayload && Number.isFinite(Number(commandPayload.tabId))) {
+        return Number(commandPayload.tabId);
+      }
+      if (envelope && envelope.meta && Number.isFinite(Number(envelope.meta.tabId))) {
+        return Number(envelope.meta.tabId);
+      }
+      return null;
+    }
+
+    async _handleContentMessage(message, sender) {
+      if (!this.translationOrchestrator) {
+        return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Translation orchestrator unavailable' } };
+      }
+      return this.translationOrchestrator.handleContentMessage({ message, sender });
     }
 
     _onRuntimeMessage(message, sender, sendResponse) {
+      const TranslationProtocol = NT && NT.TranslationProtocol ? NT.TranslationProtocol : null;
+      if (TranslationProtocol && message && typeof message.type === 'string' && this.translationOrchestrator && this.translationOrchestrator.isContentMessageType(message.type)) {
+        this._handleContentMessage(message, sender)
+          .then((result) => this._respondWithTimeout(sendResponse, result || { ok: true }))
+          .catch((error) => this._respondWithTimeout(sendResponse, {
+            ok: false,
+            error: { code: 'CONTENT_MESSAGE_FAILED', message: error && error.message ? error.message : 'unknown' }
+          }));
+        return true;
+      }
+
       const MessageEnvelope = NT && NT.MessageEnvelope ? NT.MessageEnvelope : null;
       const UiProtocol = NT && NT.UiProtocol ? NT.UiProtocol : null;
       if (!MessageEnvelope || !UiProtocol || !MessageEnvelope.isEnvelope(message)) {
@@ -397,11 +513,13 @@
       }
 
       if (message.type === UiProtocol.UI_COMMAND) {
-        this._handleUiCommand(message);
-        if (message.payload && (message.payload.name === 'LOG_EVENT' || message.payload.name === 'CLEAR_EVENT_LOG')) {
-          this._respondWithTimeout(sendResponse, { ok: true });
-          return true;
-        }
+        this._handleUiCommand(message)
+          .then((result) => this._respondWithTimeout(sendResponse, result || { ok: true }))
+          .catch((error) => this._respondWithTimeout(sendResponse, {
+            ok: false,
+            error: { code: 'UI_COMMAND_FAILED', message: error && error.message ? error.message : 'unknown' }
+          }));
+        return true;
       }
       return false;
     }
@@ -410,7 +528,7 @@
       if (areaName !== 'local') {
         return;
       }
-      const watchedKeys = ['translationStatusByTab', 'translationVisibilityByTab', 'modelBenchmarkStatus', 'modelBenchmarks'];
+      const watchedKeys = ['translationStatusByTab', 'translationVisibilityByTab', 'modelBenchmarkStatus', 'modelBenchmarks', 'translationPipelineEnabled'];
       const changedKeys = Object.keys(changes).filter((key) => watchedKeys.includes(key));
       if (!changedKeys.length) {
         return;

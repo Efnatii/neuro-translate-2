@@ -55,6 +55,14 @@ function checkRequiredSymbols() {
     {
       file: path.join(EXTENSION_DIR, 'ai', 'model-rate-limit-store.js'),
       symbols: ['class ModelRateLimitStore', 'upsertFromHeaders(', 'computeAvailability(']
+    },
+    {
+      file: path.join(EXTENSION_DIR, 'ai', 'model-chooser.js'),
+      symbols: ['class ModelChooser', 'NT.ModelChooser = ModelChooser']
+    },
+    {
+      file: path.join(EXTENSION_DIR, 'bg', 'translation-orchestrator.js'),
+      symbols: ['class TranslationOrchestrator', 'NT.TranslationOrchestrator = TranslationOrchestrator']
     }
   ];
 
@@ -77,10 +85,15 @@ function checkBgImports() {
   const requiredSnippets = [
     "'/core/nt-namespace.js'",
     "'/core/message-envelope.js'",
+    "'/core/translation-protocol.js'",
     "'/ai/llm-engine.js'",
     "'/ai/llm-client.js'",
+    "'/ai/model-chooser.js'",
+    "'/ai/translation-call.js'",
     "'/ai/model-selection-policy.js'",
-    "'/ai/ai-load-scheduler.js'"
+    "'/ai/ai-load-scheduler.js'",
+    "'/bg/translation-orchestrator.js'",
+    "'/bg/translation-job-store.js'"
   ];
   const forbiddenSnippets = [
     "'/core/rate-limiter.js'",

@@ -21,10 +21,11 @@
  */
 (function initUiPortHub(global) {
   class UiPortHub {
-    constructor({ settingsStore, tabStateStore, eventLogStore, aiModule, onCommand, onEvent } = {}) {
+    constructor({ settingsStore, tabStateStore, translationJobStore, eventLogStore, aiModule, onCommand, onEvent } = {}) {
       this.subscribers = new Set();
       this.settingsStore = settingsStore || null;
       this.tabStateStore = tabStateStore || null;
+      this.translationJobStore = translationJobStore || null;
       this.eventLogStore = eventLogStore || null;
       this.aiModule = aiModule || null;
       this.onCommand = typeof onCommand === 'function' ? onCommand : null;
@@ -101,7 +102,11 @@
           modelBenchmarkStatus: null,
           modelBenchmarks: {},
           modelLimitsBySpec: {},
-          modelRegistry: { entries: [], byKey: {} }
+          modelRegistry: { entries: [], byKey: {} },
+          translationJob: null,
+          translationProgress: 0,
+          failedBlocksCount: 0,
+          lastError: null
         };
       }
       const helloPayload = envelope && envelope.payload && typeof envelope.payload === 'object' ? envelope.payload : {};
@@ -118,18 +123,103 @@
         ? this.aiModule.getRegistry()
         : { entries: [], byKey: {} };
       const tabId = this.resolveTabId(envelope && envelope.meta ? envelope.meta : null, visibilityData);
+      const translationState = await this.buildTranslationStateSnapshot(tabId);
+      const effectiveTabId = tabId === null || tabId === undefined ? translationState.tabId : tabId;
 
       return {
         settings,
-        tabId,
+        tabId: effectiveTabId === null || effectiveTabId === undefined ? null : effectiveTabId,
         translationStatusByTab,
         translationVisibilityByTab: visibilityData.translationVisibilityByTab || {},
         modelBenchmarkStatus: benchmarkData.modelBenchmarkStatus || null,
         modelBenchmarks: benchmarkData.modelBenchmarks || {},
         modelLimitsBySpec,
         modelRegistry,
-        eventLog
+        eventLog,
+        translationJob: translationState.translationJob,
+        translationProgress: translationState.translationProgress,
+        failedBlocksCount: translationState.failedBlocksCount,
+        lastError: translationState.lastError
       };
+    }
+
+    async buildTranslationStateSnapshot(tabId) {
+      if (!this.translationJobStore) {
+        return {
+          tabId: null,
+          translationJob: null,
+          translationProgress: 0,
+          failedBlocksCount: 0,
+          lastError: null
+        };
+      }
+      const resolvedTabId = (tabId === null || tabId === undefined)
+        ? await this._guessTabIdFromActiveJobs()
+        : tabId;
+      if (resolvedTabId === null || resolvedTabId === undefined) {
+        return {
+          tabId: null,
+          translationJob: null,
+          translationProgress: 0,
+          failedBlocksCount: 0,
+          lastError: null
+        };
+      }
+      const active = await this.translationJobStore.getActiveJob(resolvedTabId);
+      const fallback = active || await this._getLastJobForTab(resolvedTabId);
+      if (!fallback) {
+        return {
+          tabId: resolvedTabId,
+          translationJob: null,
+          translationProgress: 0,
+          failedBlocksCount: 0,
+          lastError: null
+        };
+      }
+      const total = Number.isFinite(Number(fallback.totalBlocks)) ? Number(fallback.totalBlocks) : 0;
+      const completed = Number.isFinite(Number(fallback.completedBlocks)) ? Number(fallback.completedBlocks) : 0;
+      const failedBlocksCount = Array.isArray(fallback.failedBlockIds) ? fallback.failedBlockIds.length : 0;
+      return {
+        tabId: resolvedTabId,
+        translationJob: {
+          id: fallback.id,
+          tabId: fallback.tabId,
+          status: fallback.status || 'idle',
+          message: fallback.message || '',
+          totalBlocks: total,
+          completedBlocks: completed,
+          failedBlocksCount,
+          currentBatchId: fallback.currentBatchId || null,
+          updatedAt: fallback.updatedAt || null
+        },
+        translationProgress: total > 0
+          ? Math.max(0, Math.min(100, Math.round((completed / total) * 100)))
+          : (fallback.status === 'done' ? 100 : 0),
+        failedBlocksCount,
+        lastError: fallback.lastError || null
+      };
+    }
+
+    async _guessTabIdFromActiveJobs() {
+      if (!this.translationJobStore || typeof this.translationJobStore.listActiveJobs !== 'function') {
+        return null;
+      }
+      const activeJobs = await this.translationJobStore.listActiveJobs();
+      if (!Array.isArray(activeJobs) || !activeJobs.length) {
+        return null;
+      }
+      return Number.isFinite(Number(activeJobs[0].tabId)) ? Number(activeJobs[0].tabId) : null;
+    }
+
+    async _getLastJobForTab(tabId) {
+      if (!this.translationJobStore || tabId === null || tabId === undefined) {
+        return null;
+      }
+      const lastJobId = await this.translationJobStore.getLastJobId(tabId);
+      if (!lastJobId) {
+        return null;
+      }
+      return this.translationJobStore.getJob(lastJobId);
     }
 
     async buildModelLimitsSnapshot() {

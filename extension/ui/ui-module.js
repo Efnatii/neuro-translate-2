@@ -44,7 +44,8 @@
           translationModelList: [],
           modelSelection: { speed: true, preference: null },
           modelSelectionPolicy: null,
-          translationVisibilityByTab: {}
+          translationVisibilityByTab: {},
+          translationPipelineEnabled: false
         }
       });
 
@@ -200,28 +201,14 @@
       if (tabId === null || tabId === undefined) {
         return;
       }
-
-      if (this.chromeApi && this.chromeApi.tabs && typeof this.chromeApi.tabs.sendMessage === 'function') {
-        try {
-          await new Promise((resolve, reject) => {
-            this.chromeApi.tabs.sendMessage(
-              tabId,
-              { type: 'SET_TRANSLATION_VISIBILITY', visible: Boolean(visible) },
-              () => {
-                const error = this.chromeApi.runtime && this.chromeApi.runtime.lastError;
-                if (error) {
-                  reject(error);
-                  return;
-                }
-                resolve();
-              }
-            );
-          });
-        } catch (error) {
-          // ignore tab message failures
-        }
-      }
-
+      const UiProtocol = NT.UiProtocol || null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.SET_TRANSLATION_VISIBILITY
+        : 'SET_TRANSLATION_VISIBILITY';
+      this.sendUiCommand(command, {
+        tabId,
+        visible: Boolean(visible)
+      });
       this.queueSettingsPatch({ translationVisibilityByTab: { [tabId]: Boolean(visible) } });
     }
 

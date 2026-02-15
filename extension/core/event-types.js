@@ -39,6 +39,13 @@
     BENCH_DONE: 'bench.done',
     BENCH_SKIP: 'bench.skip',
 
+    TRANSLATION_START: 'translation.start',
+    TRANSLATION_BATCH_SENT: 'translation.batch.sent',
+    TRANSLATION_BATCH_APPLIED: 'translation.batch.applied',
+    TRANSLATION_CANCEL: 'translation.cancel',
+    TRANSLATION_FAIL: 'translation.fail',
+    TRANSLATION_RESUME: 'translation.resume',
+
     CS_HELLO: 'cs.hello',
     CS_STATUS: 'cs.status',
     CS_APPLY: 'cs.apply',

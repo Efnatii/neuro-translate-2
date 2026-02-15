@@ -6,6 +6,7 @@
   "permissions": [
     "activeTab",
     "offscreen",
+    "scripting",
     "storage",
     "tabs"
   ],
