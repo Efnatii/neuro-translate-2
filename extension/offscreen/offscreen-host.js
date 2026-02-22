@@ -49,6 +49,8 @@
         }
         case 'OFFSCREEN_EXECUTE':
           return this._executeOnce(msg.requestId, msg.payload || {});
+        case 'OFFSCREEN_ABORT':
+          return this._abortInFlight(msg.requestId, msg.reason);
         case 'OFFSCREEN_PURGE':
           await this._purgeExpired();
           return { ok: true };
@@ -72,23 +74,47 @@
         return cached.result;
       }
       if (this.inFlight.has(requestId)) {
-        return this.inFlight.get(requestId);
+        const current = this.inFlight.get(requestId);
+        return current && current.promise ? current.promise : current;
       }
-      const promise = this._doFetchAndCache(requestId, payload)
+      const controller = new AbortController();
+      const promise = this._doFetchAndCache(requestId, payload, controller)
         .finally(() => {
           this.inFlight.delete(requestId);
         });
-      this.inFlight.set(requestId, promise);
+      this.inFlight.set(requestId, {
+        promise,
+        controller,
+        startedAt: Date.now()
+      });
       return promise;
     }
 
-    async _doFetchAndCache(requestId, payload) {
+    async _abortInFlight(requestId, reason) {
+      if (!requestId) {
+        return { ok: true, aborted: false };
+      }
+      const current = this.inFlight.get(requestId);
+      if (!current || !current.controller || !current.controller.signal || current.controller.signal.aborted) {
+        return { ok: true, aborted: false };
+      }
+      try {
+        current.controller.abort(reason || 'ABORTED_BY_CALLER');
+      } catch (_) {
+        return { ok: true, aborted: false };
+      }
+      return { ok: true, aborted: true };
+    }
+
+    async _doFetchAndCache(requestId, payload, requestController) {
       const startedAt = Date.now();
       const timeoutMsRaw = Number(payload && payload.timeoutMs);
       const timeoutMs = Number.isFinite(timeoutMsRaw)
         ? Math.max(3000, Math.min(timeoutMsRaw, 180000))
         : 90000;
-      const controller = new AbortController();
+      const controller = requestController && requestController.signal
+        ? requestController
+        : new AbortController();
       const timeoutId = global.setTimeout(() => controller.abort('timeout'), timeoutMs);
 
       try {
@@ -139,6 +165,11 @@
         await this._putCached(requestId, result);
         return result;
       } catch (error) {
+        const aborted = Boolean(controller && controller.signal && controller.signal.aborted);
+        const reason = aborted ? controller.signal.reason : null;
+        const code = aborted
+          ? (reason === 'timeout' ? 'TIMEOUT' : 'ABORTED')
+          : 'FETCH_FAILED';
         const result = {
           ok: false,
           status: 0,
@@ -146,15 +177,17 @@
           json: null,
           text: null,
           error: {
-            code: 'FETCH_FAILED',
-            message: String(error && error.message ? error.message : error)
+            code,
+            message: String(error && error.message ? error.message : (aborted ? 'Request aborted' : error))
           },
           meta: {
             startedAt,
             elapsedMs: Date.now() - startedAt
           }
         };
-        await this._putCached(requestId, result);
+        if (code !== 'ABORTED') {
+          await this._putCached(requestId, result);
+        }
         return result;
       } finally {
         global.clearTimeout(timeoutId);

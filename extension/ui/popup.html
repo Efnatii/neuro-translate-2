@@ -8,75 +8,353 @@
   <body>
     <main class="popup">
       <header class="popup__header">
-        <div>
+        <div class="popup__brand">
           <h1 class="popup__title">Neuro Translate</h1>
-          <p class="popup__subtitle">by Efnatii</p>
+          <p class="popup__subtitle">ИИ-агент перевода страницы</p>
         </div>
-        <button class="popup__debug" type="button" data-action="open-debug">Отладка ↗</button>
+        <button
+          class="popup__debug"
+          type="button"
+          data-action="open-debug"
+          title="Открыть расширенную страницу отладки"
+        >
+          Отладка ↗
+        </button>
       </header>
 
-      <section class="popup__section">
-        <details class="popup__details" data-section="api-key">
-          <summary>OpenAI API Key</summary>
-          <div class="popup__field">
-            <input class="popup__input" type="password" placeholder="sk-..." autocomplete="off" data-field="api-key">
-            <button class="popup__button" type="button" data-action="toggle-api">Показать</button>
-          </div>
-        </details>
-      </section>
-
-      <section class="popup__section">
-        <details class="popup__details popup__details--models" data-section="models-details" open>
-          <summary>Выбор моделей</summary>
-          <div class="popup__models" data-section="models"></div>
-        </details>
-      </section>
-
-      <section class="popup__section">
-        <label class="popup__label popup__checkbox-row">
-          <input type="checkbox" data-field="selection-speed">
-          <span>Максимальная скорость</span>
-        </label>
-        <label class="popup__label" for="selection-preference">Приоритет</label>
-        <select id="selection-preference" class="popup__select" data-field="selection-preference">
-          <option value="none">Без приоритета</option>
-          <option value="smartest">Самые умные</option>
-          <option value="cheapest">Самые дешёвые</option>
-        </select>
-      </section>
-
-      <section class="popup__section">
-        <div class="popup__status">
+      <section class="popup__top-strip" aria-label="Статус и быстрые действия">
+        <div class="popup__status-card">
           <div class="popup__status-header">
-            <span class="popup__label">Статус</span>
+            <span class="popup__label popup__label--strong">Статус текущей вкладки</span>
             <span class="popup__status-text" data-field="status-text">—</span>
           </div>
-          <progress class="popup__progress" value="0" max="100" data-field="status-progress"></progress>
+          <div class="popup__agent-status" data-field="agent-status">Агент: —</div>
+          <div class="popup__status-chips" data-section="status-chips">
+            <span class="popup__status-chip" data-field="status-chip-pipeline" title="Текущее состояние пайплайна перевода">
+              Пайплайн: —
+            </span>
+            <span class="popup__status-chip" data-field="status-chip-model" title="Эффективная политика выбора модели">
+              Модели: —
+            </span>
+            <span class="popup__status-chip" data-field="status-chip-cache" title="Состояние кэша страниц и API">
+              Кэш: —
+            </span>
+          </div>
+          <label class="popup__label popup__label--muted" for="status-progress">Прогресс шага</label>
+          <progress id="status-progress" class="popup__progress" value="0" max="100" data-field="status-progress"></progress>
+        </div>
+
+        <div class="popup__action-grid">
+          <button class="popup__icon-button popup__action-button" type="button" data-action="start-translation" title="Запустить перевод" aria-label="Запустить перевод">
+            <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 5L19 12L7 19Z"></path>
+            </svg>
+            <span class="popup__action-label">Перевести</span>
+          </button>
+          <button class="popup__icon-button popup__action-button" type="button" data-action="clear-translation-data" title="Отменить перевод и стереть данные страницы" aria-label="Отменить и стереть">
+            <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12"></rect>
+              <path d="M4 7H20"></path>
+              <path d="M9 7V5H15V7"></path>
+              <path d="M7 7L8 20H16L17 7"></path>
+            </svg>
+            <span class="popup__action-label">Отменить и стереть</span>
+          </button>
+          <button class="popup__icon-button popup__action-button popup__action-button--wide" type="button" data-action="toggle-visibility" aria-label="Показать перевод" title="Переключить видимость перевода на странице">
+            <svg class="popup__icon popup__icon--visible" viewBox="0 0 24 24" aria-hidden="true" data-field="visibility-on">
+              <path d="M2 12C4.8 7.2 8 5 12 5C16 5 19.2 7.2 22 12C19.2 16.8 16 19 12 19C8 19 4.8 16.8 2 12Z"></path>
+              <circle cx="12" cy="12" r="3.2"></circle>
+            </svg>
+            <svg class="popup__icon popup__icon--hidden" viewBox="0 0 24 24" aria-hidden="true" data-field="visibility-off">
+              <path d="M2 12C4.8 7.2 8 5 12 5C16 5 19.2 7.2 22 12C19.2 16.8 16 19 12 19C8 19 4.8 16.8 2 12Z"></path>
+              <line x1="5" y1="19" x2="19" y2="5"></line>
+            </svg>
+            <span class="popup__action-label" data-field="visibility-label">Показать оригинал</span>
+          </button>
         </div>
       </section>
 
-      <footer class="popup__footer">
-        <button class="popup__icon-button" type="button" data-action="start-translation" title="Перевести" aria-label="Перевести">
-          <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M7 5L19 12L7 19Z"></path>
-          </svg>
+      <nav class="popup__tabs" role="tablist" aria-label="Разделы">
+        <button
+          class="popup__tab is-active"
+          type="button"
+          role="tab"
+          id="popup-tab-button-control"
+          data-action="switch-tab"
+          data-tab="control"
+          aria-controls="popup-tab-control"
+          aria-selected="true"
+          tabindex="0"
+          title="Запуск перевода, категории и расширенный runtime-статус"
+        >
+          Управление
         </button>
-        <button class="popup__icon-button" type="button" data-action="cancel-translation" title="Отменить" aria-label="Отменить">
-          <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="6" y="6" width="12" height="12"></rect>
-          </svg>
+        <button
+          class="popup__tab"
+          type="button"
+          role="tab"
+          id="popup-tab-button-agent"
+          data-action="switch-tab"
+          data-tab="agent"
+          aria-controls="popup-tab-agent"
+          aria-selected="false"
+          tabindex="-1"
+          title="Профиль, модельная политика и настройки размышления агента"
+        >
+          Агент
         </button>
-        <button class="popup__icon-button" type="button" data-action="toggle-visibility" aria-label="Показать перевод">
-          <svg class="popup__icon popup__icon--visible" viewBox="0 0 24 24" aria-hidden="true" data-field="visibility-on">
-            <path d="M2 12C4.8 7.2 8 5 12 5C16 5 19.2 7.2 22 12C19.2 16.8 16 19 12 19C8 19 4.8 16.8 2 12Z"></path>
-            <circle cx="12" cy="12" r="3.2"></circle>
-          </svg>
-          <svg class="popup__icon popup__icon--hidden" viewBox="0 0 24 24" aria-hidden="true" data-field="visibility-off">
-            <path d="M2 12C4.8 7.2 8 5 12 5C16 5 19.2 7.2 22 12C19.2 16.8 16 19 12 19C8 19 4.8 16.8 2 12Z"></path>
-            <line x1="5" y1="19" x2="19" y2="5"></line>
-          </svg>
+        <button
+          class="popup__tab"
+          type="button"
+          role="tab"
+          id="popup-tab-button-models"
+          data-action="switch-tab"
+          data-tab="models"
+          aria-controls="popup-tab-models"
+          aria-selected="false"
+          tabindex="-1"
+          title="API-ключ, разрешённые модели, инструменты и кэш"
+        >
+          Модели и кэш
         </button>
-      </footer>
+      </nav>
+
+      <section class="popup__tab-panels">
+        <section
+          class="popup__tab-panel is-active"
+          role="tabpanel"
+          id="popup-tab-control"
+          data-tab-panel="control"
+          aria-labelledby="popup-tab-button-control"
+        >
+          <div class="popup__context-note" title="Категории предлагаются после первичного планирующего анализа агента">
+            Выбор категорий появляется после первичного анализа агента.
+          </div>
+
+          <div class="popup__runtime-categories" data-section="category-chooser" hidden>
+            <div class="popup__label popup__runtime-categories-hint" data-field="category-chooser-hint">—</div>
+            <div class="popup__categories popup__categories--runtime" data-section="category-chooser-list"></div>
+          </div>
+
+          <details class="popup__details popup__details--runtime-status" data-section="runtime-status-extended" open>
+            <summary title="Подробные live-метрики выполнения переводчика-агента">Расширенный статус</summary>
+            <div class="popup__status-metrics" data-section="status-metrics"></div>
+            <div class="popup__status-trace" data-field="status-trace">—</div>
+          </details>
+        </section>
+
+        <section
+          class="popup__tab-panel"
+          role="tabpanel"
+          id="popup-tab-agent"
+          data-tab-panel="agent"
+          aria-labelledby="popup-tab-button-agent"
+          hidden
+        >
+          <div class="popup__mini-statuses" data-section="agent-mini-statuses"></div>
+
+          <details class="popup__details" data-section="agent-model-policy" open>
+            <summary title="Эти параметры задают базовый приоритет выбора модели для переводчика-агента">
+              Профиль и политика выбора моделей
+            </summary>
+
+            <div class="popup__field-group">
+              <label class="popup__label" for="agent-profile">Профиль агента</label>
+              <select id="agent-profile" class="popup__select" data-field="agent-profile" title="Профиль влияет на стиль, батчинг и стратегию перевода">
+                <option value="auto">Авто (адаптивный)</option>
+                <option value="balanced">Сбалансированный</option>
+                <option value="literal">Ближе к дословному</option>
+                <option value="readable">Более читабельный</option>
+                <option value="technical">Технический</option>
+              </select>
+            </div>
+
+            <div class="popup__tool-grid popup__tool-grid--compact">
+              <div class="popup__tool-row">
+                <label for="agent-model-policy-mode" title="Авто: агент может усиливать/ускорять выбор модели по контексту; Фиксировано: используйте заданные параметры как базу">
+                  Режим приоритета
+                </label>
+                <select id="agent-model-policy-mode" data-field="agent-model-policy-mode" title="Режим применения политики выбора модели">
+                  <option value="auto">АВТО</option>
+                  <option value="fixed">ФИКСИРОВАНО</option>
+                </select>
+              </div>
+              <label class="popup__label popup__checkbox-row" title="Если включено, приоритетно выбираются более быстрые модели в рамках доступного списка">
+                <input type="checkbox" data-field="agent-model-speed">
+                <span>Приоритет скорости</span>
+              </label>
+              <div class="popup__tool-row">
+                <label for="agent-model-preference" title="Дополнительный приоритет к качеству или стоимости модели">
+                  Доп. приоритет
+                </label>
+                <select id="agent-model-preference" data-field="agent-model-preference" title="Базовый предпочтительный уклон выбора модели">
+                  <option value="none">Без приоритета</option>
+                  <option value="smartest">Наиболее умные</option>
+                  <option value="cheapest">Наиболее дешёвые</option>
+                </select>
+              </div>
+              <label class="popup__label popup__checkbox-row" title="Разрешает агенту временно форсировать fast/strong маршрут для отдельных батчей">
+                <input type="checkbox" data-field="agent-model-route-override">
+                <span>Разрешить маршрутизацию батчей</span>
+              </label>
+            </div>
+          </details>
+
+          <details class="popup__details" data-section="agent-profile-preview" open>
+            <summary title="Показывает итоговые параметры после применения профиля и ваших оверрайдов">
+              Влияние профиля и оверрайдов
+            </summary>
+            <div class="popup__impact" data-section="agent-profile-impact"></div>
+          </details>
+
+          <details class="popup__details" data-section="agent-expert-settings">
+            <summary title="Расширенная настройка планирования, аудита и автосжатия контекста">
+              Экспертные настройки
+            </summary>
+
+            <details class="popup__details popup__details--nested" data-section="agent-runtime-settings" open>
+              <summary title="Базовые переключатели запуска пайплайна и преднастройка категорий">Режим запуска и категории</summary>
+              <label class="popup__label popup__checkbox-row" title="Глобальный переключатель пайплайна перевода. При выключении запуск блокируется">
+                <input type="checkbox" data-field="pipeline-enabled">
+                <span>Пайплайн перевода включён</span>
+              </label>
+              <div class="popup__tool-row">
+                <label for="agent-category-mode" title="Базовая стратегия категорий для первого планирования агента">Стратегия категорий</label>
+                <select id="agent-category-mode" data-field="agent-category-mode" title="Определяет, какие категории агент выбирает по умолчанию">
+                  <option value="all">Все категории</option>
+                  <option value="content">Только контент</option>
+                  <option value="interface">Только интерфейс</option>
+                  <option value="meta">Только мета</option>
+                  <option value="custom">Кастомный список</option>
+                </select>
+              </div>
+              <div class="popup__label popup__label--muted" data-field="agent-category-mode-hint">—</div>
+              <div class="popup__categories popup__categories--settings" data-section="agent-category-defaults"></div>
+            </details>
+
+            <details class="popup__details popup__details--nested" data-section="agent-thinking" open>
+              <summary title="Тонкая настройка планирования и батчинга">Размышление и планирование</summary>
+              <div class="popup__tool-grid popup__tool-grid--compact">
+                <div class="popup__tool-row">
+                  <label for="agent-style-override" title="Оверрайд стилистики перевода поверх профиля">Стиль</label>
+                  <select id="agent-style-override" data-field="agent-style-override" title="Если AUTO, стиль берётся из профиля">
+                    <option value="auto">АВТО</option>
+                    <option value="balanced">СБАЛАНСИР.</option>
+                    <option value="literal">ДОСЛОВНЫЙ</option>
+                    <option value="readable">ЧИТАЕМЫЙ</option>
+                    <option value="technical">ТЕХНИЧЕСКИЙ</option>
+                  </select>
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-batch-size" title="Размер батча для перевода. Пусто = автоматический выбор">Размер батча</label>
+                  <input id="agent-batch-size" class="popup__input popup__input--narrow" type="number" min="1" placeholder="авто" data-field="agent-batch-size" title="Сколько блоков переводить в одном запросе">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-proofread-passes" title="Количество проходов вычитки после основного перевода">Проходы вычитки</label>
+                  <input id="agent-proofread-passes" class="popup__input popup__input--narrow" type="number" min="0" placeholder="авто" data-field="agent-proofread-passes" title="0 = без вычитки, пусто = по профилю">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-parallelism" title="Уровень распараллеливания обработки блоков">Параллелизм</label>
+                  <select id="agent-parallelism" data-field="agent-parallelism" title="AUTO подбирает уровень по сложности страницы">
+                    <option value="auto">АВТО</option>
+                    <option value="low">НИЗКИЙ</option>
+                    <option value="mixed">СМЕШАННЫЙ</option>
+                    <option value="high">ВЫСОКИЙ</option>
+                  </select>
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-planner-temperature" title="Температура только для шага планирования агента">Температура планировщика</label>
+                  <input id="agent-planner-temperature" class="popup__input popup__input--narrow" type="number" min="0" step="0.05" data-field="agent-planner-temperature" title="Ниже = стабильнее, выше = разнообразнее">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-planner-tokens" title="Максимум токенов, доступных шагу планирования">Лимит токенов планировщика</label>
+                  <input id="agent-planner-tokens" class="popup__input popup__input--narrow" type="number" min="1" step="50" data-field="agent-planner-tokens" title="Ограничение длины ответа планировщика">
+                </div>
+              </div>
+            </details>
+
+            <details class="popup__details popup__details--nested" data-section="agent-optimization" open>
+              <summary title="Интервалы аудита и параметры автосжатия контекста">Оптимизация и автосжатие</summary>
+              <div class="popup__tool-grid popup__tool-grid--compact">
+                <div class="popup__tool-row">
+                  <label for="agent-audit-interval" title="Регулярный интервал аудита выполнения плана (мс)">Интервал аудита (мс)</label>
+                  <input id="agent-audit-interval" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-audit-interval" title="Частота обычной проверки прогресса">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-mandatory-audit-interval" title="Минимальная частота обязательного аудита (мс)">Обязательный аудит (мс)</label>
+                  <input id="agent-mandatory-audit-interval" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-mandatory-audit-interval" title="Минимальный интервал принудительного аудита">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-compression-threshold" title="Порог для запуска автосжатия контекста">Порог сжатия</label>
+                  <input id="agent-compression-threshold" class="popup__input popup__input--narrow" type="number" min="0" step="1" data-field="agent-compression-threshold" title="Чем ниже значение, тем чаще будет автосжатие">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-context-limit" title="Лимит условного размера контекста перед сжатием">Лимит контекста (симв.)</label>
+                  <input id="agent-context-limit" class="popup__input popup__input--narrow" type="number" min="1" step="500" data-field="agent-context-limit" title="Если контекст растёт выше лимита, запускается сжатие">
+                </div>
+                <div class="popup__tool-row">
+                  <label for="agent-compression-cooldown" title="Минимальная пауза между операциями сжатия (мс)">Пауза между сжатиями (мс)</label>
+                  <input id="agent-compression-cooldown" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-compression-cooldown" title="Защита от слишком частого сжатия">
+                </div>
+              </div>
+            </details>
+          </details>
+        </section>
+
+        <section
+          class="popup__tab-panel"
+          role="tabpanel"
+          id="popup-tab-models"
+          data-tab-panel="models"
+          aria-labelledby="popup-tab-button-models"
+          hidden
+        >
+          <details class="popup__details popup__details--inline" data-section="api-key" open>
+            <summary title="Ключ нужен для вызовов OpenAI API">OpenAI API-ключ</summary>
+            <div class="popup__field">
+              <input
+                class="popup__input"
+                type="password"
+                placeholder="sk-..."
+                autocomplete="off"
+                data-field="api-key"
+                title="Ваш OpenAI API-ключ сохраняется локально в настройках расширения"
+              >
+              <button class="popup__button" type="button" data-action="toggle-api" title="Показать или скрыть API-ключ">
+                Показать
+              </button>
+            </div>
+          </details>
+
+          <details class="popup__details popup__details--models" data-section="models-details" open>
+            <summary title="Выберите список моделей, которые агенту разрешено использовать">
+              Разрешённые модели
+            </summary>
+            <p class="popup__block-hint">
+              Агент использует только модели из списка ниже. В каждой строке показана
+              суммарная стоимость за 1M токенов.
+            </p>
+            <div class="popup__models" data-section="models"></div>
+          </details>
+
+          <details class="popup__details" data-section="agent-tools" open>
+            <summary title="Режимы отдельных инструментов агента">Инструменты агента</summary>
+            <div class="popup__tool-grid" data-section="agent-tools-grid"></div>
+          </details>
+
+          <details class="popup__details" data-section="agent-cache" open>
+            <summary title="Настройки кэширования перевода и API">Кэширование</summary>
+            <label class="popup__label popup__checkbox-row" title="При повторном открытии той же страницы агент сможет восстановить готовый перевод из кэша">
+              <input type="checkbox" data-field="cache-enabled">
+              <span>Запоминать переведённые страницы</span>
+            </label>
+            <label class="popup__label popup__checkbox-row" title="Повторные идентичные запросы к API могут браться из кэша, если это безопасно для текущего шага">
+              <input type="checkbox" data-field="api-cache-enabled">
+              <span>Кэшировать ответы API</span>
+            </label>
+          </details>
+        </section>
+      </section>
     </main>
 
     <script src="../core/nt-namespace.js"></script>
@@ -92,6 +370,7 @@
     <script src="../core/runtime-paths.js"></script>
     <script src="../ai/capability-rank.js"></script>
     <script src="../ai/ai-common.js"></script>
+    <script src="../ai/translation-agent.js"></script>
     <script src="./ui-module.js"></script>
     <script src="./popup.js"></script>
   </body>

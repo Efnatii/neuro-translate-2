@@ -162,6 +162,7 @@
         chosenModelSpec: chosen ? chosen.modelSpec : null,
         chosenModelId: chosen ? chosen.id : null,
         serviceTier: chosen ? this.mapServiceTier(chosen.tier) : 'default',
+        promptCachingSupported: Boolean(chosen && typeof chosen.cachedInputPrice === 'number' && Number.isFinite(chosen.cachedInputPrice)),
         policy,
         reason,
         candidates: prepared.slice(0, 12).map((item) => ({
@@ -268,7 +269,14 @@
             meta: {
               requestId,
               estTokens,
-              timeoutMs: requestMeta && Number.isFinite(Number(requestMeta.timeoutMs)) ? Number(requestMeta.timeoutMs) : 90000
+              timeoutMs: requestMeta && Number.isFinite(Number(requestMeta.timeoutMs)) ? Number(requestMeta.timeoutMs) : 90000,
+              promptCacheKey: this.buildPromptCacheKey({
+                tabId,
+                taskType,
+                requestMeta,
+                modelSpec: decision.chosenModelSpec,
+                promptCachingSupported: decision.promptCachingSupported === true
+              })
             }
           });
           return { response, decision };
@@ -366,7 +374,10 @@
             id: entry.id,
             tier: entry.tier,
             capabilityRank: typeof entry.capabilityRank === 'number' ? entry.capabilityRank : 0,
-            cost: typeof entry.sum_1M === 'number' ? entry.sum_1M : Number.POSITIVE_INFINITY
+            cost: typeof entry.sum_1M === 'number' ? entry.sum_1M : Number.POSITIVE_INFINITY,
+            cachedInputPrice: typeof entry.cachedInputPrice === 'number' && Number.isFinite(entry.cachedInputPrice)
+              ? entry.cachedInputPrice
+              : null
           };
         });
     }
@@ -415,6 +426,34 @@
       const safeBlock = meta.blockId || meta.blockIndex || 'block0';
       const safeAttempt = Number.isFinite(Number(meta.attempt)) ? Number(meta.attempt) : 1;
       return `${safeJob}:${safeBlock}:${safeAttempt}:${safeTask}`;
+    }
+
+    buildPromptCacheKey({ tabId, taskType, requestMeta, modelSpec, promptCachingSupported } = {}) {
+      if (promptCachingSupported !== true) {
+        return null;
+      }
+      const safeTask = typeof taskType === 'string' ? taskType : '';
+      if (!safeTask.startsWith('translation_')) {
+        return null;
+      }
+      const meta = requestMeta && typeof requestMeta === 'object' ? requestMeta : {};
+      const jobId = meta.jobId ? String(meta.jobId) : `tab${tabId === null || tabId === undefined ? 'na' : String(tabId)}`;
+      const source = [
+        `task=${safeTask}`,
+        `job=${jobId}`,
+        `model=${modelSpec || 'unknown'}`
+      ].join('|');
+      return `nt:pc:${this._hashText(source)}`;
+    }
+
+    _hashText(text) {
+      const src = typeof text === 'string' ? text : String(text || '');
+      let hash = 0;
+      for (let i = 0; i < src.length; i += 1) {
+        hash = ((hash << 5) - hash) + src.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash);
     }
   }
 

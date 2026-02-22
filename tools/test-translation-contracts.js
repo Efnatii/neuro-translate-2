@@ -25,6 +25,8 @@ assert(UiProtocol.Commands, 'UiProtocol.Commands must be defined');
 [
   'START_TRANSLATION',
   'CANCEL_TRANSLATION',
+  'CLEAR_TRANSLATION_DATA',
+  'SET_TRANSLATION_CATEGORIES',
   'SET_TRANSLATION_VISIBILITY',
   'RETRY_FAILED_BLOCKS',
   'BENCHMARK_SELECTED_MODELS',
@@ -51,4 +53,3 @@ assert.strictEqual(
 );
 
 console.log('PASS: translation contracts');
-

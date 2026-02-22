@@ -44,8 +44,17 @@
           translationModelList: [],
           modelSelection: { speed: true, preference: null },
           modelSelectionPolicy: null,
+          translationAgentModelPolicy: null,
           translationVisibilityByTab: {},
-          translationPipelineEnabled: false
+          translationPipelineEnabled: false,
+          translationAgentProfile: 'auto',
+          translationAgentTools: {},
+          translationAgentTuning: {},
+          translationCategoryMode: 'all',
+          translationCategoryList: [],
+          translationPageCacheEnabled: true,
+          translationApiCacheEnabled: true,
+          translationPopupActiveTab: 'control'
         }
       });
 
@@ -116,6 +125,10 @@
       return this._normalizeSelection(modelSelection, legacyPolicy);
     }
 
+    normalizeAgentModelPolicy(modelPolicy, fallbackSelection) {
+      return this._normalizeAgentModelPolicy(modelPolicy, fallbackSelection);
+    }
+
     _normalizeSelection(modelSelection, legacyPolicy) {
       if (modelSelection && typeof modelSelection === 'object') {
         const preference = modelSelection.preference === 'smartest' || modelSelection.preference === 'cheapest'
@@ -133,6 +146,22 @@
         return { speed: false, preference: 'cheapest' };
       }
       return { speed: true, preference: null };
+    }
+
+    _normalizeAgentModelPolicy(modelPolicy, fallbackSelection) {
+      const fallback = this._normalizeSelection(fallbackSelection, null);
+      const src = modelPolicy && typeof modelPolicy === 'object' ? modelPolicy : {};
+      const mode = src.mode === 'fixed' ? 'fixed' : 'auto';
+      const hasSpeed = Object.prototype.hasOwnProperty.call(src, 'speed');
+      const preference = src.preference === 'smartest' || src.preference === 'cheapest'
+        ? src.preference
+        : fallback.preference;
+      return {
+        mode,
+        speed: hasSpeed ? src.speed !== false : fallback.speed !== false,
+        preference,
+        allowRouteOverride: src.allowRouteOverride !== false
+      };
     }
 
     getActiveTab() {
@@ -194,7 +223,11 @@
         requestId: resolvedRequestId
       });
       try {
-        this.chromeApi.runtime.sendMessage(envelope);
+        this.chromeApi.runtime.sendMessage(envelope, () => {
+          if (this.chromeApi && this.chromeApi.runtime && this.chromeApi.runtime.lastError) {
+            // Swallow runtime lastError in fire-and-forget fallback mode.
+          }
+        });
       } catch (error) {
         // ignore fallback errors
       }

@@ -1,5 +1,5 @@
 /**
- * Unified AI load scheduler with built-in token-bucket budget.
+ * Unified AI load scheduler with optional token-bucket budget.
  *
  * Role:
  * - Coordinate high/low priority AI work queues and rate-limit backoff policy.
@@ -23,8 +23,8 @@
 
   class AiLoadScheduler {
     constructor({
-      rpm = 60,
-      tpm = 60000,
+      rpm = null,
+      tpm = null,
       windowMs = 60000,
       minLowRpmFraction = 0.15,
       minLowTpmFraction = 0.1,
@@ -32,11 +32,19 @@
       benchFreezeMs = 20 * 60 * 1000,
       eventLogger = null
     } = {}) {
-      this.rpmCapacity = Number.isFinite(Number(rpm)) ? Math.max(1, Number(rpm)) : 60;
-      this.tpmCapacity = Number.isFinite(Number(tpm)) ? Math.max(1, Number(tpm)) : 60000;
+      const parsedRpm = Number(rpm);
+      const parsedTpm = Number(tpm);
+      this.rpmCapacity = Number.isFinite(parsedRpm) && parsedRpm > 0
+        ? parsedRpm
+        : Number.POSITIVE_INFINITY;
+      this.tpmCapacity = Number.isFinite(parsedTpm) && parsedTpm > 0
+        ? parsedTpm
+        : Number.POSITIVE_INFINITY;
       this.windowMs = Number.isFinite(Number(windowMs)) ? Math.max(1000, Number(windowMs)) : 60000;
-      this.rpmTokens = this.rpmCapacity;
-      this.tpmTokens = this.tpmCapacity;
+      this.hasRpmBudget = Number.isFinite(this.rpmCapacity);
+      this.hasTpmBudget = Number.isFinite(this.tpmCapacity);
+      this.rpmTokens = this.hasRpmBudget ? this.rpmCapacity : Number.POSITIVE_INFINITY;
+      this.tpmTokens = this.hasTpmBudget ? this.tpmCapacity : Number.POSITIVE_INFINITY;
       this.lastRefillAt = Date.now();
 
       this.minLowRpmFraction = minLowRpmFraction;
@@ -94,11 +102,15 @@
 
     getAvailability() {
       this.refill();
-      const rpmFraction = this.rpmCapacity ? this.rpmTokens / this.rpmCapacity : 0;
-      const tpmFraction = this.tpmCapacity ? this.tpmTokens / this.tpmCapacity : 0;
+      const rpmFraction = this.hasRpmBudget
+        ? (this.rpmCapacity ? this.rpmTokens / this.rpmCapacity : 1)
+        : 1;
+      const tpmFraction = this.hasTpmBudget
+        ? (this.tpmCapacity ? this.tpmTokens / this.tpmCapacity : 1)
+        : 1;
       return {
-        rpmRemaining: this.rpmTokens,
-        tpmRemaining: this.tpmTokens,
+        rpmRemaining: this.hasRpmBudget ? this.rpmTokens : null,
+        tpmRemaining: this.hasTpmBudget ? this.tpmTokens : null,
         rpmFraction,
         tpmFraction
       };
@@ -172,14 +184,22 @@
       const safeRpm = Number.isFinite(Number(rpm)) ? Math.max(1, Number(rpm)) : 1;
       const safeTokens = Number.isFinite(Number(tokens)) ? Math.max(0, Number(tokens)) : 0;
 
-      if (this.rpmTokens >= safeRpm && this.tpmTokens >= safeTokens) {
-        this.rpmTokens -= safeRpm;
-        this.tpmTokens -= safeTokens;
+      const hasRpmBudget = this.hasRpmBudget;
+      const hasTpmBudget = this.hasTpmBudget;
+      const rpmAllowed = !hasRpmBudget || this.rpmTokens >= safeRpm;
+      const tpmAllowed = !hasTpmBudget || this.tpmTokens >= safeTokens;
+      if (rpmAllowed && tpmAllowed) {
+        if (hasRpmBudget) {
+          this.rpmTokens -= safeRpm;
+        }
+        if (hasTpmBudget) {
+          this.tpmTokens -= safeTokens;
+        }
         return { allowed: true, retryAfterMs: 0 };
       }
 
-      const rpmDeficit = Math.max(0, safeRpm - this.rpmTokens);
-      const tpmDeficit = Math.max(0, safeTokens - this.tpmTokens);
+      const rpmDeficit = hasRpmBudget ? Math.max(0, safeRpm - this.rpmTokens) : 0;
+      const tpmDeficit = hasTpmBudget ? Math.max(0, safeTokens - this.tpmTokens) : 0;
       const rpmWait = this.estimateWait(rpmDeficit, this.rpmCapacity);
       const tpmWait = this.estimateWait(tpmDeficit, this.tpmCapacity);
       return { allowed: false, retryAfterMs: Math.max(rpmWait, tpmWait) };
@@ -187,20 +207,28 @@
 
     refill() {
       const now = Date.now();
+      if (!this.hasRpmBudget && !this.hasTpmBudget) {
+        this.lastRefillAt = now;
+        return;
+      }
       const elapsed = Math.max(0, now - this.lastRefillAt);
       if (!elapsed) {
         return;
       }
 
-      const rpmRefill = (elapsed / this.windowMs) * this.rpmCapacity;
-      const tpmRefill = (elapsed / this.windowMs) * this.tpmCapacity;
-      this.rpmTokens = Math.min(this.rpmCapacity, this.rpmTokens + rpmRefill);
-      this.tpmTokens = Math.min(this.tpmCapacity, this.tpmTokens + tpmRefill);
+      if (this.hasRpmBudget) {
+        const rpmRefill = (elapsed / this.windowMs) * this.rpmCapacity;
+        this.rpmTokens = Math.min(this.rpmCapacity, this.rpmTokens + rpmRefill);
+      }
+      if (this.hasTpmBudget) {
+        const tpmRefill = (elapsed / this.windowMs) * this.tpmCapacity;
+        this.tpmTokens = Math.min(this.tpmCapacity, this.tpmTokens + tpmRefill);
+      }
       this.lastRefillAt = now;
     }
 
     estimateWait(deficit, capacity) {
-      if (!deficit || !capacity) {
+      if (!deficit || !capacity || !Number.isFinite(Number(capacity))) {
         return 0;
       }
       return Math.ceil((deficit / capacity) * this.windowMs);

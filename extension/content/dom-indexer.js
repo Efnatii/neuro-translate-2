@@ -31,11 +31,13 @@
         const parent = node.parentElement || null;
         if (this._isEligible(parent, text)) {
           const pathHint = this._pathHint(parent);
+          const category = this._category(parent, pathHint, text);
           const blockId = `b${index}`;
           blocks.push({
             blockId,
             originalText: text,
-            pathHint
+            pathHint,
+            category
           });
           blockNodes[blockId] = node;
           index += 1;
@@ -91,8 +93,47 @@
       const index = siblings.indexOf(element);
       return index >= 0 ? index + 1 : 1;
     }
+
+    _category(element, pathHint, text) {
+      const tag = String(element && element.tagName ? element.tagName : '').toUpperCase();
+      if (tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6') {
+        return 'heading';
+      }
+      if (tag === 'LI' || tag === 'UL' || tag === 'OL') {
+        return 'list';
+      }
+      if (tag === 'BUTTON') {
+        return 'button';
+      }
+      if (tag === 'LABEL') {
+        return 'label';
+      }
+      if (tag === 'NAV' || tag === 'MENU') {
+        return 'navigation';
+      }
+      if (tag === 'CODE' || tag === 'PRE' || tag === 'KBD' || tag === 'SAMP') {
+        return 'code';
+      }
+      if (tag === 'BLOCKQUOTE' || tag === 'Q') {
+        return 'quote';
+      }
+      if (tag === 'TABLE' || tag === 'TH' || tag === 'TD' || tag === 'THEAD' || tag === 'TBODY') {
+        return 'table';
+      }
+
+      const hint = String(pathHint || '').toLowerCase();
+      if (hint.includes('header') || hint.includes('footer') || hint.includes('title') || hint.includes('meta')) {
+        return 'meta';
+      }
+      if (hint.includes('nav') || hint.includes('menu')) {
+        return 'navigation';
+      }
+      if (text.length <= 18 && /^(ok|yes|no|cancel|save|close|next|back|menu)$/i.test(text)) {
+        return 'button';
+      }
+      return 'paragraph';
+    }
   }
 
   NT.DomIndexer = DomIndexer;
 })(globalThis);
-

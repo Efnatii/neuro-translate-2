@@ -50,7 +50,9 @@
     async ensureDocument() {
       const chromeApi = this.chromeApi;
       if (!chromeApi || !chromeApi.runtime || !chromeApi.offscreen) {
-        throw new Error('OFFSCREEN_UNAVAILABLE');
+        const error = new Error('OFFSCREEN_UNAVAILABLE');
+        error.code = 'OFFSCREEN_UNAVAILABLE';
+        throw error;
       }
 
       const url = chromeApi.runtime.getURL(this.offscreenPath);
@@ -151,6 +153,23 @@
         }
       }
       throw new Error('OFFSCREEN_EXECUTE_FAILED');
+    }
+
+    async abort({ requestId, reason = 'ABORTED_BY_CALLER', timeoutMs = 4000 } = {}) {
+      if (!requestId) {
+        return false;
+      }
+      try {
+        await this.ensureDocument();
+        const response = await this._sendWithTimeout({
+          type: 'OFFSCREEN_ABORT',
+          requestId,
+          reason
+        }, timeoutMs);
+        return Boolean(response && response.ok && response.aborted);
+      } catch (_) {
+        return false;
+      }
     }
   }
 

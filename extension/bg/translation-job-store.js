@@ -137,6 +137,70 @@
       return jobs;
     }
 
+    async removeJob(jobId) {
+      if (!jobId) {
+        return false;
+      }
+      const data = await this.getSnapshot();
+      if (!Object.prototype.hasOwnProperty.call(data.translationJobsById, jobId)) {
+        return false;
+      }
+      delete data.translationJobsById[jobId];
+      Object.keys(data.translationJobsByTab).forEach((tabKey) => {
+        if (data.translationJobsByTab[tabKey] === jobId) {
+          data.translationJobsByTab[tabKey] = null;
+        }
+      });
+      Object.keys(data.translationJobIndexByTab).forEach((tabKey) => {
+        const row = data.translationJobIndexByTab[tabKey] || {};
+        if (row.activeJobId === jobId) {
+          row.activeJobId = null;
+        }
+        if (row.lastJobId === jobId) {
+          row.lastJobId = null;
+        }
+        data.translationJobIndexByTab[tabKey] = row;
+      });
+      await this.storageSet({
+        translationSchemaVersion: this.SCHEMA_VERSION,
+        translationJobsById: data.translationJobsById,
+        translationJobsByTab: data.translationJobsByTab,
+        translationJobIndexByTab: data.translationJobIndexByTab
+      });
+      return true;
+    }
+
+    async clearTabHistory(tabId) {
+      if (tabId === null || tabId === undefined) {
+        return false;
+      }
+      const key = String(tabId);
+      const data = await this.getSnapshot();
+      const index = data.translationJobIndexByTab[key] || {};
+      const activeJobId = data.translationJobsByTab[key] || null;
+      const lastJobId = index.lastJobId || null;
+      data.translationJobsByTab[key] = null;
+      data.translationJobIndexByTab[key] = {
+        ...index,
+        activeJobId: null,
+        lastJobId: null,
+        updatedAt: Date.now()
+      };
+      if (activeJobId && data.translationJobsById[activeJobId]) {
+        delete data.translationJobsById[activeJobId];
+      }
+      if (lastJobId && data.translationJobsById[lastJobId]) {
+        delete data.translationJobsById[lastJobId];
+      }
+      await this.storageSet({
+        translationSchemaVersion: this.SCHEMA_VERSION,
+        translationJobsById: data.translationJobsById,
+        translationJobsByTab: data.translationJobsByTab,
+        translationJobIndexByTab: data.translationJobIndexByTab
+      });
+      return true;
+    }
+
     _normalizeData(data) {
       const src = data && typeof data === 'object' ? data : {};
       return {
@@ -156,4 +220,3 @@
 
   NT.TranslationJobStore = TranslationJobStore;
 })(globalThis);
-

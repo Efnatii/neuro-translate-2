@@ -28,6 +28,9 @@
         translationProgress: 0,
         failedBlocksCount: 0,
         lastError: null,
+        agentState: null,
+        selectedCategories: [],
+        recentDiffItems: [],
         eventLog: { seq: 0, items: [] },
         filters: { level: 'all', q: '', tag: 'all' },
         oldestSeq: null
@@ -59,6 +62,17 @@
       this.fields.translationProgress = this.doc.querySelector('[data-field="translation-progress"]');
       this.fields.translationFailedCount = this.doc.querySelector('[data-field="translation-failed-count"]');
       this.fields.translationLastError = this.doc.querySelector('[data-field="translation-last-error"]');
+      this.fields.agentPhase = this.doc.querySelector('[data-field="agent-phase"]');
+      this.fields.agentProfile = this.doc.querySelector('[data-field="agent-profile"]');
+      this.fields.agentCategories = this.doc.querySelector('[data-field="agent-categories"]');
+      this.fields.agentGlossarySize = this.doc.querySelector('[data-field="agent-glossary-size"]');
+      this.fields.agentCompressions = this.doc.querySelector('[data-field="agent-compressions"]');
+      this.fields.agentContextSummary = this.doc.querySelector('[data-field="agent-context-summary"]');
+      this.fields.agentChecklist = this.doc.querySelector('[data-field="agent-checklist"]');
+      this.fields.agentTools = this.doc.querySelector('[data-field="agent-tools"]');
+      this.fields.agentToolTrace = this.doc.querySelector('[data-field="agent-tool-trace"]');
+      this.fields.agentReports = this.doc.querySelector('[data-field="agent-reports"]');
+      this.fields.diffList = this.doc.querySelector('[data-field="diff-list"]');
       this.fields.benchStatus = this.doc.querySelector('[data-field="bench-status"]');
       this.fields.benchCurrent = this.doc.querySelector('[data-field="bench-current"]');
       this.fields.benchMessage = this.doc.querySelector('[data-field="bench-message"]');
@@ -120,9 +134,30 @@
       if (Object.prototype.hasOwnProperty.call(payload, 'lastError')) {
         this.state.lastError = payload.lastError || null;
       }
+      if (Object.prototype.hasOwnProperty.call(payload, 'agentState')) {
+        this.state.agentState = payload.agentState || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'selectedCategories')) {
+        this.state.selectedCategories = Array.isArray(payload.selectedCategories) ? payload.selectedCategories : [];
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'recentDiffItems')) {
+        this.state.recentDiffItems = Array.isArray(payload.recentDiffItems) ? payload.recentDiffItems : [];
+      }
       if (payload.eventLog) {
         this._mergeEventLogSnapshot(payload.eventLog.items || []);
         this.state.eventLog.seq = typeof payload.eventLog.seq === 'number' ? payload.eventLog.seq : this.state.eventLog.seq;
+      }
+
+      if (this.state.status) {
+        if (this.state.status.agentState) {
+          this.state.agentState = this.state.status.agentState;
+        }
+        if (Array.isArray(this.state.status.selectedCategories) && this.state.status.selectedCategories.length) {
+          this.state.selectedCategories = this.state.status.selectedCategories;
+        }
+        if (Array.isArray(this.state.status.recentDiffItems) && this.state.status.recentDiffItems.length) {
+          this.state.recentDiffItems = this.state.status.recentDiffItems;
+        }
       }
 
       if (this.ui.portClient && typeof this.ui.portClient.acknowledgeSnapshot === 'function') {
@@ -164,6 +199,27 @@
       if (Object.prototype.hasOwnProperty.call(patch, 'lastError')) {
         this.state.lastError = patch.lastError || null;
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'agentState')) {
+        this.state.agentState = patch.agentState || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'selectedCategories')) {
+        this.state.selectedCategories = Array.isArray(patch.selectedCategories) ? patch.selectedCategories : [];
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'recentDiffItems')) {
+        this.state.recentDiffItems = Array.isArray(patch.recentDiffItems) ? patch.recentDiffItems : [];
+      }
+
+      if (this.state.status) {
+        if (this.state.status.agentState) {
+          this.state.agentState = this.state.status.agentState;
+        }
+        if (Array.isArray(this.state.status.selectedCategories) && this.state.status.selectedCategories.length) {
+          this.state.selectedCategories = this.state.status.selectedCategories;
+        }
+        if (Array.isArray(this.state.status.recentDiffItems) && this.state.status.recentDiffItems.length) {
+          this.state.recentDiffItems = this.state.status.recentDiffItems;
+        }
+      }
 
       if (patch.eventLogAppend && patch.eventLogAppend.item) {
         const entry = patch.eventLogAppend.item;
@@ -203,6 +259,8 @@
 
       this.renderStatus();
       this.renderTranslationJob();
+      this.renderAgent();
+      this.renderDiff();
       this.renderBenchmarks();
       this.renderRateLimits();
     }
@@ -276,8 +334,9 @@
       }
       this.renderStatus();
       this.renderTranslationJob();
+      this.renderAgent();
+      this.renderDiff();
       this.renderBenchmarks();
-      this.renderRateLimits();
       this.renderRateLimits();
       this.renderEventLog();
     }
@@ -317,7 +376,7 @@
         this.fields.translationJobId.textContent = job && job.id ? job.id : '—';
       }
       if (this.fields.translationJobStatus) {
-        this.fields.translationJobStatus.textContent = job && job.status ? job.status : '—';
+        this.fields.translationJobStatus.textContent = job && job.status ? this._jobStatusLabel(job.status) : '—';
       }
       if (this.fields.translationProgress) {
         const progress = Number.isFinite(Number(this.state.translationProgress)) ? Number(this.state.translationProgress) : 0;
@@ -330,6 +389,102 @@
         this.fields.translationLastError.textContent = this.state.lastError && this.state.lastError.message
           ? this.state.lastError.message
           : '—';
+      }
+    }
+
+    renderAgent() {
+      const fallback = this.state.status && this.state.status.agentState ? this.state.status.agentState : null;
+      const agent = this.state.agentState || fallback || null;
+      if (this.fields.agentPhase) {
+        this.fields.agentPhase.textContent = agent && agent.phase ? this._phaseLabel(agent.phase) : '—';
+      }
+      if (this.fields.agentProfile) {
+        this.fields.agentProfile.textContent = agent && agent.profile ? this._profileLabel(agent.profile) : '—';
+      }
+      if (this.fields.agentCategories) {
+        const categories = Array.isArray(this.state.selectedCategories) && this.state.selectedCategories.length
+          ? this.state.selectedCategories
+          : (agent && Array.isArray(agent.selectedCategories) ? agent.selectedCategories : []);
+        this.fields.agentCategories.textContent = categories.length ? categories.join(', ') : '—';
+      }
+      if (this.fields.agentGlossarySize) {
+        this.fields.agentGlossarySize.textContent = String(agent && Number.isFinite(Number(agent.glossarySize)) ? Number(agent.glossarySize) : 0);
+      }
+      if (this.fields.agentCompressions) {
+        this.fields.agentCompressions.textContent = String(agent && Number.isFinite(Number(agent.compressedContextCount)) ? Number(agent.compressedContextCount) : 0);
+      }
+      if (this.fields.agentContextSummary) {
+        this.fields.agentContextSummary.textContent = agent && agent.contextSummary ? agent.contextSummary : '—';
+      }
+
+      this.renderList(this.fields.agentChecklist, agent && Array.isArray(agent.checklist) ? agent.checklist : [], (item) => {
+        const status = item && item.status ? this._checklistStatusLabel(item.status) : 'ожидание';
+        const title = item && item.title ? item.title : item && item.id ? item.id : 'пункт';
+        const details = item && item.details ? ` | ${item.details}` : '';
+        return `${status} | ${title}${details}`;
+      });
+
+      this.renderList(this.fields.agentTools, agent && Array.isArray(agent.toolHistory) ? agent.toolHistory : [], (item) => {
+        const ts = item && item.ts ? this.formatTs(item.ts) : '—';
+        const tool = item && item.tool ? item.tool : 'инструмент';
+        const status = this._toolStatusLabel(item && item.status ? item.status : 'ok');
+        const msg = item && item.message ? item.message : '';
+        return `${ts} | ${tool} | ${status}${msg ? ` | ${msg}` : ''}`;
+      });
+
+      this.renderList(this.fields.agentToolTrace, agent && Array.isArray(agent.toolExecutionTrace) ? agent.toolExecutionTrace : [], (item) => {
+        const ts = item && item.ts ? this.formatTs(item.ts) : '—';
+        const tool = item && item.tool ? item.tool : 'инструмент';
+        const status = this._toolStatusLabel(item && item.status ? item.status : 'ok');
+        const mode = item && item.mode ? item.mode : 'auto';
+        const forced = item && item.forced ? 'forced' : 'normal';
+        const msg = item && item.message ? item.message : '';
+        return `${ts} | ${tool} | mode=${mode} | ${forced} | ${status}${msg ? ` | ${msg}` : ''}`;
+      });
+
+      this.renderList(this.fields.agentReports, agent && Array.isArray(agent.reports) ? agent.reports : [], (item) => {
+        const ts = item && item.ts ? this.formatTs(item.ts) : '—';
+        const type = item && item.type ? item.type : 'заметка';
+        const title = item && item.title ? item.title : 'отчёт';
+        const body = item && item.body ? item.body : '';
+        return `${ts} | ${type} | ${title}${body ? ` | ${body}` : ''}`;
+      });
+    }
+
+    renderDiff() {
+      const fromStatus = this.state.status && Array.isArray(this.state.status.recentDiffItems)
+        ? this.state.status.recentDiffItems
+        : [];
+      const list = Array.isArray(this.state.recentDiffItems) && this.state.recentDiffItems.length
+        ? this.state.recentDiffItems
+        : fromStatus;
+      this.renderList(this.fields.diffList, list, (item) => {
+        const id = item && item.blockId ? item.blockId : 'блок';
+        const cat = item && item.category ? item.category : 'прочее';
+        const before = item && item.before ? item.before : '';
+        const after = item && item.after ? item.after : '';
+        return `${id} [${cat}] | "${before}" -> "${after}"`;
+      });
+    }
+
+    renderList(root, items, mapFn) {
+      if (!root) {
+        return;
+      }
+      const source = Array.isArray(items) ? items : [];
+      root.innerHTML = '';
+      const visible = source.slice(-40);
+      visible.forEach((item) => {
+        const row = this.doc.createElement('div');
+        row.className = 'debug__list-item';
+        row.textContent = mapFn(item);
+        root.appendChild(row);
+      });
+      if (!visible.length) {
+        const empty = this.doc.createElement('div');
+        empty.className = 'debug__list-item';
+        empty.textContent = '—';
+        root.appendChild(empty);
       }
     }
 
@@ -421,9 +576,9 @@
       }
       const remain = Math.max(0, cooldownUntilTs - Date.now());
       if (remain <= 0) {
-        return 'ready';
+        return 'готово';
       }
-      return `cooldown ${Math.ceil(remain / 1000)}s`;
+      return `пауза ${Math.ceil(remain / 1000)}с`;
     }
 
     formatReset(reqTs, tokTs) {
@@ -478,7 +633,7 @@
         const copyBtn = this.doc.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'event-copy-btn';
-        copyBtn.textContent = 'Copy';
+        copyBtn.textContent = 'Копировать';
         copyBtn.addEventListener('click', () => this.copySingleEvent(event));
         content.appendChild(tag);
         content.appendChild(msg);
@@ -513,7 +668,7 @@
       tags.forEach((value) => {
         const opt = this.doc.createElement('option');
         opt.value = value;
-        opt.textContent = value === 'all' ? 'Tag: all' : `Tag: ${value}`;
+        opt.textContent = value === 'all' ? 'Тег: все' : `Тег: ${value}`;
         this.fields.eventTag.appendChild(opt);
       });
       this.fields.eventTag.value = tags.includes(current) ? current : 'all';
@@ -540,6 +695,60 @@
         const haystack = `${item.tag || ''} ${item.message || ''} ${JSON.stringify(item.meta || {})}`.toLowerCase();
         return haystack.includes(q);
       });
+    }
+
+    _jobStatusLabel(status) {
+      const raw = String(status || '').trim().toLowerCase();
+      if (raw === 'idle') return 'ожидание';
+      if (raw === 'preparing') return 'подготовка';
+      if (raw === 'awaiting_categories') return 'ожидание категорий';
+      if (raw === 'running') return 'выполняется';
+      if (raw === 'completing') return 'завершение';
+      if (raw === 'done') return 'готово';
+      if (raw === 'failed') return 'ошибка';
+      if (raw === 'cancelled') return 'отменено';
+      return status || '—';
+    }
+
+    _phaseLabel(phase) {
+      const raw = String(phase || '').trim().toLowerCase();
+      if (raw === 'planned') return 'план готов';
+      if (raw === 'running' || raw === 'translating') return 'перевод';
+      if (raw === 'awaiting_categories') return 'ожидание категорий';
+      if (raw === 'proofreading') return 'вычитка';
+      if (raw === 'done') return 'завершено';
+      if (raw === 'failed') return 'ошибка';
+      if (raw === 'cache_restore') return 'восстановление из кэша';
+      if (raw === 'idle') return 'ожидание';
+      return phase || '—';
+    }
+
+    _profileLabel(profile) {
+      const raw = String(profile || '').trim().toLowerCase();
+      if (raw === 'balanced') return 'сбалансированный';
+      if (raw === 'literal') return 'дословный';
+      if (raw === 'readable') return 'читабельный';
+      if (raw === 'technical') return 'технический';
+      if (raw === 'auto') return 'авто';
+      return profile || '—';
+    }
+
+    _checklistStatusLabel(status) {
+      const raw = String(status || '').trim().toLowerCase();
+      if (raw === 'done') return 'готово';
+      if (raw === 'running') return 'в работе';
+      if (raw === 'failed') return 'ошибка';
+      if (raw === 'skipped') return 'пропуск';
+      return 'ожидание';
+    }
+
+    _toolStatusLabel(status) {
+      const raw = String(status || '').trim().toLowerCase();
+      if (raw === 'ok') return 'ok';
+      if (raw === 'warn') return 'предупреждение';
+      if (raw === 'error') return 'ошибка';
+      if (raw === 'skip' || raw === 'skipped') return 'пропуск';
+      return status || '—';
     }
 
     formatMeta(meta) {

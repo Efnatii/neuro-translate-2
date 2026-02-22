@@ -39,10 +39,37 @@ body {
   text-transform: uppercase;
 }
 
-.debug__status,
-section {
+.debug__section {
   border: 1px solid #000;
   padding: 10px;
+}
+
+.debug__section > summary {
+  list-style: none;
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.debug__section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.debug__section > summary::after {
+  content: "+";
+  font-size: 14px;
+  line-height: 1;
+}
+
+.debug__section[open] > summary::after {
+  content: "-";
+}
+
+.debug__status {
+  margin-top: 8px;
   display: grid;
   gap: 6px;
 }
@@ -158,4 +185,24 @@ progress {
 
 .rate-row--current {
   background: #efefef;
+}
+
+.debug__list {
+  border: 1px solid #000;
+  padding: 6px;
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+}
+
+.debug__list-item {
+  font-size: 12px;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+
+.debug__list-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
 }

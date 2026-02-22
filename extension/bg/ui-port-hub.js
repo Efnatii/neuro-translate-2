@@ -106,7 +106,11 @@
           translationJob: null,
           translationProgress: 0,
           failedBlocksCount: 0,
-          lastError: null
+          lastError: null,
+          agentState: null,
+          selectedCategories: [],
+          availableCategories: [],
+          recentDiffItems: []
         };
       }
       const helloPayload = envelope && envelope.payload && typeof envelope.payload === 'object' ? envelope.payload : {};
@@ -139,7 +143,11 @@
         translationJob: translationState.translationJob,
         translationProgress: translationState.translationProgress,
         failedBlocksCount: translationState.failedBlocksCount,
-        lastError: translationState.lastError
+        lastError: translationState.lastError,
+        agentState: translationState.agentState,
+        selectedCategories: translationState.selectedCategories,
+        availableCategories: translationState.availableCategories,
+        recentDiffItems: translationState.recentDiffItems
       };
     }
 
@@ -150,7 +158,11 @@
           translationJob: null,
           translationProgress: 0,
           failedBlocksCount: 0,
-          lastError: null
+          lastError: null,
+          agentState: null,
+          selectedCategories: [],
+          availableCategories: [],
+          recentDiffItems: []
         };
       }
       const resolvedTabId = (tabId === null || tabId === undefined)
@@ -162,7 +174,11 @@
           translationJob: null,
           translationProgress: 0,
           failedBlocksCount: 0,
-          lastError: null
+          lastError: null,
+          agentState: null,
+          selectedCategories: [],
+          availableCategories: [],
+          recentDiffItems: []
         };
       }
       const active = await this.translationJobStore.getActiveJob(resolvedTabId);
@@ -173,7 +189,11 @@
           translationJob: null,
           translationProgress: 0,
           failedBlocksCount: 0,
-          lastError: null
+          lastError: null,
+          agentState: null,
+          selectedCategories: [],
+          availableCategories: [],
+          recentDiffItems: []
         };
       }
       const total = Number.isFinite(Number(fallback.totalBlocks)) ? Number(fallback.totalBlocks) : 0;
@@ -190,13 +210,19 @@
           completedBlocks: completed,
           failedBlocksCount,
           currentBatchId: fallback.currentBatchId || null,
+          selectedCategories: Array.isArray(fallback.selectedCategories) ? fallback.selectedCategories.slice(0, 24) : [],
+          availableCategories: Array.isArray(fallback.availableCategories) ? fallback.availableCategories.slice(0, 24) : [],
           updatedAt: fallback.updatedAt || null
         },
         translationProgress: total > 0
           ? Math.max(0, Math.min(100, Math.round((completed / total) * 100)))
           : (fallback.status === 'done' ? 100 : 0),
         failedBlocksCount,
-        lastError: fallback.lastError || null
+        lastError: fallback.lastError || null,
+        agentState: fallback.agentState || null,
+        selectedCategories: Array.isArray(fallback.selectedCategories) ? fallback.selectedCategories.slice(0, 24) : [],
+        availableCategories: Array.isArray(fallback.availableCategories) ? fallback.availableCategories.slice(0, 24) : [],
+        recentDiffItems: Array.isArray(fallback.recentDiffItems) ? fallback.recentDiffItems.slice(-20) : []
       };
     }
 

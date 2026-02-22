@@ -39,7 +39,16 @@
         'translationModelList',
         'modelSelection',
         'modelSelectionPolicy',
-        'translationPipelineEnabled'
+        'translationAgentModelPolicy',
+        'translationPipelineEnabled',
+        'translationAgentProfile',
+        'translationAgentTools',
+        'translationAgentTuning',
+        'translationCategoryMode',
+        'translationCategoryList',
+        'translationPageCacheEnabled',
+        'translationApiCacheEnabled',
+        'translationPopupActiveTab'
       ]);
       const apiKey = typeof data.apiKey === 'string' ? data.apiKey : '';
       return {
@@ -48,7 +57,20 @@
         translationModelList: Array.isArray(data.translationModelList) ? data.translationModelList : [],
         modelSelection: data.modelSelection || null,
         modelSelectionPolicy: data.modelSelectionPolicy || null,
-        translationPipelineEnabled: Boolean(data.translationPipelineEnabled)
+        translationAgentModelPolicy: data.translationAgentModelPolicy || null,
+        translationPipelineEnabled: Boolean(data.translationPipelineEnabled),
+        translationAgentProfile: data.translationAgentProfile || 'auto',
+        translationAgentTools: data.translationAgentTools && typeof data.translationAgentTools === 'object'
+          ? data.translationAgentTools
+          : {},
+        translationAgentTuning: data.translationAgentTuning && typeof data.translationAgentTuning === 'object'
+          ? data.translationAgentTuning
+          : {},
+        translationCategoryMode: data.translationCategoryMode || 'all',
+        translationCategoryList: Array.isArray(data.translationCategoryList) ? data.translationCategoryList : [],
+        translationPageCacheEnabled: data.translationPageCacheEnabled !== false,
+        translationApiCacheEnabled: data.translationApiCacheEnabled !== false,
+        translationPopupActiveTab: data.translationPopupActiveTab || 'control'
       };
     }
 

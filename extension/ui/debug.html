@@ -12,81 +12,112 @@
         <p class="debug__subtitle" data-field="site">Сайт: —</p>
       </header>
 
-      <section>
-        <div class="debug__label">Прогресс</div>
-        <progress value="0" max="100" data-field="progress"></progress>
-      </section>
-
-      <section class="debug__status">
-        <div class="debug__label">Статус</div>
-        <div class="debug__row"><span>Completed</span><span data-field="completed">—</span></div>
-        <div class="debug__row"><span>Total</span><span data-field="total">—</span></div>
-        <div class="debug__row"><span>In progress</span><span data-field="inProgress">—</span></div>
-        <div class="debug__row"><span>Message</span><span data-field="message">нет данных</span></div>
-      </section>
-
-      <section class="debug__status">
-        <div class="debug__label">Decision</div>
-        <div class="debug__row"><span>Policy</span><span data-field="decision-policy">—</span></div>
-        <div class="debug__row"><span>Chosen model</span><span data-field="decision-model">—</span></div>
-        <div class="debug__row"><span>Reason</span><span data-field="decision-reason">—</span></div>
-      </section>
-
-      <section class="debug__status">
-        <div class="debug__label">Translation Job</div>
-        <div class="debug__row"><span>Job id</span><span data-field="translation-job-id">—</span></div>
-        <div class="debug__row"><span>Status</span><span data-field="translation-job-status">—</span></div>
-        <div class="debug__row"><span>Progress</span><span data-field="translation-progress">0%</span></div>
-        <div class="debug__row"><span>Failed blocks</span><span data-field="translation-failed-count">0</span></div>
-        <div class="debug__row"><span>Last error</span><span data-field="translation-last-error">—</span></div>
-      </section>
-
-      <section class="debug__status">
-        <div class="debug__label">Model Benchmarks</div>
-        <div class="debug__row"><span>Status</span><span data-field="bench-status">—</span></div>
-        <div class="debug__row"><span>Current model</span><span data-field="bench-current">—</span></div>
-        <div class="debug__row"><span>Message</span><span data-field="bench-message">—</span></div>
-        <table class="debug__table">
-          <thead>
-            <tr>
-              <th>Model spec</th>
-              <th>Median (ms)</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody data-field="bench-table"></tbody>
-        </table>
-      </section>
-
-
-      <section class="debug__status">
-        <div class="debug__label">Rate limits</div>
-        <div class="debug__row"><span>Current model</span><span data-field="rate-current-model">—</span></div>
-        <div class="rate-head">
-          <span>Model</span><span>RemReq</span><span>RemTok</span><span>Reserved</span><span>Cooldown</span><span>Reset</span>
+      <details class="debug__section" open>
+        <summary title="Текущий агрегированный прогресс по активному переводу">Прогресс и общий статус</summary>
+        <div class="debug__status">
+          <div class="debug__label">Прогресс</div>
+          <progress value="0" max="100" data-field="progress"></progress>
+          <div class="debug__row"><span>Готово</span><span data-field="completed">—</span></div>
+          <div class="debug__row"><span>Всего</span><span data-field="total">—</span></div>
+          <div class="debug__row"><span>В работе</span><span data-field="inProgress">—</span></div>
+          <div class="debug__row"><span>Сообщение</span><span data-field="message">нет данных</span></div>
         </div>
-        <div class="rate-table" data-field="rate-table"></div>
-      </section>
+      </details>
 
-      <section class="debug__status">
-        <div class="debug__label">Events</div>
-        <div class="debug__controls">
-          <select data-field="event-level">
-            <option value="all">Level: all</option>
-            <option value="info">Level: info</option>
-            <option value="warn">Level: warn</option>
-            <option value="error">Level: error</option>
-          </select>
-          <select data-field="event-tag">
-            <option value="all">Tag: all</option>
-          </select>
-          <input type="text" placeholder="Search text" data-field="event-search">
-          <button type="button" data-action="event-copy">Copy JSON</button>
-          <button type="button" data-action="event-clear">Clear</button>
-          <button type="button" data-action="event-older">Load older</button>
+      <details class="debug__section" open>
+        <summary title="Последнее решение маршрутизатора моделей">Решение по модели</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Политика</span><span data-field="decision-policy">—</span></div>
+          <div class="debug__row"><span>Выбранная модель</span><span data-field="decision-model">—</span></div>
+          <div class="debug__row"><span>Причина</span><span data-field="decision-reason">—</span></div>
         </div>
-        <div class="debug__event-log" id="eventList" data-field="event-log"></div>
-      </section>
+      </details>
+
+      <details class="debug__section" open>
+        <summary title="Состояние текущей или последней задачи перевода">Задача перевода</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>ID задачи</span><span data-field="translation-job-id">—</span></div>
+          <div class="debug__row"><span>Статус</span><span data-field="translation-job-status">—</span></div>
+          <div class="debug__row"><span>Прогресс</span><span data-field="translation-progress">0%</span></div>
+          <div class="debug__row"><span>Ошибки блоков</span><span data-field="translation-failed-count">0</span></div>
+          <div class="debug__row"><span>Последняя ошибка</span><span data-field="translation-last-error">—</span></div>
+        </div>
+      </details>
+
+      <details class="debug__section" open>
+        <summary title="Подробное состояние переводчика-агента">Состояние агента</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Фаза</span><span data-field="agent-phase">—</span></div>
+          <div class="debug__row"><span>Профиль</span><span data-field="agent-profile">—</span></div>
+          <div class="debug__row"><span>Категории</span><span data-field="agent-categories">—</span></div>
+          <div class="debug__row"><span>Термины глоссария</span><span data-field="agent-glossary-size">0</span></div>
+          <div class="debug__row"><span>Сжатия контекста</span><span data-field="agent-compressions">0</span></div>
+          <div class="debug__row"><span>Сводка контекста</span><span data-field="agent-context-summary">—</span></div>
+          <div class="debug__row"><span>Чеклист</span><div data-field="agent-checklist" class="debug__list"></div></div>
+          <div class="debug__row"><span>Вызовы инструментов</span><div data-field="agent-tools" class="debug__list"></div></div>
+          <div class="debug__row"><span>Трасса инструментов</span><div data-field="agent-tool-trace" class="debug__list"></div></div>
+          <div class="debug__row"><span>Отчёты</span><div data-field="agent-reports" class="debug__list"></div></div>
+        </div>
+      </details>
+
+      <details class="debug__section" open>
+        <summary title="Недавние изменения текста на странице">Изменения текста</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Последние изменения</span><div data-field="diff-list" class="debug__list"></div></div>
+        </div>
+      </details>
+
+      <details class="debug__section" open>
+        <summary title="Результаты внутренних бенчмарков моделей">Бенчмарки моделей</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Состояние</span><span data-field="bench-status">—</span></div>
+          <div class="debug__row"><span>Текущая модель</span><span data-field="bench-current">—</span></div>
+          <div class="debug__row"><span>Сообщение</span><span data-field="bench-message">—</span></div>
+          <table class="debug__table">
+            <thead>
+              <tr>
+                <th>Модель</th>
+                <th>Медиана (мс)</th>
+                <th>Обновлено</th>
+              </tr>
+            </thead>
+            <tbody data-field="bench-table"></tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="debug__section" open>
+        <summary title="Текущие лимиты и охлаждения по моделям">Лимиты запросов/токенов</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Текущая модель</span><span data-field="rate-current-model">—</span></div>
+          <div class="rate-head">
+            <span>Модель</span><span>Ост. req</span><span>Ост. tok</span><span>Резерв</span><span>Охлаждение</span><span>Сброс</span>
+          </div>
+          <div class="rate-table" data-field="rate-table"></div>
+        </div>
+      </details>
+
+      <details class="debug__section" open>
+        <summary title="Журнал событий по UI/BG/AI">События</summary>
+        <div class="debug__status">
+          <div class="debug__controls">
+            <select data-field="event-level" title="Фильтр по уровню события">
+              <option value="all">Уровень: все</option>
+              <option value="info">Уровень: info</option>
+              <option value="warn">Уровень: warn</option>
+              <option value="error">Уровень: error</option>
+            </select>
+            <select data-field="event-tag" title="Фильтр по тегу события">
+              <option value="all">Тег: все</option>
+            </select>
+            <input type="text" placeholder="Поиск по тексту" data-field="event-search" title="Поиск по тегу, сообщению и метаданным события">
+            <button type="button" data-action="event-copy" title="Скопировать весь журнал событий в JSON">Копировать JSON</button>
+            <button type="button" data-action="event-clear" title="Очистить журнал событий">Очистить</button>
+            <button type="button" data-action="event-older" title="Загрузить более старые события">Старые события</button>
+          </div>
+          <div class="debug__event-log" id="eventList" data-field="event-log"></div>
+        </div>
+      </details>
     </main>
 
     <script src="../core/nt-namespace.js"></script>
