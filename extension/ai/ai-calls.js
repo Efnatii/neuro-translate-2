@@ -203,7 +203,7 @@
       }
     }
 
-    send({ modelSpec, modelId, serviceTier, input, maxOutputTokens, temperature, store, background, signal, meta } = {}) {
+    send({ modelSpec, modelId, serviceTier, input, maxOutputTokens, temperature, store, background, signal, meta, responsesOptions, stream = false, onEvent = null } = {}) {
       const startedAt = this._now();
       const requestMeta = meta && typeof meta === 'object' ? { ...meta } : {};
       return this.reserveBudget(modelSpec, requestMeta)
@@ -211,17 +211,35 @@
           modelSpec,
           successTag: NT.EventTypes ? NT.EventTypes.Tags.AI_RESPONSE : 'ai.response',
           stage: 'request',
-          rawFn: async () => this.llmClient.generateResponseRaw({
-            modelId,
-            serviceTier,
-            input,
-            maxOutputTokens,
-            temperature,
-            store,
-            background,
-            signal,
-            meta: requestMeta
-          })
+          rawFn: async () => {
+            if (stream === true && typeof this.llmClient.generateResponseStreamRaw === 'function') {
+              return this.llmClient.generateResponseStreamRaw({
+                modelId,
+                serviceTier,
+                input,
+                maxOutputTokens,
+                temperature,
+                store,
+                background,
+                signal,
+                meta: requestMeta,
+                responsesOptions,
+                onEvent
+              });
+            }
+            return this.llmClient.generateResponseRaw({
+              modelId,
+              serviceTier,
+              input,
+              maxOutputTokens,
+              temperature,
+              store,
+              background,
+              signal,
+              meta: requestMeta,
+              responsesOptions
+            });
+          }
         }))
         .then(async (response) => {
           const endedAt = this._now();

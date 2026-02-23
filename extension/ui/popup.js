@@ -44,80 +44,146 @@
 
   const AGENT_TOOLS = [
     {
-      key: 'pageAnalyzer',
-      label: 'Анализ страницы',
-      hint: 'Собирает статистику по контенту страницы для принятия решений агентом'
+      key: 'page.get_stats',
+      label: 'page.get_stats',
+      hint: 'Статистика страницы и категорий перед планированием.'
     },
     {
-      key: 'categorySelector',
-      label: 'Выбор категорий',
-      hint: 'Определяет, какие категории текста переводить на текущем шаге'
+      key: 'page.get_blocks',
+      label: 'page.get_blocks',
+      hint: 'Выборка блоков страницы для анализа и/или исполнения.'
     },
     {
-      key: 'glossaryBuilder',
-      label: 'Построение глоссария',
-      hint: 'Формирует локальный глоссарий терминов для единообразного перевода'
+      key: 'agent.set_tool_config',
+      label: 'agent.set_tool_config',
+      hint: 'Установка режимов инструментов on/off/auto.'
     },
     {
-      key: 'batchPlanner',
-      label: 'Планировщик батчей',
-      hint: 'Разбивает перевод на батчи и задаёт порядок обработки'
+      key: 'agent.propose_tool_policy',
+      label: 'agent.propose_tool_policy',
+      hint: 'Предложение агентом конфигурации инструментов с пересчётом effective policy.'
     },
     {
-      key: 'modelRouter',
-      label: 'Маршрутизатор моделей',
-      hint: 'Выбирает fast/strong маршрут модели по сложности батча'
+      key: 'agent.get_tool_context',
+      label: 'agent.get_tool_context',
+      hint: 'Чтение toolset hash, effective policy и capability summary.'
     },
     {
-      key: 'progressAuditor',
-      label: 'Аудит прогресса',
-      hint: 'Периодически проверяет выполнение плана и фиксирует отклонения'
+      key: 'agent.get_autotune_context',
+      label: 'agent.get_autotune_context',
+      hint: 'Контекст для AutoTune в planning/execution.'
     },
     {
-      key: 'antiRepeatGuard',
-      label: 'Антидубликаты',
-      hint: 'Защищает от повторной обработки одних и тех же блоков'
+      key: 'agent.propose_run_settings_patch',
+      label: 'agent.propose_run_settings_patch',
+      hint: 'Предложение патча job-scoped run settings.'
     },
     {
-      key: 'contextCompressor',
-      label: 'Сжатие контекста',
-      hint: 'Автоматически сжимает накопленный контекст при переполнении'
+      key: 'agent.apply_run_settings_proposal',
+      label: 'agent.apply_run_settings_proposal',
+      hint: 'Применение proposal AutoTune.'
     },
     {
-      key: 'reportWriter',
-      label: 'Отчёты агента',
-      hint: 'Ведёт структурированные отчёты по шагам перевода'
+      key: 'agent.reject_run_settings_proposal',
+      label: 'agent.reject_run_settings_proposal',
+      hint: 'Отклонение proposal AutoTune.'
     },
     {
-      key: 'pageRuntime',
-      label: 'Runtime страницы',
-      hint: 'Логирует действия с контент-скриптом: apply/ack/restore/rescan'
+      key: 'agent.explain_current_run_settings',
+      label: 'agent.explain_current_run_settings',
+      hint: 'Объяснение текущего effective run settings.'
     },
     {
-      key: 'cacheManager',
-      label: 'Менеджер кэша',
-      hint: 'Логирует восстановление/сохранение кэша страниц и решения reuse'
+      key: 'agent.set_plan',
+      label: 'agent.set_plan',
+      hint: 'Фиксация плана выполнения перевода.'
     },
     {
-      key: 'workflowController',
-      label: 'Контроллер действий',
-      hint: 'Системный инструмент: через него проходят все state-действия агента'
+      key: 'agent.set_recommended_categories',
+      label: 'agent.set_recommended_categories',
+      hint: 'Рекомендация категорий для подтверждения пользователем.'
+    },
+    {
+      key: 'agent.append_report',
+      label: 'agent.append_report',
+      hint: 'Короткие отчёты о ходе планирования/исполнения.'
+    },
+    {
+      key: 'agent.update_checklist',
+      label: 'agent.update_checklist',
+      hint: 'Обновление статусов чеклиста агента.'
+    },
+    {
+      key: 'agent.compress_context',
+      label: 'agent.compress_context',
+      hint: 'Сжатие контекста, чтобы избежать переполнения.'
+    },
+    {
+      key: 'job.get_next_blocks',
+      label: 'job.get_next_blocks',
+      hint: 'Выбор следующей порции pending-блоков.'
+    },
+    {
+      key: 'translator.translate_block_stream',
+      label: 'translator.translate_block_stream',
+      hint: 'Потоковый перевод одного блока.'
+    },
+    {
+      key: 'page.apply_delta',
+      label: 'page.apply_delta',
+      hint: 'Промежуточное применение дельты текста на страницу.'
+    },
+    {
+      key: 'job.mark_block_done',
+      label: 'job.mark_block_done',
+      hint: 'Финализация успешно переведённого блока.'
+    },
+    {
+      key: 'job.mark_block_failed',
+      label: 'job.mark_block_failed',
+      hint: 'Фиксация ошибки по блоку без остановки всего пайплайна.'
+    },
+    {
+      key: 'agent.audit_progress',
+      label: 'agent.audit_progress',
+      hint: 'Проверка прогресса и anti-repeat guard.'
+    },
+    {
+      key: 'memory.build_glossary',
+      label: 'memory.build_glossary',
+      hint: 'Построение терминологического глоссария по уже переведённым блокам.'
+    },
+    {
+      key: 'memory.update_context_summary',
+      label: 'memory.update_context_summary',
+      hint: 'Обновление краткого контекстного summary для следующих шагов.'
     }
   ];
 
   const DEFAULT_AGENT_TOOLS = {
-    pageAnalyzer: 'on',
-    categorySelector: 'auto',
-    glossaryBuilder: 'auto',
-    batchPlanner: 'auto',
-    modelRouter: 'auto',
-    progressAuditor: 'on',
-    antiRepeatGuard: 'on',
-    contextCompressor: 'auto',
-    reportWriter: 'on',
-    pageRuntime: 'on',
-    cacheManager: 'auto',
-    workflowController: 'on'
+    'page.get_stats': 'on',
+    'page.get_blocks': 'auto',
+    'agent.set_tool_config': 'on',
+    'agent.propose_tool_policy': 'on',
+    'agent.get_tool_context': 'on',
+    'agent.get_autotune_context': 'on',
+    'agent.propose_run_settings_patch': 'on',
+    'agent.apply_run_settings_proposal': 'on',
+    'agent.reject_run_settings_proposal': 'on',
+    'agent.explain_current_run_settings': 'on',
+    'agent.set_plan': 'on',
+    'agent.set_recommended_categories': 'on',
+    'agent.append_report': 'on',
+    'agent.update_checklist': 'on',
+    'agent.compress_context': 'auto',
+    'job.get_next_blocks': 'on',
+    'translator.translate_block_stream': 'on',
+    'page.apply_delta': 'on',
+    'job.mark_block_done': 'on',
+    'job.mark_block_failed': 'on',
+    'agent.audit_progress': 'auto',
+    'memory.build_glossary': 'auto',
+    'memory.update_context_summary': 'auto'
   };
 
   const LOCAL_AGENT_TUNING_DEFAULTS = {
@@ -125,6 +191,8 @@
     maxBatchSizeOverride: null,
     proofreadingPassesOverride: null,
     parallelismOverride: 'auto',
+    autoTuneEnabled: true,
+    autoTuneMode: 'auto_apply',
     plannerTemperature: 0.2,
     plannerMaxOutputTokens: 1300,
     auditIntervalMs: 2500,
@@ -142,16 +210,30 @@
   };
 
   class DetailsStateManager {
-    constructor({ doc, storageKeyPrefix }) {
+    constructor({ doc, storageKeyPrefix, ui }) {
       this.doc = doc;
       this.storageKeyPrefix = typeof storageKeyPrefix === 'string' && storageKeyPrefix
         ? storageKeyPrefix
         : 'nt.ui.details';
+      this.ui = ui || null;
     }
 
-    init() {
+    async init() {
       if (!this.doc || typeof this.doc.querySelectorAll !== 'function') {
         return;
+      }
+      let collapseState = {};
+      if (this.ui && typeof this.ui.getSettingsSnapshot === 'function') {
+        const settings = await this.ui.getSettingsSnapshot().catch(() => null);
+        const userSettings = settings && settings.userSettings && typeof settings.userSettings === 'object'
+          ? settings.userSettings
+          : {};
+        const uiSettings = userSettings.ui && typeof userSettings.ui === 'object'
+          ? userSettings.ui
+          : {};
+        collapseState = uiSettings.collapseState && typeof uiSettings.collapseState === 'object'
+          ? uiSettings.collapseState
+          : {};
       }
       const detailsList = Array.from(this.doc.querySelectorAll('details[data-section]'));
       detailsList.forEach((details) => {
@@ -162,24 +244,20 @@
         if (!sectionId) {
           return;
         }
-        const key = `${this.storageKeyPrefix}.${sectionId}`;
-        try {
-          const saved = global.localStorage ? global.localStorage.getItem(key) : null;
-          if (saved === '0') {
-            details.open = false;
-          } else if (saved === '1') {
-            details.open = true;
-          }
-        } catch (_) {
-          // best-effort only
+        if (Object.prototype.hasOwnProperty.call(collapseState, sectionId)) {
+          details.open = Boolean(collapseState[sectionId]);
         }
         details.addEventListener('toggle', () => {
-          try {
-            if (global.localStorage) {
-              global.localStorage.setItem(key, details.open ? '1' : '0');
-            }
-          } catch (_) {
-            // best-effort only
+          if (this.ui && typeof this.ui.queueSettingsPatch === 'function') {
+            this.ui.queueSettingsPatch({
+              userSettings: {
+                ui: {
+                  collapseState: {
+                    [sectionId]: details.open
+                  }
+                }
+              }
+            });
           }
         });
       });
@@ -192,6 +270,24 @@
       this.ui = ui;
       this.state = {
         apiKey: '',
+        security: {
+          credentials: null,
+          lastConnectionTest: null,
+          lastAudit: null
+        },
+        connectionModeDraft: 'PROXY',
+        proxyDraft: {
+          baseUrl: '',
+          authToken: '',
+          authHeaderName: 'X-NT-Token',
+          projectId: '',
+          persistToken: false
+        },
+        byokDraft: {
+          key: '',
+          persist: false,
+          persistConfirmed: false
+        },
         translationModelList: [],
         modelSelection: { speed: DEFAULT_AGENT_MODEL_POLICY.speed, preference: DEFAULT_AGENT_MODEL_POLICY.preference },
         translationAgentModelPolicy: { ...DEFAULT_AGENT_MODEL_POLICY },
@@ -200,22 +296,36 @@
         translationAgentTuning: { ...LOCAL_AGENT_TUNING_DEFAULTS },
         translationCategoryMode: 'auto',
         translationCategoryList: [],
+        translationDisplayMode: 'translated',
+        translationCompareDiffThreshold: 8000,
+        translationMemoryEnabled: true,
+        translationMemoryMaxPages: 200,
+        translationMemoryMaxBlocks: 5000,
+        translationMemoryMaxAgeDays: 30,
+        translationMemoryGcOnStartup: true,
+        translationMemoryIgnoredQueryParams: ['utm_*', 'fbclid', 'gclid'],
         translationPageCacheEnabled: true,
         translationApiCacheEnabled: true,
         translationPopupActiveTab: POPUP_DEFAULT_TAB,
         translationVisible: true,
         translationPipelineEnabled: false,
         translationStatusByTab: {},
+        schedulerRuntime: null,
         modelLimitsBySpec: {},
         translationJob: null,
         translationProgress: 0,
         failedBlocksCount: 0,
         lastError: null,
         agentState: null,
+        settingsSchemaVersion: 1,
+        settingsUser: null,
+        settingsEffective: null,
+        settingsOverrides: { changed: [], values: {} },
         selectedCategories: [],
         availableCategories: [],
         categorySelectionDraft: [],
-        categorySelectionDraftJobId: null
+        categorySelectionDraftJobId: null,
+        lastMemoryRestore: null
       };
       this.activeTabId = null;
       this.modelRegistry = { entries: [], byKey: {} };
@@ -224,31 +334,57 @@
     async init() {
       this.cacheElements();
       this.bindEvents();
-      new DetailsStateManager({ doc: this.doc, storageKeyPrefix: 'nt.ui.popup.details' }).init();
+      new DetailsStateManager({ doc: this.doc, storageKeyPrefix: 'nt.ui.popup.details', ui: this.ui }).init();
+      await this._migrateLegacyUiState();
 
       const activeTab = await this.ui.getActiveTab();
       this.activeTabId = activeTab ? activeTab.id : null;
+      if (this.ui && typeof this.ui.setHelloContext === 'function') {
+        this.ui.setHelloContext({ tabId: this.activeTabId });
+      }
       this.modelRegistry = this.ui.getModelRegistry();
 
       const settings = await this.ui.getSettings([
-        'apiKey',
+        'schemaVersion',
+        'userSettings',
+        'effectiveSettings',
+        'overrides',
         'translationModelList',
         'modelSelection',
         'modelSelectionPolicy',
         'translationAgentModelPolicy',
+        'translationDisplayModeByTab',
         'translationVisibilityByTab',
+        'translationCompareDiffThreshold',
         'translationPipelineEnabled',
         'translationAgentProfile',
         'translationAgentTools',
         'translationAgentTuning',
         'translationCategoryMode',
         'translationCategoryList',
+        'translationMemoryEnabled',
+        'translationMemoryMaxPages',
+        'translationMemoryMaxBlocks',
+        'translationMemoryMaxAgeDays',
+        'translationMemoryGcOnStartup',
+        'translationMemoryIgnoredQueryParams',
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
         'translationPopupActiveTab'
       ]);
 
-      this.state.apiKey = settings.apiKey || '';
+      this.state.settingsSchemaVersion = Number.isFinite(Number(settings.schemaVersion))
+        ? Number(settings.schemaVersion)
+        : this.state.settingsSchemaVersion;
+      this.state.settingsUser = settings.userSettings && typeof settings.userSettings === 'object'
+        ? settings.userSettings
+        : this.state.settingsUser;
+      this.state.settingsEffective = settings.effectiveSettings && typeof settings.effectiveSettings === 'object'
+        ? settings.effectiveSettings
+        : this.state.settingsEffective;
+      this.state.settingsOverrides = settings.overrides && typeof settings.overrides === 'object'
+        ? settings.overrides
+        : this.state.settingsOverrides;
       this.state.translationModelList = Array.isArray(settings.translationModelList) ? settings.translationModelList : [];
       this.state.modelSelection = this.ui.normalizeSelection(settings.modelSelection, settings.modelSelectionPolicy);
       this.state.translationAgentModelPolicy = this.normalizeAgentModelPolicy(
@@ -262,11 +398,34 @@
       this.state.translationAgentTuning = this.normalizeAgentTuning(settings.translationAgentTuning);
       this.state.translationCategoryMode = this.normalizeCategoryMode(settings.translationCategoryMode);
       this.state.translationCategoryList = this.normalizeCategoryList(settings.translationCategoryList);
+      this.state.translationMemoryEnabled = settings.translationMemoryEnabled !== false;
+      this.state.translationMemoryMaxPages = Number.isFinite(Number(settings.translationMemoryMaxPages))
+        ? Number(settings.translationMemoryMaxPages)
+        : 200;
+      this.state.translationMemoryMaxBlocks = Number.isFinite(Number(settings.translationMemoryMaxBlocks))
+        ? Number(settings.translationMemoryMaxBlocks)
+        : 5000;
+      this.state.translationMemoryMaxAgeDays = Number.isFinite(Number(settings.translationMemoryMaxAgeDays))
+        ? Number(settings.translationMemoryMaxAgeDays)
+        : 30;
+      this.state.translationMemoryGcOnStartup = settings.translationMemoryGcOnStartup !== false;
+      this.state.translationMemoryIgnoredQueryParams = Array.isArray(settings.translationMemoryIgnoredQueryParams)
+        ? settings.translationMemoryIgnoredQueryParams
+        : ['utm_*', 'fbclid', 'gclid'];
       this.state.translationPageCacheEnabled = settings.translationPageCacheEnabled !== false;
       this.state.translationApiCacheEnabled = settings.translationApiCacheEnabled !== false;
+      this.state.translationCompareDiffThreshold = Number.isFinite(Number(settings.translationCompareDiffThreshold))
+        ? Math.max(500, Math.min(50000, Math.round(Number(settings.translationCompareDiffThreshold))))
+        : 8000;
       this.state.translationPopupActiveTab = this.normalizePopupTab(settings.translationPopupActiveTab);
+      this._syncLegacyStateFromV2();
       const byTab = settings.translationVisibilityByTab || {};
-      this.state.translationVisible = this.activeTabId !== null ? byTab[this.activeTabId] !== false : true;
+      const modeByTab = settings.translationDisplayModeByTab || {};
+      const modeFromSettings = this.activeTabId !== null && Object.prototype.hasOwnProperty.call(modeByTab, this.activeTabId)
+        ? modeByTab[this.activeTabId]
+        : null;
+      this.state.translationDisplayMode = this.normalizeDisplayMode(modeFromSettings, this.activeTabId !== null ? byTab[this.activeTabId] !== false : true);
+      this.state.translationVisible = this.state.translationDisplayMode !== 'original';
 
       this.renderModels();
       this.renderAgentControls();
@@ -275,16 +434,280 @@
       this.renderTabs();
     }
 
+    async _migrateLegacyUiState() {
+      try {
+        if (!global.localStorage) {
+          return;
+        }
+        const markerKey = 'nt.ui.settings.v2.popup.migrated';
+        if (global.localStorage.getItem(markerKey) === '1') {
+          return;
+        }
+        const collapseState = {};
+        const detailsList = Array.from(this.doc.querySelectorAll('details[data-section]'));
+        detailsList.forEach((details) => {
+          const sectionId = details && typeof details.getAttribute === 'function'
+            ? details.getAttribute('data-section')
+            : null;
+          if (!sectionId) {
+            return;
+          }
+          const key = `nt.ui.popup.details.${sectionId}`;
+          const value = global.localStorage.getItem(key);
+          if (value === '1') {
+            collapseState[sectionId] = true;
+          } else if (value === '0') {
+            collapseState[sectionId] = false;
+          }
+        });
+        if (Object.keys(collapseState).length) {
+          this.ui.queueSettingsPatch({
+            userSettings: {
+              ui: {
+                collapseState
+              }
+            }
+          });
+        }
+        global.localStorage.setItem(markerKey, '1');
+      } catch (_) {
+        // best-effort migration only
+      }
+    }
+
+    _mergeObjects(base, patch) {
+      const left = base && typeof base === 'object' ? JSON.parse(JSON.stringify(base)) : {};
+      const right = patch && typeof patch === 'object' ? patch : {};
+      const mergeInto = (target, source) => {
+        Object.keys(source).forEach((key) => {
+          const value = source[key];
+          if (Array.isArray(value)) {
+            target[key] = value.slice();
+            return;
+          }
+          if (value && typeof value === 'object') {
+            const current = target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])
+              ? target[key]
+              : {};
+            target[key] = mergeInto(current, value);
+            return;
+          }
+          target[key] = value;
+        });
+        return target;
+      };
+      return mergeInto(left, right);
+    }
+
+    _patchUserSettings(partial) {
+      const patch = partial && typeof partial === 'object' ? partial : {};
+      this.state.settingsUser = this._mergeObjects(this.state.settingsUser || {}, patch);
+      this.ui.queueSettingsPatch({
+        userSettings: patch
+      });
+    }
+
+    _cloneJson(value, fallback = null) {
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch (_) {
+        return fallback;
+      }
+    }
+
+    _defaultUserSettings() {
+      const Policy = global.NT && global.NT.AgentSettingsPolicy ? global.NT.AgentSettingsPolicy : null;
+      const defaults = Policy && Policy.DEFAULT_USER_SETTINGS && typeof Policy.DEFAULT_USER_SETTINGS === 'object'
+        ? Policy.DEFAULT_USER_SETTINGS
+        : null;
+      return this._cloneJson(defaults, {
+        profile: 'auto',
+        agent: { agentMode: 'agent', toolConfigUser: {} },
+        reasoning: { reasoningMode: 'auto', reasoningEffort: 'medium', reasoningSummary: 'auto' },
+        caching: { promptCacheRetention: 'auto', promptCacheKey: null, compatCache: true },
+        models: { agentAllowedModels: [], modelRoutingMode: 'auto', modelUserPriority: [] },
+        memory: {
+          enabled: true,
+          maxPages: 200,
+          maxBlocks: 5000,
+          maxAgeDays: 30,
+          gcOnStartup: true,
+          ignoredQueryParams: ['utm_*', 'fbclid', 'gclid']
+        },
+        ui: { uiLanguage: 'ru', showAdvanced: false, collapseState: {} }
+      });
+    }
+
+    _userSettings() {
+      const base = this._defaultUserSettings();
+      const merged = this._mergeObjects(base, this.state.settingsUser || {});
+      this.state.settingsUser = merged;
+      return merged;
+    }
+
+    _effectiveSettings() {
+      const settings = this.state.settingsEffective && typeof this.state.settingsEffective === 'object'
+        ? this.state.settingsEffective
+        : null;
+      if (settings) {
+        return settings;
+      }
+      const user = this._userSettings();
+      return {
+        profile: user.profile || 'auto',
+        effectiveProfile: user.profile || 'auto',
+        agent: {
+          agentMode: user.agent && user.agent.agentMode ? user.agent.agentMode : 'agent',
+          toolConfigEffective: this.normalizeAgentTools(
+            user.agent && user.agent.toolConfigUser && typeof user.agent.toolConfigUser === 'object'
+              ? user.agent.toolConfigUser
+              : {}
+          )
+        },
+        reasoning: {
+          reasoningMode: user.reasoning && user.reasoning.reasoningMode ? user.reasoning.reasoningMode : 'auto',
+          reasoningEffort: user.reasoning && user.reasoning.reasoningEffort ? user.reasoning.reasoningEffort : 'medium',
+          reasoningSummary: user.reasoning && user.reasoning.reasoningSummary ? user.reasoning.reasoningSummary : 'auto'
+        },
+        caching: {
+          promptCacheRetention: user.caching && user.caching.promptCacheRetention ? user.caching.promptCacheRetention : 'auto',
+          promptCacheKey: user.caching ? user.caching.promptCacheKey || null : null,
+          compatCache: user.caching ? user.caching.compatCache !== false : true
+        },
+        models: {
+          agentAllowedModels: user.models && Array.isArray(user.models.agentAllowedModels)
+            ? user.models.agentAllowedModels.slice()
+            : [],
+          modelRoutingMode: user.models && user.models.modelRoutingMode ? user.models.modelRoutingMode : 'auto',
+          modelUserPriority: user.models && Array.isArray(user.models.modelUserPriority)
+            ? user.models.modelUserPriority.slice()
+            : []
+        },
+        memory: {
+          enabled: user.memory ? user.memory.enabled !== false : true,
+          maxPages: user.memory && Number.isFinite(Number(user.memory.maxPages)) ? Number(user.memory.maxPages) : 200,
+          maxBlocks: user.memory && Number.isFinite(Number(user.memory.maxBlocks)) ? Number(user.memory.maxBlocks) : 5000,
+          maxAgeDays: user.memory && Number.isFinite(Number(user.memory.maxAgeDays)) ? Number(user.memory.maxAgeDays) : 30,
+          gcOnStartup: user.memory ? user.memory.gcOnStartup !== false : true,
+          ignoredQueryParams: user.memory && Array.isArray(user.memory.ignoredQueryParams)
+            ? user.memory.ignoredQueryParams.slice()
+            : ['utm_*', 'fbclid', 'gclid']
+        }
+      };
+    }
+
+    _resolveAllowlistForUi() {
+      const user = this._userSettings();
+      const effective = this._effectiveSettings();
+      const fromUser = user.models && Array.isArray(user.models.agentAllowedModels)
+        ? user.models.agentAllowedModels
+        : [];
+      const overrides = this.state.settingsOverrides && Array.isArray(this.state.settingsOverrides.changed)
+        ? this.state.settingsOverrides.changed
+        : [];
+      const userAllowlistOverridden = overrides.includes('models.agentAllowedModels');
+      if (userAllowlistOverridden) {
+        return fromUser.slice();
+      }
+      if (fromUser.length) {
+        return fromUser.slice();
+      }
+      const fromEffective = effective.models && Array.isArray(effective.models.agentAllowedModels)
+        ? effective.models.agentAllowedModels
+        : [];
+      if (fromEffective.length) {
+        return fromEffective.slice();
+      }
+      return Array.isArray(this.state.translationModelList) ? this.state.translationModelList.slice() : [];
+    }
+
+    _syncLegacyStateFromV2() {
+      const user = this._userSettings();
+      const effective = this._effectiveSettings();
+      this.state.translationAgentProfile = this.normalizeAgentProfile(user.profile || this.state.translationAgentProfile);
+      this.state.translationAgentTools = this.normalizeAgentTools(
+        user.agent && user.agent.toolConfigUser && typeof user.agent.toolConfigUser === 'object'
+          ? user.agent.toolConfigUser
+          : this.state.translationAgentTools
+      );
+      this.state.translationModelList = this._resolveAllowlistForUi();
+      if (user.caching && Object.prototype.hasOwnProperty.call(user.caching, 'compatCache')) {
+        this.state.translationApiCacheEnabled = user.caching.compatCache !== false;
+      }
+      if (user.memory && Object.prototype.hasOwnProperty.call(user.memory, 'enabled')) {
+        this.state.translationMemoryEnabled = user.memory.enabled !== false;
+      }
+    }
+
+    normalizeReasoningMode(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      return raw === 'custom' ? 'custom' : 'auto';
+    }
+
+    normalizeReasoningEffort(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'max') {
+        return raw;
+      }
+      return 'medium';
+    }
+
+    normalizeReasoningSummary(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'auto' || raw === 'none' || raw === 'short' || raw === 'detailed') {
+        return raw;
+      }
+      return 'auto';
+    }
+
+    normalizePromptCacheRetention(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'auto' || raw === 'in_memory' || raw === 'extended' || raw === 'disabled') {
+        return raw;
+      }
+      return 'auto';
+    }
+
+    normalizeModelRoutingMode(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'auto' || raw === 'user_priority' || raw === 'profile_priority') {
+        return raw;
+      }
+      return 'auto';
+    }
+
     cacheElements() {
       this.debugButton = this.doc.querySelector('[data-action="open-debug"]');
-      this.apiKeyInput = this.doc.querySelector('[data-field="api-key"]');
-      this.apiKeyToggle = this.doc.querySelector('[data-action="toggle-api"]');
+      this.exportButton = this.doc.querySelector('[data-action="open-export"]');
+      this.connectionModeProxy = this.doc.querySelector('[data-field="connection-mode-proxy"]');
+      this.connectionModeByok = this.doc.querySelector('[data-field="connection-mode-byok"]');
+      this.proxyUrlInput = this.doc.querySelector('[data-field="proxy-url"]');
+      this.proxyTokenInput = this.doc.querySelector('[data-field="proxy-token"]');
+      this.proxyProjectIdInput = this.doc.querySelector('[data-field="proxy-project-id"]');
+      this.proxyHeaderNameInput = this.doc.querySelector('[data-field="proxy-header-name"]');
+      this.proxyTokenPersistCheckbox = this.doc.querySelector('[data-field="proxy-token-persist"]');
+      this.proxySaveButton = this.doc.querySelector('[data-action="save-proxy-config"]');
+      this.proxyClearButton = this.doc.querySelector('[data-action="clear-proxy-config"]');
+      this.testConnectionButton = this.doc.querySelector('[data-action="test-connection"]');
+      this.byokKeyInput = this.doc.querySelector('[data-field="byok-key"]');
+      this.byokPersistCheckbox = this.doc.querySelector('[data-field="byok-persist"]');
+      this.byokPersistConfirmCheckbox = this.doc.querySelector('[data-field="byok-persist-confirm"]');
+      this.byokSaveSessionButton = this.doc.querySelector('[data-action="save-byok-session"]');
+      this.byokSaveButton = this.doc.querySelector('[data-action="save-byok"]');
+      this.byokClearButton = this.doc.querySelector('[data-action="clear-byok"]');
+      this.credentialsWarning = this.doc.querySelector('[data-field="credentials-warning"]');
+      this.credentialsStatus = this.doc.querySelector('[data-field="credentials-status"]');
+      this.connectionTestStatus = this.doc.querySelector('[data-field="connection-test-status"]');
       this.modelsRoot = this.doc.querySelector('[data-section="models"]');
       this.agentProfileSelect = this.doc.querySelector('[data-field="agent-profile"]');
+      this.modelRoutingModeSelect = this.doc.querySelector('[data-field="model-routing-mode"]');
       this.agentModelPolicyMode = this.doc.querySelector('[data-field="agent-model-policy-mode"]');
       this.agentModelSpeed = this.doc.querySelector('[data-field="agent-model-speed"]');
       this.agentModelPreference = this.doc.querySelector('[data-field="agent-model-preference"]');
       this.agentModelRouteOverride = this.doc.querySelector('[data-field="agent-model-route-override"]');
+      this.reasoningModeSelect = this.doc.querySelector('[data-field="reasoning-mode"]');
+      this.reasoningEffortSelect = this.doc.querySelector('[data-field="reasoning-effort"]');
+      this.reasoningSummarySelect = this.doc.querySelector('[data-field="reasoning-summary"]');
       this.agentStyleOverride = this.doc.querySelector('[data-field="agent-style-override"]');
       this.agentBatchSizeInput = this.doc.querySelector('[data-field="agent-batch-size"]');
       this.agentProofreadPassesInput = this.doc.querySelector('[data-field="agent-proofread-passes"]');
@@ -295,7 +718,16 @@
       this.agentMandatoryAuditIntervalInput = this.doc.querySelector('[data-field="agent-mandatory-audit-interval"]');
       this.agentCompressionThresholdInput = this.doc.querySelector('[data-field="agent-compression-threshold"]');
       this.agentContextLimitInput = this.doc.querySelector('[data-field="agent-context-limit"]');
+      this.compareDiffThresholdInput = this.doc.querySelector('[data-field="compare-diff-threshold"]');
       this.agentCompressionCooldownInput = this.doc.querySelector('[data-field="agent-compression-cooldown"]');
+      this.autoTuneEnabledCheckbox = this.doc.querySelector('[data-field="autotune-enabled"]');
+      this.autoTuneModeSelect = this.doc.querySelector('[data-field="autotune-mode"]');
+      this.autoTuneLastDecision = this.doc.querySelector('[data-field="autotune-last-decision"]');
+      this.autoTunePendingDiff = this.doc.querySelector('[data-field="autotune-pending-diff"]');
+      this.autoTunePendingReason = this.doc.querySelector('[data-field="autotune-pending-reason"]');
+      this.autoTuneApplyButton = this.doc.querySelector('[data-action="autotune-apply"]');
+      this.autoTuneRejectButton = this.doc.querySelector('[data-action="autotune-reject"]');
+      this.autoTuneResetButton = this.doc.querySelector('[data-action="autotune-reset"]');
       this.pipelineEnabledCheckbox = this.doc.querySelector('[data-field="pipeline-enabled"]');
       this.agentCategoryModeSelect = this.doc.querySelector('[data-field="agent-category-mode"]');
       this.agentCategoryModeHint = this.doc.querySelector('[data-field="agent-category-mode-hint"]');
@@ -303,12 +735,19 @@
       this.agentProfileImpactRoot = this.doc.querySelector('[data-section="agent-profile-impact"]');
       this.cacheEnabledCheckbox = this.doc.querySelector('[data-field="cache-enabled"]');
       this.apiCacheEnabledCheckbox = this.doc.querySelector('[data-field="api-cache-enabled"]');
+      this.memoryEnabledCheckbox = this.doc.querySelector('[data-field="memory-enabled"]');
+      this.memoryRestoreStats = this.doc.querySelector('[data-field="memory-restore-stats"]');
+      this.promptCacheRetentionSelect = this.doc.querySelector('[data-field="prompt-cache-retention"]');
+      this.promptCacheKeyInput = this.doc.querySelector('[data-field="prompt-cache-key"]');
       this.agentToolsRoot = this.doc.querySelector('[data-section="agent-tools-grid"]');
       this.statusText = this.doc.querySelector('[data-field="status-text"]');
       this.agentStatusText = this.doc.querySelector('[data-field="agent-status"]');
       this.statusChipPipeline = this.doc.querySelector('[data-field="status-chip-pipeline"]');
       this.statusChipModel = this.doc.querySelector('[data-field="status-chip-model"]');
       this.statusChipCache = this.doc.querySelector('[data-field="status-chip-cache"]');
+      this.activeJobsSummary = this.doc.querySelector('[data-field="active-jobs-summary"]');
+      this.activeJobsSelect = this.doc.querySelector('[data-field="active-jobs-select"]');
+      this.gotoJobTabButton = this.doc.querySelector('[data-action="goto-job-tab"]');
       this.statusMetricsRoot = this.doc.querySelector('[data-section="status-metrics"]');
       this.statusTrace = this.doc.querySelector('[data-field="status-trace"]');
       this.agentMiniStatuses = this.doc.querySelector('[data-section="agent-mini-statuses"]');
@@ -320,10 +759,9 @@
       this.startButtonLabel = this.startButton ? this.startButton.querySelector('.popup__action-label') : null;
       this.cancelButton = this.doc.querySelector('[data-action="cancel-translation"]');
       this.clearButton = this.doc.querySelector('[data-action="clear-translation-data"]');
-      this.visibilityButton = this.doc.querySelector('[data-action="toggle-visibility"]');
-      this.visibilityIconOn = this.doc.querySelector('[data-field="visibility-on"]');
-      this.visibilityIconOff = this.doc.querySelector('[data-field="visibility-off"]');
-      this.visibilityLabel = this.doc.querySelector('[data-field="visibility-label"]');
+      this.erasePageMemoryButton = this.doc.querySelector('[data-action="erase-page-memory"]');
+      this.eraseAllMemoryButton = this.doc.querySelector('[data-action="erase-all-memory"]');
+      this.displayModeSelect = this.doc.querySelector('[data-field="display-mode-select"]');
       this.popupTabButtons = Array.from(this.doc.querySelectorAll('[data-action="switch-tab"][data-tab]'));
       this.popupTabPanels = Array.from(this.doc.querySelectorAll('[data-tab-panel]'));
     }
@@ -331,6 +769,9 @@
     bindEvents() {
       if (this.debugButton) {
         this.debugButton.addEventListener('click', () => this.openDebug());
+      }
+      if (this.exportButton) {
+        this.exportButton.addEventListener('click', () => this.openDebugExport());
       }
       const openDebugFromStatus = (event) => {
         if (!event) {
@@ -353,15 +794,103 @@
         this.agentStatusText.addEventListener('click', openDebugFromStatus);
         this.agentStatusText.addEventListener('keydown', openDebugFromStatus);
       }
-
-      if (this.apiKeyToggle) {
-        this.apiKeyToggle.addEventListener('click', () => this.toggleApiKeyVisibility());
+      if (this.gotoJobTabButton) {
+        this.gotoJobTabButton.addEventListener('click', () => {
+          const rawValue = this.activeJobsSelect ? this.activeJobsSelect.value : '';
+          const tabId = Number(rawValue);
+          if (!Number.isFinite(tabId) || !this.ui || !this.ui.chromeApi || !this.ui.chromeApi.tabs || typeof this.ui.chromeApi.tabs.update !== 'function') {
+            return;
+          }
+          this.ui.chromeApi.tabs.update(tabId, { active: true }, () => {});
+        });
       }
 
-      if (this.apiKeyInput) {
-        this.apiKeyInput.addEventListener('input', (event) => {
-          this.state.apiKey = event.target.value || '';
-          this.scheduleSave({ apiKey: this.state.apiKey });
+      const onModeChanged = (mode) => {
+        this.state.connectionModeDraft = mode === 'BYOK' ? 'BYOK' : 'PROXY';
+        this.ui.setConnectionMode(this.state.connectionModeDraft);
+        this.renderCredentials();
+      };
+      if (this.connectionModeProxy) {
+        this.connectionModeProxy.addEventListener('change', (event) => {
+          if (event.target && event.target.checked) {
+            onModeChanged('PROXY');
+          }
+        });
+      }
+      if (this.connectionModeByok) {
+        this.connectionModeByok.addEventListener('change', (event) => {
+          if (event.target && event.target.checked) {
+            onModeChanged('BYOK');
+          }
+        });
+      }
+
+      if (this.proxySaveButton) {
+        this.proxySaveButton.addEventListener('click', () => {
+          const baseUrl = this.proxyUrlInput ? this.proxyUrlInput.value || '' : '';
+          const authToken = this.proxyTokenInput ? this.proxyTokenInput.value || '' : '';
+          const projectId = this.proxyProjectIdInput ? this.proxyProjectIdInput.value || '' : '';
+          const authHeaderName = this.proxyHeaderNameInput ? this.proxyHeaderNameInput.value || 'X-NT-Token' : 'X-NT-Token';
+          const persistToken = this.proxyTokenPersistCheckbox ? this.proxyTokenPersistCheckbox.checked === true : false;
+          this.ui.saveProxyConfig({ baseUrl, authToken, projectId, authHeaderName, persistToken });
+          this._setConnectionStatus('Proxy конфиг отправлен в BG');
+        });
+      }
+      if (this.proxyClearButton) {
+        this.proxyClearButton.addEventListener('click', () => {
+          this.ui.clearProxyConfig();
+          this._setConnectionStatus('Proxy конфиг очищается...');
+        });
+      }
+      if (this.testConnectionButton) {
+        this.testConnectionButton.addEventListener('click', () => {
+          this.ui.testConnection();
+          this._setConnectionTestStatus('Проверка подключения...');
+        });
+      }
+
+      if (this.byokSaveSessionButton) {
+        this.byokSaveSessionButton.addEventListener('click', () => {
+          const key = this.byokKeyInput ? this.byokKeyInput.value || '' : '';
+          this.ui.saveByokKey({ key, persist: false });
+          this._setConnectionStatus('BYOK ключ сохранён в сессию');
+        });
+      }
+      if (this.byokSaveButton) {
+        this.byokSaveButton.addEventListener('click', () => {
+          const key = this.byokKeyInput ? this.byokKeyInput.value || '' : '';
+          const persist = this.byokPersistCheckbox ? this.byokPersistCheckbox.checked === true : false;
+          const confirmed = this.byokPersistConfirmCheckbox ? this.byokPersistConfirmCheckbox.checked === true : false;
+          if (persist && !confirmed) {
+            this._setConnectionStatus('Подтвердите риск постоянного хранения ключа');
+            return;
+          }
+          this.ui.saveByokKey({ key, persist });
+          this._setConnectionStatus(persist ? 'BYOK ключ сохранён постоянно' : 'BYOK ключ сохранён в сессию');
+        });
+      }
+      if (this.byokClearButton) {
+        this.byokClearButton.addEventListener('click', () => {
+          this.ui.clearByokKey();
+          if (this.byokKeyInput) {
+            this.byokKeyInput.value = '';
+          }
+          this._setConnectionStatus('BYOK ключ очищается...');
+        });
+      }
+      if (this.byokPersistCheckbox) {
+        this.byokPersistCheckbox.addEventListener('change', (event) => {
+          this.state.byokDraft.persist = Boolean(event.target && event.target.checked);
+        });
+      }
+      if (this.byokPersistConfirmCheckbox) {
+        this.byokPersistConfirmCheckbox.addEventListener('change', (event) => {
+          this.state.byokDraft.persistConfirmed = Boolean(event.target && event.target.checked);
+        });
+      }
+      if (this.proxyTokenPersistCheckbox) {
+        this.proxyTokenPersistCheckbox.addEventListener('change', (event) => {
+          this.state.proxyDraft.persistToken = Boolean(event.target && event.target.checked);
         });
       }
 
@@ -416,10 +945,57 @@
         });
       }
 
+      if (this.modelRoutingModeSelect) {
+        this.modelRoutingModeSelect.addEventListener('change', (event) => {
+          const mode = this.normalizeModelRoutingMode(event.target ? event.target.value : 'auto');
+          this._patchUserSettings({
+            models: {
+              modelRoutingMode: mode
+            }
+          });
+          this.renderAgentControls();
+        });
+      }
+
       if (this.agentProfileSelect) {
         this.agentProfileSelect.addEventListener('change', (event) => {
           this.state.translationAgentProfile = this.normalizeAgentProfile(event.target.value);
+          this._patchUserSettings({ profile: this.state.translationAgentProfile });
           this.scheduleSave({ translationAgentProfile: this.state.translationAgentProfile });
+          this.renderAgentControls();
+        });
+      }
+
+      if (this.reasoningModeSelect) {
+        this.reasoningModeSelect.addEventListener('change', (event) => {
+          const mode = this.normalizeReasoningMode(event.target ? event.target.value : 'auto');
+          this._patchUserSettings({
+            reasoning: {
+              reasoningMode: mode
+            }
+          });
+          this.renderAgentControls();
+        });
+      }
+      if (this.reasoningEffortSelect) {
+        this.reasoningEffortSelect.addEventListener('change', (event) => {
+          const effort = this.normalizeReasoningEffort(event.target ? event.target.value : 'medium');
+          this._patchUserSettings({
+            reasoning: {
+              reasoningEffort: effort
+            }
+          });
+          this.renderAgentControls();
+        });
+      }
+      if (this.reasoningSummarySelect) {
+        this.reasoningSummarySelect.addEventListener('change', (event) => {
+          const summary = this.normalizeReasoningSummary(event.target ? event.target.value : 'auto');
+          this._patchUserSettings({
+            reasoning: {
+              reasoningSummary: summary
+            }
+          });
           this.renderAgentControls();
         });
       }
@@ -483,9 +1059,80 @@
           updateTuning({ contextFootprintLimit: event.target.value });
         });
       }
+      if (this.compareDiffThresholdInput) {
+        this.compareDiffThresholdInput.addEventListener('input', (event) => {
+          const value = Number(event && event.target ? event.target.value : null);
+          const normalized = Number.isFinite(value)
+            ? Math.max(500, Math.min(50000, Math.round(value)))
+            : 8000;
+          this.state.translationCompareDiffThreshold = normalized;
+          if (event && event.target) {
+            event.target.value = String(normalized);
+          }
+          this.scheduleSave({ translationCompareDiffThreshold: normalized });
+        });
+      }
       if (this.agentCompressionCooldownInput) {
         this.agentCompressionCooldownInput.addEventListener('input', (event) => {
           updateTuning({ compressionCooldownMs: event.target.value });
+        });
+      }
+      if (this.autoTuneEnabledCheckbox) {
+        this.autoTuneEnabledCheckbox.addEventListener('change', (event) => {
+          updateTuning({ autoTuneEnabled: Boolean(event && event.target && event.target.checked) });
+        });
+      }
+      if (this.autoTuneModeSelect) {
+        this.autoTuneModeSelect.addEventListener('change', (event) => {
+          const mode = event && event.target && event.target.value === 'ask_user' ? 'ask_user' : 'auto_apply';
+          updateTuning({ autoTuneMode: mode });
+        });
+      }
+      if (this.autoTuneApplyButton) {
+        this.autoTuneApplyButton.addEventListener('click', () => {
+          const proposal = this._pendingAutoTuneProposal();
+          if (!proposal || !proposal.id) {
+            return;
+          }
+          const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+          const command = UiProtocol && UiProtocol.Commands
+            ? UiProtocol.Commands.APPLY_AUTOTUNE_PROPOSAL
+            : 'APPLY_AUTOTUNE_PROPOSAL';
+          this.ui.sendUiCommand(command, {
+            tabId: this.activeTabId,
+            jobId: this.state.translationJob && this.state.translationJob.id ? this.state.translationJob.id : null,
+            proposalId: proposal.id
+          });
+        });
+      }
+      if (this.autoTuneRejectButton) {
+        this.autoTuneRejectButton.addEventListener('click', () => {
+          const proposal = this._pendingAutoTuneProposal();
+          if (!proposal || !proposal.id) {
+            return;
+          }
+          const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+          const command = UiProtocol && UiProtocol.Commands
+            ? UiProtocol.Commands.REJECT_AUTOTUNE_PROPOSAL
+            : 'REJECT_AUTOTUNE_PROPOSAL';
+          this.ui.sendUiCommand(command, {
+            tabId: this.activeTabId,
+            jobId: this.state.translationJob && this.state.translationJob.id ? this.state.translationJob.id : null,
+            proposalId: proposal.id,
+            reason: 'Отклонено пользователем из popup'
+          });
+        });
+      }
+      if (this.autoTuneResetButton) {
+        this.autoTuneResetButton.addEventListener('click', () => {
+          const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+          const command = UiProtocol && UiProtocol.Commands
+            ? UiProtocol.Commands.RESET_AUTOTUNE_OVERRIDES
+            : 'RESET_AUTOTUNE_OVERRIDES';
+          this.ui.sendUiCommand(command, {
+            tabId: this.activeTabId,
+            jobId: this.state.translationJob && this.state.translationJob.id ? this.state.translationJob.id : null
+          });
         });
       }
 
@@ -543,6 +1190,47 @@
         this.apiCacheEnabledCheckbox.addEventListener('change', (event) => {
           this.state.translationApiCacheEnabled = Boolean(event.target.checked);
           this.scheduleSave({ translationApiCacheEnabled: this.state.translationApiCacheEnabled });
+          this._patchUserSettings({
+            caching: {
+              compatCache: this.state.translationApiCacheEnabled
+            }
+          });
+        });
+      }
+      if (this.memoryEnabledCheckbox) {
+        this.memoryEnabledCheckbox.addEventListener('change', (event) => {
+          this.state.translationMemoryEnabled = Boolean(event.target && event.target.checked);
+          this.scheduleSave({ translationMemoryEnabled: this.state.translationMemoryEnabled });
+          this._patchUserSettings({
+            memory: {
+              enabled: this.state.translationMemoryEnabled
+            }
+          });
+          this.renderAgentControls();
+        });
+      }
+      if (this.promptCacheRetentionSelect) {
+        this.promptCacheRetentionSelect.addEventListener('change', (event) => {
+          const retention = this.normalizePromptCacheRetention(event.target ? event.target.value : 'auto');
+          this._patchUserSettings({
+            caching: {
+              promptCacheRetention: retention
+            }
+          });
+          this.renderAgentControls();
+        });
+      }
+      if (this.promptCacheKeyInput) {
+        this.promptCacheKeyInput.addEventListener('input', (event) => {
+          const raw = event && event.target && typeof event.target.value === 'string'
+            ? event.target.value
+            : '';
+          const promptCacheKey = raw.trim() ? raw.trim().slice(0, 128) : null;
+          this._patchUserSettings({
+            caching: {
+              promptCacheKey
+            }
+          });
         });
       }
 
@@ -563,7 +1251,14 @@
             ...this.state.translationAgentTools,
             [key]: mode
           };
-          this.scheduleSave({ translationAgentTools: this.state.translationAgentTools });
+          this._patchUserSettings({
+            agent: {
+              toolConfigUser: {
+                [key]: mode
+              }
+            }
+          });
+          this.renderAgentControls();
         });
       }
 
@@ -579,8 +1274,22 @@
           } else {
             list.delete(target.value);
           }
-          this.state.translationModelList = Array.from(list);
-          this.scheduleSave({ translationModelList: this.state.translationModelList });
+          const allowlist = Array.from(list);
+          const user = this._userSettings();
+          const currentPriority = user.models && Array.isArray(user.models.modelUserPriority)
+            ? user.models.modelUserPriority
+            : [];
+          const nextPriority = currentPriority.filter((spec) => allowlist.includes(spec));
+          this.state.translationModelList = allowlist;
+          this.scheduleSave({ translationModelList: allowlist });
+          this._patchUserSettings({
+            models: {
+              agentAllowedModels: allowlist,
+              modelUserPriority: nextPriority
+            }
+          });
+          this.renderModels();
+          this.renderAgentControls();
         });
       }
 
@@ -601,8 +1310,8 @@
         });
       }
 
-      if (this.visibilityButton) {
-        this.visibilityButton.addEventListener('click', () => this.toggleVisibility());
+      if (this.displayModeSelect) {
+        this.displayModeSelect.addEventListener('change', () => this.onDisplayModeChanged());
       }
 
       if (this.startButton) {
@@ -615,6 +1324,12 @@
 
       if (this.clearButton) {
         this.clearButton.addEventListener('click', () => this.clearTranslationData());
+      }
+      if (this.erasePageMemoryButton) {
+        this.erasePageMemoryButton.addEventListener('click', () => this.erasePageMemory());
+      }
+      if (this.eraseAllMemoryButton) {
+        this.eraseAllMemoryButton.addEventListener('click', () => this.eraseAllMemory());
       }
 
       if (Array.isArray(this.popupTabButtons) && this.popupTabButtons.length) {
@@ -636,8 +1351,25 @@
       this.modelRegistry = this.ui.getModelRegistry();
 
       const settings = payload.settings || {};
-      if (Object.prototype.hasOwnProperty.call(settings, 'apiKey')) {
-        this.state.apiKey = settings.apiKey || '';
+      if (Object.prototype.hasOwnProperty.call(settings, 'schemaVersion')) {
+        this.state.settingsSchemaVersion = Number.isFinite(Number(settings.schemaVersion))
+          ? Number(settings.schemaVersion)
+          : 1;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'userSettings')) {
+        this.state.settingsUser = settings.userSettings && typeof settings.userSettings === 'object'
+          ? settings.userSettings
+          : null;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'effectiveSettings')) {
+        this.state.settingsEffective = settings.effectiveSettings && typeof settings.effectiveSettings === 'object'
+          ? settings.effectiveSettings
+          : null;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'overrides')) {
+        this.state.settingsOverrides = settings.overrides && typeof settings.overrides === 'object'
+          ? settings.overrides
+          : { changed: [], values: {} };
       }
       if (Array.isArray(settings.translationModelList)) {
         this.state.translationModelList = settings.translationModelList;
@@ -675,23 +1407,62 @@
       if (Object.prototype.hasOwnProperty.call(settings, 'translationCategoryList')) {
         this.state.translationCategoryList = this.normalizeCategoryList(settings.translationCategoryList);
       }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationMemoryEnabled')) {
+        this.state.translationMemoryEnabled = settings.translationMemoryEnabled !== false;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationMemoryMaxPages')) {
+        this.state.translationMemoryMaxPages = Number.isFinite(Number(settings.translationMemoryMaxPages))
+          ? Number(settings.translationMemoryMaxPages)
+          : this.state.translationMemoryMaxPages;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationMemoryMaxBlocks')) {
+        this.state.translationMemoryMaxBlocks = Number.isFinite(Number(settings.translationMemoryMaxBlocks))
+          ? Number(settings.translationMemoryMaxBlocks)
+          : this.state.translationMemoryMaxBlocks;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationMemoryMaxAgeDays')) {
+        this.state.translationMemoryMaxAgeDays = Number.isFinite(Number(settings.translationMemoryMaxAgeDays))
+          ? Number(settings.translationMemoryMaxAgeDays)
+          : this.state.translationMemoryMaxAgeDays;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationMemoryGcOnStartup')) {
+        this.state.translationMemoryGcOnStartup = settings.translationMemoryGcOnStartup !== false;
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationMemoryIgnoredQueryParams')) {
+        this.state.translationMemoryIgnoredQueryParams = Array.isArray(settings.translationMemoryIgnoredQueryParams)
+          ? settings.translationMemoryIgnoredQueryParams
+          : this.state.translationMemoryIgnoredQueryParams;
+      }
       if (Object.prototype.hasOwnProperty.call(settings, 'translationPageCacheEnabled')) {
         this.state.translationPageCacheEnabled = settings.translationPageCacheEnabled !== false;
       }
       if (Object.prototype.hasOwnProperty.call(settings, 'translationApiCacheEnabled')) {
         this.state.translationApiCacheEnabled = settings.translationApiCacheEnabled !== false;
       }
+      if (Object.prototype.hasOwnProperty.call(settings, 'translationCompareDiffThreshold')) {
+        this.state.translationCompareDiffThreshold = Number.isFinite(Number(settings.translationCompareDiffThreshold))
+          ? Math.max(500, Math.min(50000, Math.round(Number(settings.translationCompareDiffThreshold))))
+          : this.state.translationCompareDiffThreshold;
+      }
       if (Object.prototype.hasOwnProperty.call(settings, 'translationPopupActiveTab')) {
         this.state.translationPopupActiveTab = this.normalizePopupTab(settings.translationPopupActiveTab);
       }
+      this._syncLegacyStateFromV2();
 
-      if (payload.tabId !== null && payload.tabId !== undefined) {
+      if (this.activeTabId === null && payload.tabId !== null && payload.tabId !== undefined) {
         this.activeTabId = payload.tabId;
       }
 
       const visibilityMap = payload.translationVisibilityByTab || {};
-      if (this.activeTabId !== null && Object.prototype.hasOwnProperty.call(visibilityMap, this.activeTabId)) {
-        this.state.translationVisible = visibilityMap[this.activeTabId] !== false;
+      const modeMap = payload.translationDisplayModeByTab || {};
+      if (this.activeTabId !== null) {
+        if (Object.prototype.hasOwnProperty.call(modeMap, this.activeTabId)) {
+          this.state.translationDisplayMode = this.normalizeDisplayMode(modeMap[this.activeTabId], true);
+          this.state.translationVisible = this.state.translationDisplayMode !== 'original';
+        } else if (Object.prototype.hasOwnProperty.call(visibilityMap, this.activeTabId)) {
+          this.state.translationVisible = visibilityMap[this.activeTabId] !== false;
+          this.state.translationDisplayMode = this.normalizeDisplayMode(null, this.state.translationVisible);
+        }
       }
       if (payload.translationStatusByTab && typeof payload.translationStatusByTab === 'object') {
         this.state.translationStatusByTab = payload.translationStatusByTab;
@@ -703,6 +1474,15 @@
       }
       if (Object.prototype.hasOwnProperty.call(payload, 'translationJob')) {
         this.state.translationJob = payload.translationJob || null;
+        this.state.lastMemoryRestore = this.state.translationJob
+          && this.state.translationJob.memoryRestore
+          && typeof this.state.translationJob.memoryRestore === 'object'
+          ? this.state.translationJob.memoryRestore
+          : this.state.lastMemoryRestore;
+        if (this.state.translationJob && this.state.translationJob.displayMode) {
+          this.state.translationDisplayMode = this.normalizeDisplayMode(this.state.translationJob.displayMode, true);
+          this.state.translationVisible = this.state.translationDisplayMode !== 'original';
+        }
       }
       if (Object.prototype.hasOwnProperty.call(payload, 'translationProgress')) {
         this.state.translationProgress = Number(payload.translationProgress || 0);
@@ -721,6 +1501,15 @@
       }
       if (Object.prototype.hasOwnProperty.call(payload, 'availableCategories')) {
         this.state.availableCategories = this.normalizeCategoryList(payload.availableCategories);
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'serverCaps')) {
+        const caps = payload.serverCaps && typeof payload.serverCaps === 'object' ? payload.serverCaps : null;
+        this.state.schedulerRuntime = caps && caps.schedulerRuntime && typeof caps.schedulerRuntime === 'object'
+          ? caps.schedulerRuntime
+          : null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'security')) {
+        this._applySecuritySnapshot(payload.security);
       }
       this._syncCategoryDataFromJob();
       this._syncCategoryDataFromStatus(payload.translationStatusByTab || null);
@@ -742,13 +1531,46 @@
         return;
       }
       this.modelRegistry = this.ui.getModelRegistry();
-      const patch = payload.patch && typeof payload.patch === 'object'
+      const rawPatch = payload.patch && typeof payload.patch === 'object'
         ? payload.patch
         : payload;
-
-      if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {
-        this.state.apiKey = patch.apiKey || '';
+      const patch = rawPatch && rawPatch.settings && typeof rawPatch.settings === 'object'
+        ? { ...rawPatch.settings, ...rawPatch }
+        : rawPatch;
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const settingsResultType = UiProtocol && UiProtocol.UI_SETTINGS_RESULT ? UiProtocol.UI_SETTINGS_RESULT : 'ui:settings:result';
+      if (patch && patch.type === settingsResultType && patch.ok === false) {
+        const message = patch.error && patch.error.message
+          ? patch.error.message
+          : 'Ошибка сохранения настроек';
+        if (this.statusTrace) {
+          this.statusTrace.textContent = `Ошибка настроек: ${message}`;
+        }
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'security')) {
+        this._applySecuritySnapshot(patch.security);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'schemaVersion')) {
+        this.state.settingsSchemaVersion = Number.isFinite(Number(patch.schemaVersion))
+          ? Number(patch.schemaVersion)
+          : this.state.settingsSchemaVersion;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'userSettings')) {
+        this.state.settingsUser = patch.userSettings && typeof patch.userSettings === 'object'
+          ? patch.userSettings
+          : this.state.settingsUser;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'effectiveSettings')) {
+        this.state.settingsEffective = patch.effectiveSettings && typeof patch.effectiveSettings === 'object'
+          ? patch.effectiveSettings
+          : this.state.settingsEffective;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'overrides')) {
+        this.state.settingsOverrides = patch.overrides && typeof patch.overrides === 'object'
+          ? patch.overrides
+          : this.state.settingsOverrides;
+      }
+
       if (Object.prototype.hasOwnProperty.call(patch, 'translationModelList') && Array.isArray(patch.translationModelList)) {
         this.state.translationModelList = patch.translationModelList;
       }
@@ -782,19 +1604,63 @@
       if (Object.prototype.hasOwnProperty.call(patch, 'translationCategoryList')) {
         this.state.translationCategoryList = this.normalizeCategoryList(patch.translationCategoryList);
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationMemoryEnabled')) {
+        this.state.translationMemoryEnabled = patch.translationMemoryEnabled !== false;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationMemoryMaxPages')) {
+        this.state.translationMemoryMaxPages = Number.isFinite(Number(patch.translationMemoryMaxPages))
+          ? Number(patch.translationMemoryMaxPages)
+          : this.state.translationMemoryMaxPages;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationMemoryMaxBlocks')) {
+        this.state.translationMemoryMaxBlocks = Number.isFinite(Number(patch.translationMemoryMaxBlocks))
+          ? Number(patch.translationMemoryMaxBlocks)
+          : this.state.translationMemoryMaxBlocks;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationMemoryMaxAgeDays')) {
+        this.state.translationMemoryMaxAgeDays = Number.isFinite(Number(patch.translationMemoryMaxAgeDays))
+          ? Number(patch.translationMemoryMaxAgeDays)
+          : this.state.translationMemoryMaxAgeDays;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationMemoryGcOnStartup')) {
+        this.state.translationMemoryGcOnStartup = patch.translationMemoryGcOnStartup !== false;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationMemoryIgnoredQueryParams')) {
+        this.state.translationMemoryIgnoredQueryParams = Array.isArray(patch.translationMemoryIgnoredQueryParams)
+          ? patch.translationMemoryIgnoredQueryParams
+          : this.state.translationMemoryIgnoredQueryParams;
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationPageCacheEnabled')) {
         this.state.translationPageCacheEnabled = patch.translationPageCacheEnabled !== false;
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationApiCacheEnabled')) {
         this.state.translationApiCacheEnabled = patch.translationApiCacheEnabled !== false;
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'translationCompareDiffThreshold')) {
+        this.state.translationCompareDiffThreshold = Number.isFinite(Number(patch.translationCompareDiffThreshold))
+          ? Math.max(500, Math.min(50000, Math.round(Number(patch.translationCompareDiffThreshold))))
+          : this.state.translationCompareDiffThreshold;
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationPopupActiveTab')) {
         this.state.translationPopupActiveTab = this.normalizePopupTab(patch.translationPopupActiveTab);
       }
-      if (Object.prototype.hasOwnProperty.call(patch, 'translationVisibilityByTab') && this.activeTabId !== null) {
-        const map = patch.translationVisibilityByTab || {};
-        if (Object.prototype.hasOwnProperty.call(map, this.activeTabId)) {
-          this.state.translationVisible = map[this.activeTabId] !== false;
+      this._syncLegacyStateFromV2();
+      if (this.activeTabId !== null) {
+        if (Object.prototype.hasOwnProperty.call(patch, 'translationDisplayModeByTab')) {
+          const modeMap = patch.translationDisplayModeByTab || {};
+          if (Object.prototype.hasOwnProperty.call(modeMap, this.activeTabId)) {
+            this.state.translationDisplayMode = this.normalizeDisplayMode(modeMap[this.activeTabId], true);
+            this.state.translationVisible = this.state.translationDisplayMode !== 'original';
+          }
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, 'translationVisibilityByTab')) {
+          const map = patch.translationVisibilityByTab || {};
+          if (Object.prototype.hasOwnProperty.call(map, this.activeTabId)) {
+            this.state.translationVisible = map[this.activeTabId] !== false;
+            if (!Object.prototype.hasOwnProperty.call(patch, 'translationDisplayModeByTab')) {
+              this.state.translationDisplayMode = this.normalizeDisplayMode(null, this.state.translationVisible);
+            }
+          }
         }
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationStatusByTab') && patch.translationStatusByTab && typeof patch.translationStatusByTab === 'object') {
@@ -807,6 +1673,15 @@
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationJob')) {
         this.state.translationJob = patch.translationJob || null;
+        this.state.lastMemoryRestore = this.state.translationJob
+          && this.state.translationJob.memoryRestore
+          && typeof this.state.translationJob.memoryRestore === 'object'
+          ? this.state.translationJob.memoryRestore
+          : this.state.lastMemoryRestore;
+        if (this.state.translationJob && this.state.translationJob.displayMode) {
+          this.state.translationDisplayMode = this.normalizeDisplayMode(this.state.translationJob.displayMode, true);
+          this.state.translationVisible = this.state.translationDisplayMode !== 'original';
+        }
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationProgress')) {
         this.state.translationProgress = Number(patch.translationProgress || 0);
@@ -829,6 +1704,12 @@
       if (Object.prototype.hasOwnProperty.call(patch, 'translationPipelineEnabled')) {
         this.state.translationPipelineEnabled = Boolean(patch.translationPipelineEnabled);
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'serverCaps')) {
+        const caps = patch.serverCaps && typeof patch.serverCaps === 'object' ? patch.serverCaps : null;
+        this.state.schedulerRuntime = caps && caps.schedulerRuntime && typeof caps.schedulerRuntime === 'object'
+          ? caps.schedulerRuntime
+          : this.state.schedulerRuntime;
+      }
       this._syncCategoryDataFromJob();
       this._syncCategoryDataFromStatus(patch.translationStatusByTab || null);
       this._syncCategoryDraft();
@@ -850,13 +1731,18 @@
       });
     }
 
-    async toggleVisibility() {
-      this.state.translationVisible = !this.state.translationVisible;
+    async onDisplayModeChanged() {
+      const mode = this.normalizeDisplayMode(
+        this.displayModeSelect ? this.displayModeSelect.value : this.state.translationDisplayMode,
+        this.state.translationVisible
+      );
+      this.state.translationDisplayMode = mode;
+      this.state.translationVisible = mode !== 'original';
       this.updateVisibilityIcon();
       if (this.activeTabId === null) {
         return;
       }
-      await this.ui.setVisibility(this.activeTabId, this.state.translationVisible);
+      await this.ui.setDisplayMode(this.activeTabId, mode);
     }
 
     async startTranslation() {
@@ -933,6 +1819,40 @@
       this.renderStatus();
     }
 
+    erasePageMemory() {
+      if (this.activeTabId === null) {
+        return;
+      }
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.ERASE_TRANSLATION_MEMORY
+        : 'ERASE_TRANSLATION_MEMORY';
+      this.ui.sendUiCommand(command, {
+        tabId: this.activeTabId,
+        scope: 'page'
+      });
+      if (this.memoryRestoreStats) {
+        this.memoryRestoreStats.textContent = 'Память страницы очищается...';
+      }
+    }
+
+    eraseAllMemory() {
+      const confirmed = global.confirm ? global.confirm('Стереть всю память перевода? Это действие нельзя отменить.') : true;
+      if (!confirmed) {
+        return;
+      }
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.ERASE_TRANSLATION_MEMORY
+        : 'ERASE_TRANSLATION_MEMORY';
+      this.ui.sendUiCommand(command, {
+        scope: 'all'
+      });
+      if (this.memoryRestoreStats) {
+        this.memoryRestoreStats.textContent = 'Вся память очищается...';
+      }
+    }
+
     async openDebug() {
       const tab = await this.ui.getActiveTab();
       this.ui.openDebug({
@@ -941,36 +1861,80 @@
       });
     }
 
-    toggleApiKeyVisibility() {
-      if (!this.apiKeyInput || !this.apiKeyToggle) {
-        return;
-      }
-      const isPassword = this.apiKeyInput.type === 'password';
-      this.apiKeyInput.type = isPassword ? 'text' : 'password';
-      this.apiKeyToggle.textContent = isPassword ? 'Скрыть' : 'Показать';
+    async openDebugExport() {
+      const tab = await this.ui.getActiveTab();
+      this.ui.openDebug({
+        tabId: tab ? tab.id : '',
+        url: tab && tab.url ? tab.url : '',
+        section: 'export'
+      });
     }
 
     normalizeAgentProfile(value) {
-      if (value === 'balanced' || value === 'literal' || value === 'readable' || value === 'technical') {
-        return value;
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'auto' || raw === 'fast' || raw === 'balanced' || raw === 'bulk' || raw === 'accurate' || raw === 'research' || raw === 'custom') {
+        return raw;
+      }
+      if (raw === 'readable') {
+        return 'bulk';
+      }
+      if (raw === 'literal') {
+        return 'accurate';
+      }
+      if (raw === 'technical') {
+        return 'research';
       }
       return 'auto';
     }
 
     _profileLabel(profile) {
+      if (profile === 'fast') {
+        return 'быстрый';
+      }
       if (profile === 'balanced') {
         return 'сбаланс.';
       }
-      if (profile === 'literal') {
-        return 'дословный';
+      if (profile === 'bulk') {
+        return 'массовый';
       }
-      if (profile === 'readable') {
-        return 'читабельный';
+      if (profile === 'accurate') {
+        return 'точный';
       }
-      if (profile === 'technical') {
-        return 'технический';
+      if (profile === 'research') {
+        return 'исслед.';
+      }
+      if (profile === 'custom') {
+        return 'кастом';
       }
       return 'авто';
+    }
+
+    _toLegacyAgentProfile(profile) {
+      const normalized = this.normalizeAgentProfile(profile);
+      if (normalized === 'bulk') {
+        return 'readable';
+      }
+      if (normalized === 'accurate') {
+        return 'literal';
+      }
+      if (normalized === 'research') {
+        return 'technical';
+      }
+      if (normalized === 'fast') {
+        return 'readable';
+      }
+      if (normalized === 'custom') {
+        return 'balanced';
+      }
+      return normalized;
+    }
+
+    normalizeDisplayMode(value, visibleFallback = true) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'original' || raw === 'translated' || raw === 'compare') {
+        return raw;
+      }
+      return visibleFallback === false ? 'original' : 'translated';
     }
 
     _phaseLabel(phase) {
@@ -1085,7 +2049,7 @@
         const raw = source[tool.key];
         out[tool.key] = raw === 'on' || raw === 'off' || raw === 'auto'
           ? raw
-          : DEFAULT_AGENT_TOOLS[tool.key];
+          : 'auto';
       });
       return out;
     }
@@ -1127,6 +2091,8 @@
         maxBatchSizeOverride: normalizeNullableInt(source.maxBatchSizeOverride, 1),
         proofreadingPassesOverride: normalizeNullableInt(source.proofreadingPassesOverride, 0),
         parallelismOverride: normalizeToken(source.parallelismOverride, ['auto', 'low', 'mixed', 'high'], LOCAL_AGENT_TUNING_DEFAULTS.parallelismOverride),
+        autoTuneEnabled: source.autoTuneEnabled !== false,
+        autoTuneMode: source.autoTuneMode === 'ask_user' ? 'ask_user' : 'auto_apply',
         plannerTemperature: normalizeNumber(source.plannerTemperature, 0, null, LOCAL_AGENT_TUNING_DEFAULTS.plannerTemperature),
         plannerMaxOutputTokens: Math.round(normalizeNumber(source.plannerMaxOutputTokens, 1, null, LOCAL_AGENT_TUNING_DEFAULTS.plannerMaxOutputTokens)),
         auditIntervalMs: Math.round(normalizeNumber(source.auditIntervalMs, 0, null, LOCAL_AGENT_TUNING_DEFAULTS.auditIntervalMs)),
@@ -1143,8 +2109,82 @@
     }
 
     renderAgentControls() {
+      const userSettings = this._userSettings();
+      const effectiveSettings = this._effectiveSettings();
+      const userReasoning = userSettings.reasoning && typeof userSettings.reasoning === 'object'
+        ? userSettings.reasoning
+        : {};
+      const effectiveReasoning = effectiveSettings.reasoning && typeof effectiveSettings.reasoning === 'object'
+        ? effectiveSettings.reasoning
+        : {};
+      const userCaching = userSettings.caching && typeof userSettings.caching === 'object'
+        ? userSettings.caching
+        : {};
+      const userMemory = userSettings.memory && typeof userSettings.memory === 'object'
+        ? userSettings.memory
+        : {};
+      const userModels = userSettings.models && typeof userSettings.models === 'object'
+        ? userSettings.models
+        : {};
+      const effectiveModels = effectiveSettings.models && typeof effectiveSettings.models === 'object'
+        ? effectiveSettings.models
+        : {};
+      const effectiveMemory = effectiveSettings.memory && typeof effectiveSettings.memory === 'object'
+        ? effectiveSettings.memory
+        : {};
+      const userAgent = userSettings.agent && typeof userSettings.agent === 'object'
+        ? userSettings.agent
+        : {};
+      this.state.translationModelList = this._resolveAllowlistForUi();
+      this.state.translationAgentTools = this.normalizeAgentTools(
+        userAgent.toolConfigUser && typeof userAgent.toolConfigUser === 'object'
+          ? userAgent.toolConfigUser
+          : this.state.translationAgentTools
+      );
+      this.state.translationAgentProfile = this.normalizeAgentProfile(
+        userSettings.profile || this.state.translationAgentProfile
+      );
       if (this.agentProfileSelect) {
         this.agentProfileSelect.value = this.normalizeAgentProfile(this.state.translationAgentProfile);
+      }
+      if (this.modelRoutingModeSelect) {
+        this.modelRoutingModeSelect.value = this.normalizeModelRoutingMode(
+          userModels.modelRoutingMode || effectiveModels.modelRoutingMode || 'auto'
+        );
+      }
+      if (this.reasoningModeSelect) {
+        this.reasoningModeSelect.value = this.normalizeReasoningMode(
+          userReasoning.reasoningMode || effectiveReasoning.reasoningMode || 'auto'
+        );
+      }
+      if (this.reasoningEffortSelect) {
+        this.reasoningEffortSelect.value = this.normalizeReasoningEffort(
+          userReasoning.reasoningEffort || effectiveReasoning.reasoningEffort || 'medium'
+        );
+      }
+      if (this.reasoningSummarySelect) {
+        this.reasoningSummarySelect.value = this.normalizeReasoningSummary(
+          userReasoning.reasoningSummary || effectiveReasoning.reasoningSummary || 'auto'
+        );
+      }
+      const reasoningCustom = this.reasoningModeSelect
+        ? this.normalizeReasoningMode(this.reasoningModeSelect.value) === 'custom'
+        : false;
+      if (this.reasoningEffortSelect) {
+        this.reasoningEffortSelect.disabled = !reasoningCustom;
+      }
+      if (this.reasoningSummarySelect) {
+        this.reasoningSummarySelect.disabled = !reasoningCustom;
+      }
+      if (this.promptCacheRetentionSelect) {
+        this.promptCacheRetentionSelect.value = this.normalizePromptCacheRetention(
+          userCaching.promptCacheRetention || 'auto'
+        );
+      }
+      if (this.promptCacheKeyInput) {
+        this.promptCacheKeyInput.value = typeof userCaching.promptCacheKey === 'string'
+          ? userCaching.promptCacheKey
+          : '';
       }
       const modelPolicy = this.normalizeAgentModelPolicy(
         this.state.translationAgentModelPolicy,
@@ -1206,11 +2246,23 @@
       if (this.agentContextLimitInput) {
         this.agentContextLimitInput.value = String(tuning.contextFootprintLimit);
       }
+      if (this.compareDiffThresholdInput) {
+        this.compareDiffThresholdInput.value = String(this.state.translationCompareDiffThreshold);
+      }
       if (this.agentCompressionCooldownInput) {
         this.agentCompressionCooldownInput.value = String(tuning.compressionCooldownMs);
       }
+      if (this.autoTuneEnabledCheckbox) {
+        this.autoTuneEnabledCheckbox.checked = tuning.autoTuneEnabled !== false;
+      }
+      if (this.autoTuneModeSelect) {
+        this.autoTuneModeSelect.value = tuning.autoTuneMode === 'ask_user' ? 'ask_user' : 'auto_apply';
+      }
       if (this.pipelineEnabledCheckbox) {
         this.pipelineEnabledCheckbox.checked = this.state.translationPipelineEnabled === true;
+      }
+      if (Object.prototype.hasOwnProperty.call(userCaching, 'compatCache')) {
+        this.state.translationApiCacheEnabled = userCaching.compatCache !== false;
       }
       if (this.cacheEnabledCheckbox) {
         this.cacheEnabledCheckbox.checked = this.state.translationPageCacheEnabled !== false;
@@ -1218,11 +2270,109 @@
       if (this.apiCacheEnabledCheckbox) {
         this.apiCacheEnabledCheckbox.checked = this.state.translationApiCacheEnabled !== false;
       }
+      this.state.translationMemoryEnabled = Object.prototype.hasOwnProperty.call(userMemory, 'enabled')
+        ? userMemory.enabled !== false
+        : (Object.prototype.hasOwnProperty.call(effectiveMemory, 'enabled')
+          ? effectiveMemory.enabled !== false
+          : this.state.translationMemoryEnabled !== false);
+      if (this.memoryEnabledCheckbox) {
+        this.memoryEnabledCheckbox.checked = this.state.translationMemoryEnabled !== false;
+      }
+      const memoryRestore = this.state.translationJob
+        && this.state.translationJob.memoryRestore
+        && typeof this.state.translationJob.memoryRestore === 'object'
+        ? this.state.translationJob.memoryRestore
+        : (this.state.agentState && this.state.agentState.memory && this.state.agentState.memory.lastRestore
+          ? this.state.agentState.memory.lastRestore
+          : null);
+      if (this.memoryRestoreStats) {
+        if (memoryRestore && Number.isFinite(Number(memoryRestore.restoredCount)) && Number(memoryRestore.restoredCount) > 0) {
+          this.memoryRestoreStats.textContent = `Память: восстановлено ${Number(memoryRestore.restoredCount)} блоков (${memoryRestore.matchType || 'match'})`;
+        } else {
+          this.memoryRestoreStats.textContent = 'Память: данных восстановления пока нет';
+        }
+      }
       this.renderToolControls();
       this.renderCategorySettingsControls();
       this.renderProfileImpactPreview();
       this.renderAgentMiniStatuses();
       this.renderRuntimeCategoryChooser();
+      this.renderAutoTuneControls();
+    }
+
+    _jobRunSettingsAutoTune() {
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const runSettings = job && job.runSettings && typeof job.runSettings === 'object'
+        ? job.runSettings
+        : null;
+      const autoTune = runSettings && runSettings.autoTune && typeof runSettings.autoTune === 'object'
+        ? runSettings.autoTune
+        : null;
+      return autoTune;
+    }
+
+    _pendingAutoTuneProposal() {
+      const autoTune = this._jobRunSettingsAutoTune();
+      if (!autoTune || !Array.isArray(autoTune.proposals)) {
+        return null;
+      }
+      return autoTune.proposals
+        .slice()
+        .reverse()
+        .find((item) => item && item.status === 'proposed') || null;
+    }
+
+    renderAutoTuneControls() {
+      const autoTune = this._jobRunSettingsAutoTune();
+      const pending = this._pendingAutoTuneProposal();
+      const lastDecision = autoTune && autoTune.lastDecision && typeof autoTune.lastDecision === 'object'
+        ? autoTune.lastDecision
+        : (autoTune && Array.isArray(autoTune.decisionLog) && autoTune.decisionLog.length
+          ? autoTune.decisionLog[autoTune.decisionLog.length - 1]
+          : null);
+      if (this.autoTuneLastDecision) {
+        if (!autoTune) {
+          this.autoTuneLastDecision.textContent = 'Нет данных для текущей задачи';
+        } else {
+          const mode = autoTune.mode === 'ask_user' ? 'ask_user' : 'auto_apply';
+          const stage = lastDecision && lastDecision.stage ? String(lastDecision.stage) : '—';
+          const when = lastDecision && Number.isFinite(Number(lastDecision.ts))
+            ? this._formatTimestamp(Number(lastDecision.ts))
+            : '—';
+          const summary = lastDecision && Array.isArray(lastDecision.patchSummary) && lastDecision.patchSummary.length
+            ? lastDecision.patchSummary.slice(0, 4).join(', ')
+            : '—';
+          this.autoTuneLastDecision.textContent = `mode=${mode} | stage=${stage} | when=${when} | ${summary}`;
+        }
+      }
+      if (this.autoTunePendingDiff) {
+        this.autoTunePendingDiff.textContent = pending && pending.diffSummary
+          ? pending.diffSummary
+          : 'Ожидающих proposals нет';
+      }
+      if (this.autoTunePendingReason) {
+        this.autoTunePendingReason.textContent = pending && pending.reason && pending.reason.short
+          ? String(pending.reason.short)
+          : '—';
+      }
+      const canAct = Boolean(pending && pending.id);
+      if (this.autoTuneApplyButton) {
+        this.autoTuneApplyButton.disabled = !canAct;
+      }
+      if (this.autoTuneRejectButton) {
+        this.autoTuneRejectButton.disabled = !canAct;
+      }
+      if (this.autoTuneResetButton) {
+        const hasAgentOverrides = Boolean(
+          this.state.translationJob
+          && this.state.translationJob.runSettings
+          && this.state.translationJob.runSettings.agentOverrides
+          && Object.keys(this.state.translationJob.runSettings.agentOverrides).length
+        );
+        this.autoTuneResetButton.disabled = !hasAgentOverrides;
+      }
     }
 
     renderRuntimeCategoryChooser() {
@@ -1369,7 +2519,7 @@
               : 'АВТО';
           select.appendChild(opt);
         });
-        select.value = this.state.translationAgentTools[tool.key] || DEFAULT_AGENT_TOOLS[tool.key];
+        select.value = this.state.translationAgentTools[tool.key] || 'auto';
 
         row.appendChild(label);
         row.appendChild(select);
@@ -1496,6 +2646,58 @@
           });
         }
       }
+      const effectiveV2 = this.state.settingsEffective && typeof this.state.settingsEffective === 'object'
+        ? this.state.settingsEffective
+        : null;
+      if (effectiveV2) {
+        const effReasoning = effectiveV2.reasoning && typeof effectiveV2.reasoning === 'object'
+          ? effectiveV2.reasoning
+          : {};
+        const effCaching = effectiveV2.caching && typeof effectiveV2.caching === 'object'
+          ? effectiveV2.caching
+          : {};
+        const effAgent = effectiveV2.agent && typeof effectiveV2.agent === 'object'
+          ? effectiveV2.agent
+          : {};
+        const effModels = effectiveV2.models && typeof effectiveV2.models === 'object'
+          ? effectiveV2.models
+          : {};
+        lines.push({
+          label: 'Reasoning (effective)',
+          value: `${effReasoning.reasoningEffort || 'auto'} / ${effReasoning.reasoningSummary || 'auto'}`
+        });
+        lines.push({
+          label: 'Cache (effective)',
+          value: `${effCaching.promptCacheRetention || 'auto'}${effCaching.promptCacheKey ? ' +key' : ''}, compat=${effCaching.compatCache !== false ? 'on' : 'off'}`
+        });
+        const toolConfigEffective = effAgent.toolConfigEffective && typeof effAgent.toolConfigEffective === 'object'
+          ? effAgent.toolConfigEffective
+          : {};
+        lines.push({
+          label: 'Tools (effective)',
+          value: Object.keys(toolConfigEffective).length
+            ? Object.keys(toolConfigEffective).slice(0, 4).map((key) => `${key}:${toolConfigEffective[key]}`).join(', ')
+            : '—'
+        });
+        lines.push({
+          label: 'Models (effective)',
+          value: `allowlist=${Array.isArray(effModels.agentAllowedModels) ? effModels.agentAllowedModels.length : 0}, routing=${effModels.modelRoutingMode || 'auto'}`
+        });
+        const effMemory = effectiveV2.memory && typeof effectiveV2.memory === 'object'
+          ? effectiveV2.memory
+          : {};
+        lines.push({
+          label: 'Memory (effective)',
+          value: `enabled=${effMemory.enabled !== false ? 'on' : 'off'}, pages=${Number.isFinite(Number(effMemory.maxPages)) ? Number(effMemory.maxPages) : '—'}, blocks=${Number.isFinite(Number(effMemory.maxBlocks)) ? Number(effMemory.maxBlocks) : '—'}, age=${Number.isFinite(Number(effMemory.maxAgeDays)) ? Number(effMemory.maxAgeDays) : '—'}d`
+        });
+      }
+      const overrides = this.state.settingsOverrides && Array.isArray(this.state.settingsOverrides.changed)
+        ? this.state.settingsOverrides.changed
+        : [];
+      lines.push({
+        label: 'Overrides',
+        value: overrides.length ? overrides.slice(0, 6).join(', ') : 'нет'
+      });
 
       this.agentProfileImpactRoot.innerHTML = '';
       lines.forEach((item) => {
@@ -1516,6 +2718,7 @@
 
     buildAgentProfilePreview() {
       const profile = this.normalizeAgentProfile(this.state.translationAgentProfile);
+      const legacyProfile = this._toLegacyAgentProfile(profile);
       const tuning = this.normalizeAgentTuning(this.state.translationAgentTuning);
       const TranslationAgent = global.NT && global.NT.TranslationAgent ? global.NT.TranslationAgent : null;
       const defaults = global.NT && global.NT.TranslationAgentDefaults && global.NT.TranslationAgentDefaults.PROFILE_PRESETS
@@ -1538,7 +2741,7 @@
         try {
           resolved = TranslationAgent.previewResolvedSettings({
             settings: {
-              translationAgentProfile: profile,
+              translationAgentProfile: legacyProfile,
               translationAgentTuning: tuning,
               translationAgentTools: this.normalizeAgentTools(this.state.translationAgentTools),
               translationAgentModelPolicy: safeModelPolicy,
@@ -1644,6 +2847,21 @@
       if (lower === 'balanced') {
         return 'сбалансированный';
       }
+      if (lower === 'fast') {
+        return 'быстрый';
+      }
+      if (lower === 'bulk') {
+        return 'массовый';
+      }
+      if (lower === 'accurate') {
+        return 'точный';
+      }
+      if (lower === 'research') {
+        return 'исследовательский';
+      }
+      if (lower === 'custom') {
+        return 'кастом';
+      }
       if (lower === 'literal') {
         return 'дословный';
       }
@@ -1671,6 +2889,8 @@
       }
 
       const Html = global.NT && global.NT.Html ? global.NT.Html : null;
+      const selectedSpecs = new Set(this._resolveAllowlistForUi());
+      this.state.translationModelList = Array.from(selectedSpecs);
       this.modelsRoot.innerHTML = '';
       const options = this.resolveModelEntries();
       if (!options.length) {
@@ -1753,7 +2973,7 @@
           const input = this.doc.createElement('input');
           input.type = 'checkbox';
           input.value = modelSpec;
-          input.checked = this.state.translationModelList.includes(modelSpec);
+          input.checked = selectedSpecs.has(modelSpec);
 
           const text = this.doc.createElement('span');
           text.className = 'popup__model-text';
@@ -1874,10 +3094,115 @@
       return `Вход: ${input} / 1M | Выход: ${output} / 1M | Cached input: ${cached} / 1M`;
     }
 
-    renderSettings() {
-      if (this.apiKeyInput) {
-        this.apiKeyInput.value = this.state.apiKey;
+    _setConnectionStatus(text) {
+      if (this.credentialsStatus) {
+        this.credentialsStatus.textContent = text || 'Подключение: —';
       }
+    }
+
+    _setConnectionTestStatus(text) {
+      if (this.connectionTestStatus) {
+        this.connectionTestStatus.textContent = text || 'Проверка: —';
+      }
+    }
+
+    _applySecuritySnapshot(security) {
+      const src = security && typeof security === 'object' ? security : {};
+      const credentials = src.credentials && typeof src.credentials === 'object'
+        ? src.credentials
+        : null;
+      const lastConnectionTest = src.lastConnectionTest && typeof src.lastConnectionTest === 'object'
+        ? src.lastConnectionTest
+        : null;
+      const lastAudit = src.lastAudit && typeof src.lastAudit === 'object'
+        ? src.lastAudit
+        : null;
+      this.state.security = {
+        credentials,
+        lastConnectionTest,
+        lastAudit
+      };
+      if (credentials) {
+        this.state.connectionModeDraft = credentials.mode === 'BYOK' ? 'BYOK' : 'PROXY';
+        const proxy = credentials.proxy && typeof credentials.proxy === 'object' ? credentials.proxy : {};
+        this.state.proxyDraft = {
+          ...this.state.proxyDraft,
+          baseUrl: typeof proxy.baseUrl === 'string' ? proxy.baseUrl : '',
+          authHeaderName: typeof proxy.authHeaderName === 'string' && proxy.authHeaderName
+            ? proxy.authHeaderName
+            : 'X-NT-Token',
+          projectId: typeof proxy.projectId === 'string' ? proxy.projectId : '',
+          persistToken: proxy.authTokenPersisted === true
+        };
+      }
+    }
+
+    renderCredentials() {
+      const security = this.state.security && typeof this.state.security === 'object'
+        ? this.state.security
+        : {};
+      const credentials = security.credentials && typeof security.credentials === 'object'
+        ? security.credentials
+        : null;
+      const mode = credentials && credentials.mode === 'BYOK' ? 'BYOK' : 'PROXY';
+      const proxy = credentials && credentials.proxy && typeof credentials.proxy === 'object'
+        ? credentials.proxy
+        : {};
+      if (this.connectionModeProxy) {
+        this.connectionModeProxy.checked = mode === 'PROXY';
+      }
+      if (this.connectionModeByok) {
+        this.connectionModeByok.checked = mode === 'BYOK';
+      }
+      if (this.proxyUrlInput && this.proxyUrlInput !== this.doc.activeElement) {
+        this.proxyUrlInput.value = this.state.proxyDraft.baseUrl || '';
+      }
+      if (this.proxyProjectIdInput && this.proxyProjectIdInput !== this.doc.activeElement) {
+        this.proxyProjectIdInput.value = this.state.proxyDraft.projectId || '';
+      }
+      if (this.proxyHeaderNameInput && this.proxyHeaderNameInput !== this.doc.activeElement) {
+        this.proxyHeaderNameInput.value = this.state.proxyDraft.authHeaderName || 'X-NT-Token';
+      }
+      if (this.proxyTokenPersistCheckbox) {
+        this.proxyTokenPersistCheckbox.checked = this.state.proxyDraft.persistToken === true;
+      }
+      if (this.byokPersistCheckbox) {
+        this.byokPersistCheckbox.checked = this.state.byokDraft.persist === true;
+      }
+      if (this.byokPersistConfirmCheckbox) {
+        this.byokPersistConfirmCheckbox.checked = this.state.byokDraft.persistConfirmed === true;
+      }
+
+      const hasByok = credentials ? credentials.hasByokKey === true : false;
+      const byokPersisted = credentials ? credentials.byokPersisted === true : false;
+      const hasProxyToken = proxy && proxy.hasAuthToken === true;
+      const proxyBase = typeof proxy.baseUrl === 'string' ? proxy.baseUrl : '';
+      this._setConnectionStatus(
+        `Подключение: mode=${mode}, BYOK=${hasByok ? 'configured' : 'empty'}, proxy=${proxyBase || '—'}, token=${hasProxyToken ? 'yes' : 'no'}`
+      );
+      if (this.credentialsWarning) {
+        this.credentialsWarning.textContent = byokPersisted
+          ? 'Внимание: BYOK ключ сохранён постоянно. Это менее безопасно.'
+          : 'Внимание: BYOK в браузере менее безопасен, чем Proxy режим.';
+      }
+
+      const test = security.lastConnectionTest && typeof security.lastConnectionTest === 'object'
+        ? security.lastConnectionTest
+        : null;
+      if (test) {
+        if (test.ok) {
+          this._setConnectionTestStatus(`Проверка: OK (${test.latencyMs} ms, ${test.endpointHost || 'endpoint'})`);
+        } else {
+          const errCode = test.error && test.error.code ? test.error.code : 'FAILED';
+          this._setConnectionTestStatus(`Проверка: FAIL (${errCode})`);
+        }
+      } else {
+        this._setConnectionTestStatus('Проверка: —');
+      }
+    }
+
+    renderSettings() {
+      this.renderCredentials();
       this.renderAgentControls();
       this.updateActionButtons();
       this.updateVisibilityIcon();
@@ -1946,9 +3271,61 @@
         progress,
         message
       });
+      this.renderActiveJobsSummary();
       this.renderRuntimeCategoryChooser();
       this.updateActionButtons();
       this.renderTabs();
+    }
+
+    renderActiveJobsSummary() {
+      const runtime = this.state.schedulerRuntime && typeof this.state.schedulerRuntime === 'object'
+        ? this.state.schedulerRuntime
+        : {};
+      const jobs = Array.isArray(runtime.activeJobs) ? runtime.activeJobs : [];
+      if (this.activeJobsSummary) {
+        this.activeJobsSummary.textContent = `Активные задачи: ${jobs.length}`;
+      }
+      if (!this.activeJobsSelect) {
+        if (this.gotoJobTabButton) {
+          this.gotoJobTabButton.disabled = jobs.length === 0;
+        }
+        return;
+      }
+      const prevValue = this.activeJobsSelect.value;
+      this.activeJobsSelect.innerHTML = '';
+      if (!jobs.length) {
+        const empty = this.doc.createElement('option');
+        empty.value = '';
+        empty.textContent = 'Нет активных задач';
+        this.activeJobsSelect.appendChild(empty);
+        this.activeJobsSelect.disabled = true;
+      } else {
+        const sorted = jobs.slice().sort((a, b) => {
+          const ta = Number.isFinite(Number(a && a.tabId)) ? Number(a.tabId) : Number.MAX_SAFE_INTEGER;
+          const tb = Number.isFinite(Number(b && b.tabId)) ? Number(b.tabId) : Number.MAX_SAFE_INTEGER;
+          return ta - tb;
+        });
+        sorted.forEach((job) => {
+          const tabId = Number.isFinite(Number(job && job.tabId)) ? Number(job.tabId) : null;
+          const status = job && job.status ? String(job.status) : 'unknown';
+          const progress = Number.isFinite(Number(job && job.progress)) ? Number(job.progress) : 0;
+          const option = this.doc.createElement('option');
+          option.value = tabId === null ? '' : String(tabId);
+          option.textContent = `tab ${tabId === null ? '?' : tabId}: ${status} (${progress}%)`;
+          option.title = job && job.id ? String(job.id) : '';
+          this.activeJobsSelect.appendChild(option);
+        });
+        this.activeJobsSelect.disabled = false;
+        if (prevValue && sorted.some((job) => String(job.tabId) === prevValue)) {
+          this.activeJobsSelect.value = prevValue;
+        } else {
+          const current = sorted.find((job) => Number(job.tabId) === Number(this.activeTabId));
+          this.activeJobsSelect.value = current ? String(current.tabId) : String(sorted[0].tabId);
+        }
+      }
+      if (this.gotoJobTabButton) {
+        this.gotoJobTabButton.disabled = jobs.length === 0;
+      }
     }
 
     _forcedPopupTab() {
@@ -2063,20 +3440,32 @@
         return;
       }
       const safeEntry = entry && typeof entry === 'object' ? entry : {};
-      const total = Number.isFinite(Number(job && job.totalBlocks))
-        ? Number(job.totalBlocks)
-        : (Number.isFinite(Number(safeEntry.total)) ? Number(safeEntry.total) : 0);
-      const completed = Number.isFinite(Number(job && job.completedBlocks))
-        ? Number(job.completedBlocks)
-        : (Number.isFinite(Number(safeEntry.completed)) ? Number(safeEntry.completed) : 0);
-      const failed = Number.isFinite(Number(job && job.failedBlocksCount))
-        ? Number(job.failedBlocksCount)
-        : (Number.isFinite(Number(safeEntry.failedBlocksCount))
-          ? Number(safeEntry.failedBlocksCount)
-          : (Number.isFinite(Number(this.state.failedBlocksCount)) ? Number(this.state.failedBlocksCount) : 0));
-      const inProgress = Number.isFinite(Number(safeEntry.inProgress))
-        ? Number(safeEntry.inProgress)
-        : Math.max(0, total - completed - failed);
+      const safeJob = job && typeof job === 'object' ? job : null;
+      const safeEntryTotal = Object.prototype.hasOwnProperty.call(safeEntry, 'total') ? safeEntry.total : null;
+      const safeEntryCompleted = Object.prototype.hasOwnProperty.call(safeEntry, 'completed') ? safeEntry.completed : null;
+      const safeEntryFailed = Object.prototype.hasOwnProperty.call(safeEntry, 'failedBlocksCount')
+        ? safeEntry.failedBlocksCount
+        : null;
+      const safeEntryInProgress = Object.prototype.hasOwnProperty.call(safeEntry, 'inProgress')
+        ? safeEntry.inProgress
+        : null;
+      const safeEntryUpdatedAt = Object.prototype.hasOwnProperty.call(safeEntry, 'updatedAt')
+        ? safeEntry.updatedAt
+        : null;
+      const toCount = (value, fallback = 0) => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+          return Number.isFinite(Number(fallback)) ? Math.max(0, Number(fallback)) : 0;
+        }
+        return Math.max(0, numeric);
+      };
+      const total = toCount(safeJob && safeJob.totalBlocks, toCount(safeEntryTotal, 0));
+      const completed = toCount(safeJob && safeJob.completedBlocks, toCount(safeEntryCompleted, 0));
+      const failed = toCount(
+        safeJob && safeJob.failedBlocksCount,
+        toCount(safeEntryFailed, toCount(this.state.failedBlocksCount, 0))
+      );
+      const inProgress = toCount(safeEntryInProgress, Math.max(0, total - completed - failed));
 
       const selected = this._currentSelectedCategories();
       const available = this._currentAvailableCategories();
@@ -2106,12 +3495,17 @@
         ? agentState.recentDiffItems
         : (Array.isArray(safeEntry.recentDiffItems) ? safeEntry.recentDiffItems : []);
       const plan = agentState && agentState.plan && typeof agentState.plan === 'object' ? agentState.plan : null;
-      const updatedAt = Number.isFinite(Number(job && job.updatedAt))
-        ? Number(job.updatedAt)
-        : (Number.isFinite(Number(safeEntry.updatedAt)) ? Number(safeEntry.updatedAt) : null);
+      const updatedAt = Number.isFinite(Number(safeJob && safeJob.updatedAt))
+        ? Number(safeJob.updatedAt)
+        : (Number.isFinite(Number(safeEntryUpdatedAt)) ? Number(safeEntryUpdatedAt) : null);
+      const fetchDebug = this._resolveFetchDebugPayload({
+        job: safeJob,
+        entry: safeEntry,
+        stateLastError: this.state.lastError
+      });
 
-      const pipelineStatus = job && job.status
-        ? this._jobStatusLabel(job.status)
+      const pipelineStatus = safeJob && safeJob.status
+        ? this._jobStatusLabel(safeJob.status)
         : (safeEntry.status ? this._jobStatusLabel(safeEntry.status) : '—');
       const phase = agentState && agentState.phase ? this._phaseLabel(agentState.phase) : '—';
       const profile = agentState && agentState.profile
@@ -2122,12 +3516,21 @@
       const planBatch = plan && Number.isFinite(Number(plan.batchSize)) ? String(Math.round(Number(plan.batchSize))) : '—';
       const planProof = plan && Number.isFinite(Number(plan.proofreadingPasses)) ? String(Math.round(Number(plan.proofreadingPasses))) : '—';
       const planParallel = plan && plan.parallelism ? String(plan.parallelism) : '—';
+      const lastRate = agentState && agentState.lastRateLimits && typeof agentState.lastRateLimits === 'object'
+        ? agentState.lastRateLimits
+        : null;
+      const rateHeaders = lastRate && lastRate.headersSubset && typeof lastRate.headersSubset === 'object'
+        ? lastRate.headersSubset
+        : {};
+      const rateValue = lastRate
+        ? `RPM ${rateHeaders['x-ratelimit-remaining-requests'] || '—'}/${rateHeaders['x-ratelimit-limit-requests'] || '—'} | TPM ${rateHeaders['x-ratelimit-remaining-tokens'] || '—'}/${rateHeaders['x-ratelimit-limit-tokens'] || '—'}`
+        : '—';
 
       const metrics = [
         {
           label: 'Job ID',
-          value: this._shortId(job && job.id ? job.id : ''),
-          title: job && job.id ? job.id : 'Идентификатор активной задачи'
+          value: this._shortId(safeJob && safeJob.id ? safeJob.id : ''),
+          title: safeJob && safeJob.id ? safeJob.id : 'Идентификатор активной задачи'
         },
         {
           label: 'Пайплайн',
@@ -2146,8 +3549,8 @@
         },
         {
           label: 'Текущий батч',
-          value: this._shortId(job && job.currentBatchId ? job.currentBatchId : ''),
-          title: job && job.currentBatchId ? job.currentBatchId : 'Идентификатор текущего батча'
+          value: this._shortId(safeJob && safeJob.currentBatchId ? safeJob.currentBatchId : ''),
+          title: safeJob && safeJob.currentBatchId ? safeJob.currentBatchId : 'Идентификатор текущего батча'
         },
         {
           label: 'Агент',
@@ -2170,11 +3573,6 @@
           title: 'Количество аудитов и статус последнего аудита'
         },
         {
-          label: 'Чеклист',
-          value: `ok=${checklistDone} run=${checklistRunning} wait=${checklistPending}${checklistFailed ? ` err=${checklistFailed}` : ''}`,
-          title: 'Состояние задач в чеклисте агента'
-        },
-        {
           label: 'Инструменты',
           value: `trace=${toolTrace.length} log=${toolHistory.length}`,
           title: 'Трассировка и история вызовов инструментов'
@@ -2190,11 +3588,23 @@
           title: 'Сжатия контекста и размер глоссария'
         },
         {
+          label: 'Rate limit',
+          value: rateValue,
+          title: 'Последние заголовки x-ratelimit-* (RPM/TPM)'
+        },
+        {
           label: 'Обновлено',
           value: this._formatTimestamp(updatedAt),
           title: 'Время последнего обновления состояния'
         }
       ];
+      if (fetchDebug) {
+        metrics.push({
+          label: 'OpenAI сеть',
+          value: this._formatFetchDebugSummary(fetchDebug),
+          title: 'Диагностика транспорта и probe при FETCH_FAILED'
+        });
+      }
 
       if (this.statusMetricsRoot) {
         this.statusMetricsRoot.innerHTML = '';
@@ -2221,17 +3631,29 @@
 
       if (this.statusTrace) {
         this.statusTrace.textContent = this._buildRuntimeTrace({
-          job,
+          job: safeJob,
           agentState,
-          message
+          message,
+          fetchDebug
         });
       }
     }
 
-    _buildRuntimeTrace({ job, agentState, message } = {}) {
+    _buildRuntimeTrace({ job, agentState, message, fetchDebug } = {}) {
       const parts = [];
       if (message) {
         parts.push(`msg: ${this._truncateStatusText(String(message), 64)}`);
+      }
+      const runtime = job && job.runtime && typeof job.runtime === 'object'
+        ? job.runtime
+        : null;
+      if (runtime) {
+        const stage = runtime.stage || 'stage?';
+        const status = runtime.status || 'status?';
+        const retryAttempt = runtime.retry && Number.isFinite(Number(runtime.retry.attempt))
+          ? Number(runtime.retry.attempt)
+          : 0;
+        parts.push(`runtime: ${status}/${stage} retry=${retryAttempt}`);
       }
 
       const reports = agentState && Array.isArray(agentState.reports) ? agentState.reports : [];
@@ -2267,10 +3689,89 @@
       if (job && job.currentBatchId) {
         parts.push(`batch: ${this._shortId(job.currentBatchId, 18)}`);
       }
+      if (fetchDebug) {
+        const steps = this._formatFetchDebugSteps(fetchDebug);
+        if (steps) {
+          parts.push(`net: ${steps}`);
+        }
+      }
 
       return parts.length
         ? parts.join(' | ')
         : 'Подробных live-событий пока нет. После запуска здесь появятся последние отчёты и вызовы инструментов.';
+    }
+
+    _resolveFetchDebugPayload({ job, entry, stateLastError } = {}) {
+      const pickDebug = (errorValue) => {
+        if (!errorValue || typeof errorValue !== 'object') {
+          return null;
+        }
+        const nested = errorValue.error && typeof errorValue.error === 'object'
+          ? errorValue.error
+          : null;
+        const debug = nested && nested.debug && typeof nested.debug === 'object'
+          ? nested.debug
+          : (errorValue.debug && typeof errorValue.debug === 'object' ? errorValue.debug : null);
+        if (!debug || !debug.probe || typeof debug.probe !== 'object') {
+          return null;
+        }
+        return debug;
+      };
+
+      const candidates = [
+        job && job.lastError ? job.lastError : null,
+        stateLastError && typeof stateLastError === 'object' ? stateLastError : null,
+        entry && entry.lastError ? entry.lastError : null
+      ];
+      for (let i = 0; i < candidates.length; i += 1) {
+        const debug = pickDebug(candidates[i]);
+        if (debug) {
+          return debug;
+        }
+      }
+      return null;
+    }
+
+    _formatFetchDebugSummary(debug) {
+      if (!debug || typeof debug !== 'object') {
+        return '—';
+      }
+      const parts = [];
+      if (typeof debug.baseUrl === 'string' && debug.baseUrl) {
+        parts.push(debug.baseUrl);
+      }
+      if (typeof debug.online === 'boolean') {
+        parts.push(debug.online ? 'online' : 'offline');
+      } else if (debug.probe && typeof debug.probe.online === 'boolean') {
+        parts.push(debug.probe.online ? 'online' : 'offline');
+      }
+      if (Array.isArray(debug.transportTried) && debug.transportTried.length) {
+        parts.push(`transport=${debug.transportTried.join('->')}`);
+      }
+      const probe = debug.probe && typeof debug.probe === 'object' ? debug.probe : null;
+      if (probe && typeof probe.ok === 'boolean') {
+        parts.push(`probe=${probe.ok ? 'ok' : 'fail'}`);
+      }
+      return parts.length ? parts.join(' | ') : '—';
+    }
+
+    _formatFetchDebugSteps(debug) {
+      const probe = debug && debug.probe && typeof debug.probe === 'object'
+        ? debug.probe
+        : null;
+      const steps = probe && Array.isArray(probe.steps) ? probe.steps : [];
+      if (!steps.length) {
+        return '';
+      }
+      return steps.slice(0, 3).map((step) => {
+        const row = step && typeof step === 'object' ? step : {};
+        const name = row.name ? String(row.name) : 'step';
+        if (Number.isFinite(Number(row.status))) {
+          return `${name}:HTTP${Number(row.status)}`;
+        }
+        const err = row.errMessage ? String(row.errMessage) : 'error';
+        return `${name}:${this._truncateStatusText(err, 36)}`;
+      }).join('; ');
     }
 
     _shortId(value, limit = 14) {
@@ -2455,13 +3956,8 @@
       if (!job || !job.status) {
         return false;
       }
-      if (job.status === 'awaiting_categories') {
-        return this._currentAvailableCategories().length > 0;
-      }
-      if (job.status === 'done' && this._hasUnselectedCategories()) {
-        return this._currentAvailableCategories().length > 0;
-      }
-      return false;
+      return job.status === 'awaiting_categories'
+        && this._currentAvailableCategories().length > 0;
     }
 
     _categoryChooserHintText() {
@@ -2470,32 +3966,25 @@
         return '';
       }
       if (job.status === 'awaiting_categories') {
-        return 'План готов. Выберите категории и нажмите кнопку перевода.';
-      }
-      if (job.status === 'done') {
-        return 'Можно добавить дополнительные категории и продолжить перевод.';
+        return 'Планирование завершено. Выберите рекомендованные категории и запустите перевод. Дополнительные категории можно выбрать позже.';
       }
       return '';
     }
 
     updateVisibilityIcon() {
-      if (!this.visibilityButton) {
-        return;
-      }
-      const visible = this.state.translationVisible !== false;
-      const label = visible ? 'Показать оригинал' : 'Показать перевод';
-      this.visibilityButton.setAttribute('aria-label', label);
-      this.visibilityButton.setAttribute('title', label);
-      this.visibilityButton.setAttribute('data-state', visible ? 'visible' : 'hidden');
-
-      if (this.visibilityIconOn) {
-        this.visibilityIconOn.hidden = !visible;
-      }
-      if (this.visibilityIconOff) {
-        this.visibilityIconOff.hidden = visible;
-      }
-      if (this.visibilityLabel) {
-        this.visibilityLabel.textContent = label;
+      const mode = this.normalizeDisplayMode(this.state.translationDisplayMode, this.state.translationVisible);
+      this.state.translationDisplayMode = mode;
+      this.state.translationVisible = mode !== 'original';
+      if (this.displayModeSelect) {
+        if (this.displayModeSelect.value !== mode) {
+          this.displayModeSelect.value = mode;
+        }
+        this.displayModeSelect.setAttribute(
+          'title',
+          mode === 'compare'
+            ? 'Сравнение подсвечивает изменения. Для больших блоков см. debug.'
+            : (mode === 'original' ? 'Показ оригинального текста страницы' : 'Показ переведённого текста страницы')
+        );
       }
     }
 
@@ -2525,15 +4014,35 @@
     }
   }
 
-  const ui = new global.NT.UiModule({
-    chromeApi: global.chrome,
-    portName: 'popup'
-  }).init();
+  async function resolveInitialPopupTabId(chromeApi) {
+    if (!chromeApi || !chromeApi.tabs || typeof chromeApi.tabs.query !== 'function') {
+      return null;
+    }
+    return new Promise((resolve) => {
+      try {
+        chromeApi.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const first = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
+          resolve(first && Number.isFinite(Number(first.id)) ? Number(first.id) : null);
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
 
-  const controller = new PopupController({ doc: global.document, ui });
-  ui.setHandlers({
-    onSnapshot: (payload) => controller.applySnapshot(payload),
-    onPatch: (payload) => controller.applyPatch(payload)
-  });
-  controller.init();
+  (async () => {
+    const initialTabId = await resolveInitialPopupTabId(global.chrome);
+    const ui = new global.NT.UiModule({
+      chromeApi: global.chrome,
+      portName: 'popup',
+      helloContext: { tabId: initialTabId }
+    }).init();
+
+    const controller = new PopupController({ doc: global.document, ui });
+    ui.setHandlers({
+      onSnapshot: (payload) => controller.applySnapshot(payload),
+      onPatch: (payload) => controller.applyPatch(payload)
+    });
+    controller.init();
+  })();
 })(globalThis);

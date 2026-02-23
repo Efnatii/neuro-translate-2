@@ -122,19 +122,28 @@ async function run() {
     },
     tabs: {
       sendMessage(tabId, message, cb) {
-        if (message && message.type === protocol.BG_APPLY_BATCH) {
+        let parsed = null;
+        try {
+          parsed = protocol && typeof protocol.unwrap === 'function'
+            ? protocol.unwrap(message)
+            : { type: message && message.type ? message.type : null, payload: message || {} };
+        } catch (_) {
+          parsed = { type: message && message.type ? message.type : null, payload: message || {} };
+        }
+        const payload = parsed && parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
+        if (parsed && parsed.type === protocol.BG_APPLY_BATCH) {
           applyMessages.push({
             tabId,
-            batchId: message.batchId,
-            items: Array.isArray(message.items) ? message.items.slice() : []
+            batchId: payload.batchId,
+            items: Array.isArray(payload.items) ? payload.items.slice() : []
           });
           setTimeout(() => {
             orchestrator.handleContentMessage({
               message: {
                 type: protocol.CS_APPLY_ACK,
-                jobId: message.jobId,
-                batchId: message.batchId,
-                appliedCount: Array.isArray(message.items) ? message.items.length : 0,
+                jobId: payload.jobId,
+                batchId: payload.batchId,
+                appliedCount: Array.isArray(payload.items) ? payload.items.length : 0,
                 ok: true
               },
               sender: { tab: { id: tabId } }

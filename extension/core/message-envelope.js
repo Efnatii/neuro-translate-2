@@ -19,18 +19,25 @@
 
     static wrap(type, payload, meta) {
       const safeMeta = meta && typeof meta === 'object' ? { ...meta } : {};
+      const baseMeta = {
+        source: safeMeta.source || 'unknown',
+        tabId: safeMeta.tabId ?? null,
+        stage: safeMeta.stage || 'unknown',
+        requestId: safeMeta.requestId || null
+      };
+      Object.keys(safeMeta).forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(baseMeta, key)) {
+          return;
+        }
+        baseMeta[key] = safeMeta[key];
+      });
 
       return {
         v: MessageEnvelope.v,
         id: MessageEnvelope.newId(),
         type,
         ts: MessageEnvelope.now(),
-        meta: {
-          source: safeMeta.source || 'unknown',
-          tabId: safeMeta.tabId ?? null,
-          stage: safeMeta.stage || 'unknown',
-          requestId: safeMeta.requestId || null
-        },
+        meta: baseMeta,
         payload
       };
     }

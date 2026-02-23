@@ -230,7 +230,7 @@
       };
     }
 
-    async request({ tabId, taskType, input, maxOutputTokens, temperature, store, background, selectedModelSpecs, modelSelection, signal, hintPrevModelSpec, hintBatchSize, requestMeta } = {}) {
+    async request({ tabId, taskType, input, maxOutputTokens, temperature, store, background, selectedModelSpecs, modelSelection, signal, hintPrevModelSpec, hintBatchSize, requestMeta, responsesOptions, stream = false, onEvent = null } = {}) {
       const estTokens = this.estimateTokens({ input, maxOutputTokens });
       const pressureTokens = this.estimatePressureTokens(estTokens, hintBatchSize);
       const requestId = this.buildRequestId({ tabId, taskType, requestMeta });
@@ -266,6 +266,9 @@
             store,
             background,
             signal,
+            stream,
+            onEvent,
+            responsesOptions,
             meta: {
               requestId,
               estTokens,
@@ -312,6 +315,13 @@
         });
         return {
           json: attemptResult.response.json,
+          headers: attemptResult.response ? attemptResult.response.headers || null : null,
+          status: attemptResult.response && Number.isFinite(Number(attemptResult.response.status))
+            ? Number(attemptResult.response.status)
+            : null,
+          connection: attemptResult.response && attemptResult.response.connection && typeof attemptResult.response.connection === 'object'
+            ? attemptResult.response.connection
+            : null,
           decision: attemptResult.decision
         };
       } catch (error) {

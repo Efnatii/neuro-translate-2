@@ -2,7 +2,8 @@
  * Persistent per-tab state store for background orchestration.
  *
  * `TabStateStore` is the single write path for tab-scoped state blobs used by
- * popup/debug views (`translationStatusByTab`, `translationVisibilityByTab`).
+ * popup/debug views (`translationStatusByTab`, `translationVisibilityByTab`,
+ * `translationDisplayModeByTab`).
  * Keeping writes centralized prevents format drift and removes direct storage
  * access from AI orchestration code.
  *
@@ -66,10 +67,18 @@
       if (tabId === null || tabId === undefined) {
         return;
       }
-      const data = await this.storageGet({ translationVisibilityByTab: {} });
+      const data = await this.storageGet({
+        translationVisibilityByTab: {},
+        translationDisplayModeByTab: {}
+      });
       const map = { ...(data.translationVisibilityByTab || {}) };
+      const modeMap = { ...(data.translationDisplayModeByTab || {}) };
       map[tabId] = Boolean(visible);
-      await this.storageSet({ translationVisibilityByTab: map });
+      modeMap[tabId] = visible ? 'translated' : 'original';
+      await this.storageSet({
+        translationVisibilityByTab: map,
+        translationDisplayModeByTab: modeMap
+      });
     }
 
     async getVisibility(tabId) {
@@ -77,7 +86,20 @@
         return true;
       }
       try {
-        const data = await this.storageGet({ translationVisibilityByTab: {} });
+        const data = await this.storageGet({
+          translationVisibilityByTab: {},
+          translationDisplayModeByTab: {}
+        });
+        const modeMap = data && data.translationDisplayModeByTab && typeof data.translationDisplayModeByTab === 'object'
+          ? data.translationDisplayModeByTab
+          : {};
+        const modeKey = String(tabId);
+        if (Object.prototype.hasOwnProperty.call(modeMap, modeKey)) {
+          return modeMap[modeKey] !== 'original';
+        }
+        if (Object.prototype.hasOwnProperty.call(modeMap, tabId)) {
+          return modeMap[tabId] !== 'original';
+        }
         const map = data && data.translationVisibilityByTab && typeof data.translationVisibilityByTab === 'object'
           ? data.translationVisibilityByTab
           : {};
@@ -92,6 +114,55 @@
         // best-effort fallback
       }
       return true;
+    }
+
+    async upsertDisplayMode(tabId, mode) {
+      if (tabId === null || tabId === undefined) {
+        return;
+      }
+      const normalizedMode = mode === 'original' || mode === 'compare'
+        ? mode
+        : 'translated';
+      const data = await this.storageGet({
+        translationDisplayModeByTab: {},
+        translationVisibilityByTab: {}
+      });
+      const modeMap = { ...(data.translationDisplayModeByTab || {}) };
+      const visibilityMap = { ...(data.translationVisibilityByTab || {}) };
+      modeMap[tabId] = normalizedMode;
+      visibilityMap[tabId] = normalizedMode !== 'original';
+      await this.storageSet({
+        translationDisplayModeByTab: modeMap,
+        translationVisibilityByTab: visibilityMap
+      });
+    }
+
+    async getDisplayMode(tabId) {
+      if (tabId === null || tabId === undefined) {
+        return 'translated';
+      }
+      try {
+        const data = await this.storageGet({
+          translationDisplayModeByTab: {},
+          translationVisibilityByTab: {}
+        });
+        const modeMap = data && data.translationDisplayModeByTab && typeof data.translationDisplayModeByTab === 'object'
+          ? data.translationDisplayModeByTab
+          : {};
+        const key = String(tabId);
+        if (Object.prototype.hasOwnProperty.call(modeMap, key)) {
+          const mode = modeMap[key];
+          return mode === 'original' || mode === 'compare' ? mode : 'translated';
+        }
+        if (Object.prototype.hasOwnProperty.call(modeMap, tabId)) {
+          const mode = modeMap[tabId];
+          return mode === 'original' || mode === 'compare' ? mode : 'translated';
+        }
+        const visible = await this.getVisibility(tabId);
+        return visible ? 'translated' : 'original';
+      } catch (_) {
+        return 'translated';
+      }
     }
 
     async getLastModelSpec(tabId) {

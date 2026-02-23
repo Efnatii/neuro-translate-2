@@ -315,7 +315,37 @@
       if (rate) {
         meta.rate = rate;
       }
+      if (raw.requestOptions && typeof raw.requestOptions === 'object') {
+        meta.requestOptions = this._sanitizeRequestOptionsMeta(raw.requestOptions);
+      }
       return meta;
+    }
+
+    _sanitizeRequestOptionsMeta(rawOptions) {
+      const src = rawOptions && typeof rawOptions === 'object' ? rawOptions : {};
+      const out = {};
+      if (src.reasoning && typeof src.reasoning === 'object') {
+        out.reasoning = {
+          effort: src.reasoning.effort || null,
+          summary: src.reasoning.summary || null
+        };
+      }
+      if (Object.prototype.hasOwnProperty.call(src, 'prompt_cache_retention')) {
+        out.prompt_cache_retention = src.prompt_cache_retention || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(src, 'prompt_cache_key')) {
+        out.prompt_cache_key = src.prompt_cache_key || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(src, 'tool_choice')) {
+        out.tool_choice = src.tool_choice || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(src, 'parallel_tool_calls')) {
+        out.parallel_tool_calls = src.parallel_tool_calls;
+      }
+      if (Object.prototype.hasOwnProperty.call(src, 'max_tool_calls')) {
+        out.max_tool_calls = src.max_tool_calls;
+      }
+      return out;
     }
 
     _normalizeUsageMeta(rawUsage) {

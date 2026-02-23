@@ -148,6 +148,17 @@ async function run() {
       modelId: 'gpt-4.1-mini',
       input: 'hello',
       maxOutputTokens: 64,
+      responsesOptions: {
+        tools: [{
+          type: 'function',
+          name: 'agent.ping',
+          description: 'Ping tool',
+          parameters: { type: 'object', properties: {} }
+        }],
+        tool_choice: 'auto',
+        parallel_tool_calls: true,
+        previous_response_id: 'resp_prev_1'
+      },
       meta: { requestId: 'rid-success', promptCacheKey: 'nt:pc:unit-test' }
     });
     assert(response && response.json && response.json.output_text, 'Successful offscreen result must return json payload');
@@ -158,6 +169,10 @@ async function run() {
       : {};
     assert.strictEqual(requestBody.prompt_cache_key, 'nt:pc:unit-test', 'Prompt cache key must be forwarded to Responses payload');
     assert.strictEqual(Object.prototype.hasOwnProperty.call(requestBody, 'prompt_cache_retention'), false, 'Prompt cache retention should not be sent when not explicitly configured');
+    assert(Array.isArray(requestBody.tools) && requestBody.tools.length === 1, 'Tools must be forwarded to Responses payload');
+    assert.strictEqual(requestBody.tool_choice, 'auto', 'tool_choice must be forwarded to Responses payload');
+    assert.strictEqual(requestBody.parallel_tool_calls, true, 'parallel_tool_calls must be forwarded to Responses payload');
+    assert.strictEqual(requestBody.previous_response_id, 'resp_prev_1', 'previous_response_id must be forwarded to Responses payload');
   }
 
   {

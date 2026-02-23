@@ -18,6 +18,42 @@
 
   let activeJobId = null;
 
+  function normalizeCompareDiffThreshold(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return 8000;
+    }
+    return Math.max(500, Math.min(50000, Math.round(numeric)));
+  }
+
+  function applyCompareDiffThreshold(message, { rerender = true } = {}) {
+    const payload = message && typeof message === 'object' ? message : {};
+    if (!Object.prototype.hasOwnProperty.call(payload, 'compareDiffThreshold')) {
+      return applier.compareDiffThresholdChars;
+    }
+    const next = normalizeCompareDiffThreshold(payload.compareDiffThreshold);
+    return applier.setCompareDiffThreshold(next, { rerender });
+  }
+
+  function buildContentCaps() {
+    return {
+      domIndexerVersion: 'v1',
+      supportsApplyDelta: true,
+      supportsRestoreOriginal: true,
+      supportsCompareMode: true,
+      maxDomWritesPerSecondHint: 24,
+      selectorStability: 'medium'
+    };
+  }
+
+  function buildToolsetWanted() {
+    return {
+      toolsetId: 'neuro-translate',
+      minSemver: '1.0.0',
+      toolsetHash: null
+    };
+  }
+
   function sendToBackground(payload, callback) {
     if (!global.chrome || !global.chrome.runtime || typeof global.chrome.runtime.sendMessage !== 'function') {
       if (typeof callback === 'function') {
@@ -27,6 +63,23 @@
     }
     try {
       global.chrome.runtime.sendMessage(payload, (response) => {
+        const lastError = global.chrome
+          && global.chrome.runtime
+          && global.chrome.runtime.lastError
+          ? global.chrome.runtime.lastError
+          : null;
+        if (lastError) {
+          if (typeof callback === 'function') {
+            callback({
+              ok: false,
+              error: {
+                code: 'BG_UNREACHABLE',
+                message: lastError.message || 'Background service unreachable'
+              }
+            });
+          }
+          return;
+        }
         if (typeof callback === 'function') {
           callback(response || { ok: true });
         }
@@ -68,8 +121,14 @@
 
   function onStartJob(message, sendResponse) {
     activeJobId = message.jobId || null;
+    const compareDiffThreshold = applyCompareDiffThreshold(message, { rerender: false });
     const snapshot = indexer.scan();
     applier.setBlocks(activeJobId, snapshot.blocks, snapshot.blockNodes);
+    if (message && typeof message.mode === 'string') {
+      applier.setDisplayMode(message.mode);
+    } else if (Object.prototype.hasOwnProperty.call(message || {}, 'visible')) {
+      applier.setVisibility(Boolean(message.visible));
+    }
     sendToBackground(wrapOutgoing(protocol.CS_SCAN_RESULT, {
       jobId: activeJobId,
       blocks: snapshot.blocks,
@@ -79,7 +138,7 @@
       stage: 'scan_result',
       requestId: activeJobId || null
     }), () => {});
-    sendResponse({ ok: true, blocks: snapshot.blocks.length });
+    sendResponse({ ok: true, blocks: snapshot.blocks.length, compareDiffThreshold });
   }
 
   function onApplyBatch(message, sendResponse) {
@@ -102,6 +161,48 @@
     sendResponse({ ok: true, appliedCount: result.appliedCount });
   }
 
+  function onApplyDelta(message, sendResponse) {
+    if (!activeJobId || message.jobId !== activeJobId) {
+      sendResponse({ ok: false, error: { code: 'JOB_MISMATCH', message: 'No active job for delta' } });
+      return;
+    }
+    const result = applier.applyDelta({
+      jobId: message.jobId,
+      blockId: message.blockId || null,
+      text: typeof message.text === 'string' ? message.text : '',
+      isFinal: message.isFinal === true
+    });
+    sendToBackground(wrapOutgoing(protocol.CS_APPLY_DELTA_ACK, {
+      jobId: message.jobId,
+      blockId: message.blockId || null,
+      deltaId: message.deltaId || null,
+      applied: Boolean(result && result.applied),
+      isFinal: message.isFinal === true,
+      prevTextHash: result && result.prevTextHash ? result.prevTextHash : null,
+      nextTextHash: result && result.nextTextHash ? result.nextTextHash : null,
+      nodeCountTouched: Number.isFinite(Number(result && result.nodeCountTouched))
+        ? Number(result.nodeCountTouched)
+        : 0,
+      displayMode: result && result.displayMode ? result.displayMode : null,
+      ok: true,
+      contentSessionId
+    }, {
+      source: 'content',
+      stage: 'apply_delta_ack',
+      requestId: message.blockId || null
+    }), () => {});
+    sendResponse({
+      ok: true,
+      applied: Boolean(result && result.applied),
+      prevTextHash: result && result.prevTextHash ? result.prevTextHash : null,
+      nextTextHash: result && result.nextTextHash ? result.nextTextHash : null,
+      nodeCountTouched: Number.isFinite(Number(result && result.nodeCountTouched))
+        ? Number(result.nodeCountTouched)
+        : 0,
+      displayMode: result && result.displayMode ? result.displayMode : null
+    });
+  }
+
   function onCancelJob(message, sendResponse) {
     if (message && message.jobId && activeJobId && message.jobId !== activeJobId) {
       sendResponse({ ok: true, ignored: true });
@@ -113,13 +214,30 @@
   }
 
   function onSetVisibility(message, sendResponse) {
-    const result = applier.setVisibility(Boolean(message.visible));
-    sendResponse({ ok: true, visible: result.visible });
+    const compareDiffThreshold = applyCompareDiffThreshold(message, { rerender: true });
+    const result = typeof message.mode === 'string'
+      ? applier.setDisplayMode(message.mode)
+      : applier.setVisibility(Boolean(message.visible));
+    sendResponse({
+      ok: true,
+      visible: result.visible,
+      mode: result.mode || (result.visible ? 'translated' : 'original'),
+      compareDiffThreshold
+    });
   }
 
   function onRestoreOriginals(message, sendResponse) {
     const result = applier.restoreOriginals({ jobId: message && message.jobId ? message.jobId : activeJobId });
     sendResponse({ ok: true, restored: result.restored });
+  }
+
+  function onEraseJobData(message, sendResponse) {
+    const targetJobId = message && message.jobId ? message.jobId : activeJobId;
+    applier.restoreOriginals({ jobId: targetJobId });
+    if (!message || !message.jobId || message.jobId === activeJobId) {
+      activeJobId = null;
+    }
+    sendResponse({ ok: true, erased: true });
   }
 
   if (global.chrome && global.chrome.runtime && global.chrome.runtime.onMessage) {
@@ -142,6 +260,10 @@
         onApplyBatch(msg, sendResponse);
         return true;
       }
+      if (type === protocol.BG_APPLY_DELTA) {
+        onApplyDelta(msg, sendResponse);
+        return true;
+      }
       if (type === protocol.BG_CANCEL_JOB) {
         onCancelJob(msg, sendResponse);
         return true;
@@ -154,15 +276,36 @@
         onRestoreOriginals(msg, sendResponse);
         return true;
       }
+      if (type === protocol.BG_ERASE_JOB_DATA) {
+        onEraseJobData(msg, sendResponse);
+        return true;
+      }
       return false;
     });
   }
 
+  const contentCaps = buildContentCaps();
+  const toolsetWanted = buildToolsetWanted();
   sendToBackground(wrapOutgoing(protocol.CS_READY, {
+    tabId: null,
     contentSessionId,
-    url: global.location && global.location.href ? global.location.href : ''
+    url: global.location && global.location.href ? global.location.href : '',
+    contentCaps
   }, {
     source: 'content',
-    stage: 'cs_ready'
+    stage: 'cs_ready',
+    clientCaps: { content: contentCaps },
+    toolsetWanted
+  }), () => {});
+  sendToBackground(wrapOutgoing(protocol.CS_HELLO_CAPS, {
+    tabId: null,
+    contentSessionId,
+    url: global.location && global.location.href ? global.location.href : '',
+    contentCaps
+  }, {
+    source: 'content',
+    stage: 'cs_hello_caps',
+    clientCaps: { content: contentCaps },
+    toolsetWanted
   }), () => {});
 })(globalThis);

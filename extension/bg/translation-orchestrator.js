@@ -27,30 +27,50 @@
       tabStateStore,
       jobStore,
       pageCacheStore,
+      translationMemoryStore,
+      toolManifest,
+      toolPolicyResolver,
       translationCall,
       translationAgent,
       eventFactory,
       eventLogFn,
-      onUiPatch
+      onUiPatch,
+      onCapabilitiesChanged,
+      capabilitiesProvider
     } = {}) {
       this.chromeApi = chromeApi;
       this.settingsStore = settingsStore || null;
       this.tabStateStore = tabStateStore || null;
       this.jobStore = jobStore || null;
       this.pageCacheStore = pageCacheStore || null;
+      this.translationMemoryStore = translationMemoryStore || null;
+      this.toolManifest = toolManifest || null;
+      this.toolPolicyResolver = toolPolicyResolver || null;
       this.translationCall = translationCall || null;
       this.translationAgent = translationAgent || null;
+      this.runSettings = NT.RunSettings ? new NT.RunSettings() : null;
       this.eventFactory = eventFactory || null;
       this.eventLogFn = typeof eventLogFn === 'function' ? eventLogFn : null;
       this.onUiPatch = typeof onUiPatch === 'function' ? onUiPatch : null;
+      this.onCapabilitiesChanged = typeof onCapabilitiesChanged === 'function' ? onCapabilitiesChanged : null;
+      this.capabilitiesProvider = typeof capabilitiesProvider === 'function' ? capabilitiesProvider : null;
 
       this.BATCH_SIZE = 8;
       this.JOB_LEASE_MS = 2 * 60 * 1000;
       this.MAX_JOB_AGE_MS = 7 * 24 * 60 * 60 * 1000;
       this.APPLY_ACK_TIMEOUT_MS = 8000;
+      this.APPLY_DELTA_ACK_TIMEOUT_MS = 2500;
+      this.MEMORY_PAGE_INDEX_CAP = 5;
+      this.PATCH_HISTORY_LIMIT = 2000;
+      this.PATCH_DELTA_DEBOUNCE_MS = 320;
+      this.PATCH_PREVIEW_CHARS = 160;
+      this.COMPARE_DIFF_THRESHOLD_DEFAULT = 8000;
       this.processingJobs = new Set();
       this.pendingApplyAcks = new Map();
+      this.pendingDeltaAcks = new Map();
       this.jobAbortControllers = new Map();
+      this.contentCapsByTab = {};
+      this.pendingPatchFlushByJob = new Map();
     }
 
     isContentMessageType(type) {
@@ -88,6 +108,8 @@
 
       const MessageEnvelope = NT.MessageEnvelope || null;
       const now = Date.now();
+      const displayMode = await this._resolveTabDisplayMode(numericTabId);
+      const compareDiffThreshold = await this._getCompareDiffThreshold();
       const job = {
         id: MessageEnvelope && typeof MessageEnvelope.newId === 'function'
           ? MessageEnvelope.newId()
@@ -119,7 +141,11 @@
         agentState: null,
         recentDiffItems: [],
         translationMemoryBySource: {},
+        memoryContext: null,
+        memoryRestore: null,
         apiCacheEnabled: true,
+        displayMode,
+        compareDiffThreshold,
         proofreadingState: {
           totalPasses: 0,
           completedPasses: 0,
@@ -127,19 +153,23 @@
         }
       };
 
+      const settings = await this._readAgentSettings().catch(() => null);
+      this._ensureJobRunSettings(job, { settings });
       await this._saveJob(job, { setActive: true });
       this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_START : 'translation.start', 'Задача перевода запущена', {
         tabId: numericTabId,
         jobId: job.id,
         status: job.status
       });
-      await this._syncVisibilityToContent(numericTabId, { contentSessionId: null }).catch(() => {});
+      await this._syncVisibilityToContent(numericTabId, { contentSessionId: null, job }).catch(() => {});
 
       const protocol = NT.TranslationProtocol || {};
       const sent = await this._sendToTab(numericTabId, {
         type: protocol.BG_START_JOB,
         jobId: job.id,
-        targetLang: job.targetLang
+        targetLang: job.targetLang,
+        mode: this._normalizeDisplayMode(job.displayMode, true),
+        compareDiffThreshold: this._normalizeCompareDiffThreshold(job.compareDiffThreshold)
       });
 
       if (!sent.ok) {
@@ -163,6 +193,8 @@
         return { ok: true, cancelled: false };
       }
       this._abortJobRequests(job.id, reason);
+      this._clearPendingAckWaiters(job.id);
+      await this._flushPatchEvents(job.id, { forceSave: true }).catch(() => ({ ok: false }));
 
       job.status = 'cancelled';
       if (reason === 'REPLACED_BY_NEW_JOB') {
@@ -380,17 +412,41 @@
         }
       });
       await this._sendToTab(numericTabId, {
+        type: protocol.BG_CANCEL_JOB,
+        jobId: lastJob && lastJob.id ? lastJob.id : null
+      });
+      await this._sendToTab(numericTabId, {
         type: protocol.BG_RESTORE_ORIGINALS,
+        jobId: lastJob && lastJob.id ? lastJob.id : null
+      });
+      await this._sendToTab(numericTabId, {
+        type: protocol.BG_ERASE_JOB_DATA,
         jobId: lastJob && lastJob.id ? lastJob.id : null
       });
 
       let cacheCleared = false;
-      if (includeCache && this.pageCacheStore && lastJob && lastJob.url) {
+      if (includeCache && this.pageCacheStore && lastJob) {
         const removed = await this.pageCacheStore.removeEntry({
-          url: lastJob.url,
+          key: lastJob.cacheKey || null,
+          url: lastJob.url || '',
           targetLang: lastJob.targetLang || 'ru'
         });
         cacheCleared = Boolean(removed);
+      }
+      let memoryCleared = false;
+      if (includeCache && this.translationMemoryStore && lastJob) {
+        const memoryCtx = lastJob.memoryContext && typeof lastJob.memoryContext === 'object'
+          ? lastJob.memoryContext
+          : null;
+        if (memoryCtx && memoryCtx.pageKey) {
+          const removed = await this.translationMemoryStore.removePage(memoryCtx.pageKey).catch(() => ({ ok: false, removed: false }));
+          memoryCleared = Boolean(removed && removed.removed);
+        } else if (memoryCtx && memoryCtx.normalizedUrl) {
+          const removedByUrl = await this.translationMemoryStore.removePagesByUrl(memoryCtx.normalizedUrl, {
+            targetLang: lastJob.targetLang || 'ru'
+          }).catch(() => ({ ok: false, removed: 0 }));
+          memoryCleared = Number(removedByUrl && removedByUrl.removed || 0) > 0;
+        }
       }
 
       if (this.tabStateStore && typeof this.tabStateStore.upsertStatusPatch === 'function') {
@@ -409,6 +465,11 @@
           modelDecision: null,
           updatedAt: Date.now()
         });
+        if (typeof this.tabStateStore.upsertDisplayMode === 'function') {
+          await this.tabStateStore.upsertDisplayMode(numericTabId, 'original');
+        } else if (typeof this.tabStateStore.upsertVisibility === 'function') {
+          await this.tabStateStore.upsertVisibility(numericTabId, false);
+        }
       }
       if (this.jobStore && typeof this.jobStore.clearTabHistory === 'function') {
         await this.jobStore.clearTabHistory(numericTabId);
@@ -416,7 +477,8 @@
 
       this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_CANCEL : 'translation.cancel', 'Данные перевода очищены', {
         tabId: numericTabId,
-        cacheCleared
+        cacheCleared,
+        memoryCleared
       });
       if (this.onUiPatch) {
         this.onUiPatch({
@@ -426,13 +488,154 @@
           lastError: null,
           agentState: null,
           selectedCategories: [],
-          availableCategories: []
+          availableCategories: [],
+          translationDisplayModeByTab: { [numericTabId]: 'original' },
+          translationVisibilityByTab: { [numericTabId]: false }
         });
       }
-      return { ok: true, cleared: true, cacheCleared };
+      return { ok: true, cleared: true, cacheCleared, memoryCleared };
     }
 
-    async setVisibility({ tabId, visible } = {}) {
+    async eraseTranslationMemory({ tabId, scope = 'page' } = {}) {
+      if (!this.translationMemoryStore) {
+        return { ok: false, error: { code: 'MEMORY_STORE_UNAVAILABLE', message: 'Хранилище памяти перевода недоступно' } };
+      }
+      const mode = scope === 'all' ? 'all' : 'page';
+      if (mode === 'all') {
+        await this.translationMemoryStore.clearAll().catch(() => ({ ok: false }));
+        this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_CANCEL : 'translation.cancel', 'Память перевода полностью очищена', {
+          scope: 'all'
+        });
+        return { ok: true, scope: 'all', removed: true };
+      }
+      const numericTabId = Number(tabId);
+      if (!Number.isFinite(numericTabId)) {
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId для очистки памяти страницы' } };
+      }
+      const active = await this.jobStore.getActiveJob(numericTabId);
+      const last = await this._getLastJobForTab(numericTabId);
+      const source = active || last || null;
+      const memoryCtx = source && source.memoryContext && typeof source.memoryContext === 'object'
+        ? source.memoryContext
+        : null;
+      if (memoryCtx && memoryCtx.pageKey) {
+        const removed = await this.translationMemoryStore.removePage(memoryCtx.pageKey).catch(() => ({ ok: false, removed: false }));
+        return { ok: true, scope: 'page', removed: Boolean(removed && removed.removed), pageKey: memoryCtx.pageKey };
+      }
+      if (memoryCtx && memoryCtx.normalizedUrl) {
+        const removed = await this.translationMemoryStore.removePagesByUrl(memoryCtx.normalizedUrl, {
+          targetLang: source && source.targetLang ? source.targetLang : 'ru'
+        }).catch(() => ({ ok: false, removed: 0 }));
+        return {
+          ok: true,
+          scope: 'page',
+          removed: Number(removed && removed.removed || 0) > 0,
+          removedCount: Number(removed && removed.removed || 0),
+          normalizedUrl: memoryCtx.normalizedUrl
+        };
+      }
+      return { ok: true, scope: 'page', removed: false };
+    }
+
+    async applyAutoTuneProposal({ tabId, jobId = null, proposalId } = {}) {
+      if (!proposalId || typeof proposalId !== 'string') {
+        return { ok: false, error: { code: 'INVALID_PROPOSAL_ID', message: 'Требуется proposalId' } };
+      }
+      const job = await this._resolveJobForAutoTuneAction({ tabId, jobId });
+      if (!job) {
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача для применения авто-настройки не найдена' } };
+      }
+      const settings = await this._readAgentSettings();
+      this._ensureJobRunSettings(job, { settings });
+      const executed = await this._executeAutoTuneTool({
+        job,
+        settings,
+        toolName: 'agent.apply_run_settings_proposal',
+        args: { proposalId, confirmedByUser: true }
+      });
+      const refreshed = await this.jobStore.getJob(job.id).catch(() => null);
+      const source = refreshed || job;
+      return {
+        ok: Boolean(executed && executed.ok !== false),
+        result: executed || null,
+        job: this._toJobSummary(source)
+      };
+    }
+
+    async rejectAutoTuneProposal({ tabId, jobId = null, proposalId, reason = '' } = {}) {
+      if (!proposalId || typeof proposalId !== 'string') {
+        return { ok: false, error: { code: 'INVALID_PROPOSAL_ID', message: 'Требуется proposalId' } };
+      }
+      const job = await this._resolveJobForAutoTuneAction({ tabId, jobId });
+      if (!job) {
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача для отклонения авто-настройки не найдена' } };
+      }
+      const settings = await this._readAgentSettings();
+      this._ensureJobRunSettings(job, { settings });
+      const executed = await this._executeAutoTuneTool({
+        job,
+        settings,
+        toolName: 'agent.reject_run_settings_proposal',
+        args: { proposalId, reason: String(reason || '').slice(0, 240) }
+      });
+      const refreshed = await this.jobStore.getJob(job.id).catch(() => null);
+      const source = refreshed || job;
+      return {
+        ok: Boolean(executed && executed.ok !== false),
+        result: executed || null,
+        job: this._toJobSummary(source)
+      };
+    }
+
+    async resetAutoTuneOverrides({ tabId, jobId = null } = {}) {
+      const job = await this._resolveJobForAutoTuneAction({ tabId, jobId });
+      if (!job) {
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача для сброса авто-настроек не найдена' } };
+      }
+      const settings = await this._readAgentSettings();
+      const runSettings = this._ensureJobRunSettings(job, { settings });
+      const baseEffective = this.runSettings && typeof this.runSettings.computeBaseEffective === 'function'
+        ? this.runSettings.computeBaseEffective({
+          globalEffectiveSettings: settings && settings.effectiveSettings ? settings.effectiveSettings : {},
+          jobContext: job
+        })
+        : {};
+      const userApplied = this.runSettings && typeof this.runSettings.applyPatch === 'function'
+        ? this.runSettings.applyPatch(baseEffective, runSettings.userOverrides || {})
+        : { ...baseEffective, ...(runSettings.userOverrides || {}) };
+      const diff = this.runSettings && typeof this.runSettings.diff === 'function'
+        ? this.runSettings.diff(runSettings.effective || {}, userApplied)
+        : { changedKeys: [] };
+      runSettings.agentOverrides = {};
+      runSettings.effective = userApplied;
+      runSettings.autoTune.lastAppliedTs = Date.now();
+      runSettings.autoTune.decisionLog = Array.isArray(runSettings.autoTune.decisionLog)
+        ? runSettings.autoTune.decisionLog
+        : [];
+      runSettings.autoTune.decisionLog.push({
+        ts: Date.now(),
+        stage: this._resolvePatchPhase(job),
+        decisionKey: 'ui_reset',
+        inputsSummary: { source: 'ui' },
+        patchSummary: diff.changedKeys.slice(0, 24),
+        reasonShort: 'UI reset AutoTune overrides'
+      });
+      runSettings.autoTune.decisionLog = runSettings.autoTune.decisionLog.slice(-160);
+      job.agentState = job.agentState && typeof job.agentState === 'object' ? job.agentState : {};
+      job.agentState.reports = Array.isArray(job.agentState.reports) ? job.agentState.reports : [];
+      job.agentState.reports.push({
+        ts: Date.now(),
+        type: 'autotune',
+        title: 'Авто-настройки для задачи сброшены',
+        body: diff.changedKeys.length ? `Сброшено параметров: ${diff.changedKeys.length}` : 'Изменений не было',
+        meta: { changedKeys: diff.changedKeys.slice(0, 24) }
+      });
+      job.agentState.reports = job.agentState.reports.slice(-120);
+      await this._saveJob(job, this._isTerminalStatus(job.status) ? { clearActive: true } : { setActive: true });
+      return { ok: true, job: this._toJobSummary(job), changedKeys: diff.changedKeys || [] };
+    }
+
+    async setVisibility({ tabId, visible, mode } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
         return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
@@ -449,41 +652,184 @@
       const contentSessionId = activeJob && typeof activeJob.contentSessionId === 'string' && activeJob.contentSessionId
         ? activeJob.contentSessionId
         : null;
+      const displayMode = this._normalizeDisplayMode(mode, Boolean(visible));
+      const compareDiffThreshold = await this._getCompareDiffThreshold({ job: activeJob });
       await this._sendToTab(numericTabId, {
         type: protocol.BG_SET_VISIBILITY,
-        visible: Boolean(visible),
+        visible: displayMode !== 'original',
+        mode: displayMode,
+        compareDiffThreshold,
         ...(contentSessionId ? { contentSessionId } : {})
       });
-      if (this.tabStateStore && typeof this.tabStateStore.upsertVisibility === 'function') {
-        await this.tabStateStore.upsertVisibility(numericTabId, Boolean(visible));
+      if (this.tabStateStore && typeof this.tabStateStore.upsertDisplayMode === 'function') {
+        await this.tabStateStore.upsertDisplayMode(numericTabId, displayMode);
+      } else if (this.tabStateStore && typeof this.tabStateStore.upsertVisibility === 'function') {
+        await this.tabStateStore.upsertVisibility(numericTabId, displayMode !== 'original');
       }
-      return { ok: true };
+      if (activeJob && activeJob.id) {
+        activeJob.displayMode = displayMode;
+        activeJob.compareDiffThreshold = compareDiffThreshold;
+        this._queuePatchEvent(activeJob, {
+          blockId: '__display_mode__',
+          phase: this._resolvePatchPhase(activeJob),
+          kind: 'toggle',
+          prev: { textHash: null, textPreview: '' },
+          next: { textHash: null, textPreview: '' },
+          meta: {
+            mode: displayMode
+          }
+        }, { forceFlush: true });
+        await this._flushPatchEvents(activeJob.id, { forceSave: true });
+      }
+      return { ok: true, mode: displayMode, visible: displayMode !== 'original', compareDiffThreshold };
     }
 
     async _resolveTabVisibility(tabId) {
+      const mode = await this._resolveTabDisplayMode(tabId);
+      return mode !== 'original';
+    }
+
+    async _resolveTabDisplayMode(tabId) {
       try {
-        if (this.tabStateStore && typeof this.tabStateStore.getVisibility === 'function') {
-          return await this.tabStateStore.getVisibility(tabId);
+        if (this.tabStateStore && typeof this.tabStateStore.getDisplayMode === 'function') {
+          const mode = await this.tabStateStore.getDisplayMode(tabId);
+          if (mode === 'original' || mode === 'compare' || mode === 'translated') {
+            return mode;
+          }
         }
       } catch (_) {
         // best-effort fallback below
       }
-      return true;
+      try {
+        if (this.tabStateStore && typeof this.tabStateStore.getVisibility === 'function') {
+          const visible = await this.tabStateStore.getVisibility(tabId);
+          return visible ? 'translated' : 'original';
+        }
+      } catch (_) {
+        // best-effort fallback below
+      }
+      return 'translated';
     }
 
-    async _syncVisibilityToContent(tabId, { contentSessionId = null } = {}) {
+    async _syncVisibilityToContent(tabId, { contentSessionId = null, job = null } = {}) {
       const protocol = NT.TranslationProtocol || {};
-      const visible = await this._resolveTabVisibility(tabId);
+      const mode = await this._resolveTabDisplayMode(tabId);
+      const visible = mode !== 'original';
+      const compareDiffThreshold = await this._getCompareDiffThreshold({ job });
       try {
         await this._sendToTab(tabId, {
           type: protocol.BG_SET_VISIBILITY,
           visible,
+          mode,
+          compareDiffThreshold,
           ...(contentSessionId ? { contentSessionId } : {})
         });
       } catch (_) {
         // best-effort
       }
       return visible;
+    }
+
+    async _resolveJobForAutoTuneAction({ tabId, jobId = null } = {}) {
+      if (jobId && this.jobStore && typeof this.jobStore.getJob === 'function') {
+        const byId = await this.jobStore.getJob(jobId).catch(() => null);
+        if (byId) {
+          return byId;
+        }
+      }
+      const numericTabId = Number(tabId);
+      if (!Number.isFinite(numericTabId)) {
+        return null;
+      }
+      const active = await this.jobStore.getActiveJob(numericTabId).catch(() => null);
+      if (active) {
+        return active;
+      }
+      return this._getLastJobForTab(numericTabId);
+    }
+
+    async _executeAutoTuneTool({ job, settings, toolName, args } = {}) {
+      const AgentToolRegistry = NT.AgentToolRegistry || null;
+      if (!AgentToolRegistry || !job || !job.id || !toolName) {
+        return { ok: false, code: 'AUTOTUNE_TOOL_UNAVAILABLE' };
+      }
+      const runLlmRequest = this.translationAgent && typeof this.translationAgent.runLlmRequest === 'function'
+        ? this.translationAgent.runLlmRequest
+        : null;
+      const toolRegistry = new AgentToolRegistry({
+        translationAgent: this.translationAgent,
+        persistJobState: async (nextJob) => {
+          if (!nextJob || !nextJob.id) {
+            return;
+          }
+          await this._saveJob(nextJob, this._isTerminalStatus(nextJob.status) ? { clearActive: true } : { setActive: true });
+        },
+        runLlmRequest,
+        toolManifest: this.toolManifest,
+        toolPolicyResolver: this.toolPolicyResolver,
+        toolExecutionEngine: NT.ToolExecutionEngine
+          ? new NT.ToolExecutionEngine({
+            toolManifest: this.toolManifest,
+            persistJobState: async (nextJob) => {
+              if (!nextJob || !nextJob.id) {
+                return;
+              }
+              await this._saveJob(nextJob, this._isTerminalStatus(nextJob.status) ? { clearActive: true } : { setActive: true });
+            }
+          })
+          : null,
+        capabilities: this._buildRuntimeCapabilities(job.tabId),
+        translationMemoryStore: this.translationMemoryStore,
+        memorySettings: settings && typeof settings === 'object'
+          ? {
+            enabled: settings.translationMemoryEnabled !== false,
+            maxPages: settings.translationMemoryMaxPages,
+            maxBlocks: settings.translationMemoryMaxBlocks,
+            maxAgeDays: settings.translationMemoryMaxAgeDays
+          }
+          : null,
+        applyDelta: async ({ job: deltaJob, blockId, text, isFinal }) => this._applyDeltaToTab({
+          job: deltaJob || job,
+          blockId,
+          text,
+          isFinal
+        }),
+        getJobSignal: (jobId) => {
+          const controller = this._getJobAbortController(jobId);
+          return controller && controller.signal ? controller.signal : null;
+        }
+      });
+      const blocks = Object.keys(job.blocksById || {})
+        .map((id) => job.blocksById[id])
+        .filter(Boolean);
+      let output = null;
+      try {
+        output = await toolRegistry.execute({
+          name: toolName,
+          arguments: JSON.stringify(args || {}),
+          job,
+          blocks,
+          settings,
+          callId: `ui_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+          source: 'ui',
+          requestId: null
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          code: error && error.code ? error.code : 'AUTOTUNE_TOOL_FAILED',
+          message: error && error.message ? error.message : 'AutoTune tool execution failed'
+        };
+      }
+      if (typeof output !== 'string') {
+        return { ok: true };
+      }
+      try {
+        const parsed = JSON.parse(output);
+        return parsed && typeof parsed === 'object' ? parsed : { ok: true, value: parsed };
+      } catch (_) {
+        return { ok: true, outputString: output };
+      }
     }
 
     async retryFailed({ tabId, jobId } = {}) {
@@ -524,11 +870,15 @@
     async restoreStateAfterRestart() {
       const activeJobs = await this.jobStore.listActiveJobs();
       const now = Date.now();
+      const settings = await this._readAgentSettings().catch(() => null);
       for (const job of activeJobs) {
         if (!job) {
           continue;
         }
-        if (typeof job.leaseUntilTs === 'number' && job.leaseUntilTs < now) {
+        const leaseExpiredAtRestore = typeof job.leaseUntilTs === 'number' && job.leaseUntilTs < now;
+        this._ensureJobRunSettings(job, { settings });
+        await this._saveJob(job, { setActive: true });
+        if (leaseExpiredAtRestore) {
           const hasCreatedAt = Number.isFinite(Number(job.createdAt));
           const createdAt = hasCreatedAt ? Number(job.createdAt) : now;
           const tooOld = hasCreatedAt && (now - createdAt > this.MAX_JOB_AGE_MS);
@@ -563,13 +913,17 @@
             continue;
           }
           await this._syncVisibilityToContent(job.tabId, {
-            contentSessionId: job.contentSessionId || null
+            contentSessionId: job.contentSessionId || null,
+            job
           }).catch(() => {});
+          job.compareDiffThreshold = await this._getCompareDiffThreshold({ job });
           const protocol = NT.TranslationProtocol || {};
           const sent = await this._sendToTab(job.tabId, {
             type: protocol.BG_START_JOB,
             jobId: job.id,
-            targetLang: job.targetLang || 'ru'
+            targetLang: job.targetLang || 'ru',
+            mode: this._normalizeDisplayMode(job.displayMode, true),
+            compareDiffThreshold: this._normalizeCompareDiffThreshold(job.compareDiffThreshold)
           });
           if (!sent.ok) {
             await this._markFailed(job, {
@@ -595,7 +949,8 @@
             continue;
           }
           await this._syncVisibilityToContent(job.tabId, {
-            contentSessionId: job.contentSessionId || null
+            contentSessionId: job.contentSessionId || null,
+            job
           }).catch(() => {});
           this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Возобновляю выполнявшуюся задачу перевода после перезапуска', {
             tabId: job.tabId,
@@ -630,11 +985,20 @@
       }
       const type = typeof parsed.type === 'string' ? parsed.type : null;
       const msg = parsed && parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
+      const meta = parsed && parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {};
+      const contentCaps = msg && msg.contentCaps && typeof msg.contentCaps === 'object'
+        ? msg.contentCaps
+        : (meta && meta.clientCaps && meta.clientCaps.content && typeof meta.clientCaps.content === 'object'
+          ? meta.clientCaps.content
+          : null);
       if (!type || !protocol) {
         return { ok: false, error: { code: 'INVALID_CONTENT_MESSAGE', message: 'Отсутствует тип сообщения' } };
       }
 
       if (type === protocol.CS_READY) {
+        if (tabId !== null) {
+          this._updateContentCapabilities(tabId, contentCaps);
+        }
         if (tabId !== null) {
           const active = await this.jobStore.getActiveJob(tabId);
           if (active && (active.status === 'preparing' || active.status === 'running' || active.status === 'completing' || active.status === 'awaiting_categories')) {
@@ -648,6 +1012,11 @@
                   this.pendingApplyAcks.delete(key);
                 }
               });
+              Array.from(this.pendingDeltaAcks.keys()).forEach((key) => {
+                if (typeof key === 'string' && key.indexOf(prefix) === 0) {
+                  this.pendingDeltaAcks.delete(key);
+                }
+              });
             } catch (_) {
               // best-effort cleanup
             }
@@ -655,6 +1024,7 @@
             active.message = 'Контент-скрипт переподключён; пересканирую страницу';
             active.scanReceived = false;
             active.currentBatchId = null;
+            active.displayMode = await this._resolveTabDisplayMode(tabId);
             active.reconnectCount = Number.isFinite(Number(active.reconnectCount))
               ? Number(active.reconnectCount) + 1
               : 1;
@@ -671,11 +1041,14 @@
             const sessionId = (msg && typeof msg.contentSessionId === 'string' && msg.contentSessionId)
               ? msg.contentSessionId
               : (active.contentSessionId || null);
-            await this._syncVisibilityToContent(tabId, { contentSessionId: sessionId }).catch(() => {});
+            active.compareDiffThreshold = await this._getCompareDiffThreshold({ job: active });
+            await this._syncVisibilityToContent(tabId, { contentSessionId: sessionId, job: active }).catch(() => {});
             await this._sendToTab(tabId, {
               type: protocol.BG_START_JOB,
               jobId: active.id,
               targetLang: active.targetLang || 'ru',
+              mode: this._normalizeDisplayMode(active.displayMode, true),
+              compareDiffThreshold: this._normalizeCompareDiffThreshold(active.compareDiffThreshold),
               ...(sessionId ? { contentSessionId: sessionId } : {})
             });
             this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Контент-скрипт переподключён, задача возобновлена', {
@@ -686,13 +1059,79 @@
         }
         return { ok: true };
       }
+      if (type === protocol.CS_HELLO_CAPS) {
+        if (tabId !== null) {
+          this._updateContentCapabilities(tabId, contentCaps);
+        }
+        const runtimeCaps = this._buildRuntimeCapabilities(tabId);
+        return {
+          ok: true,
+          tabId,
+          contentCaps: tabId !== null ? (this.contentCapsByTab[String(tabId)] || null) : null,
+          serverCaps: runtimeCaps && typeof runtimeCaps === 'object' ? runtimeCaps : {},
+          toolsetWanted: meta && meta.toolsetWanted && typeof meta.toolsetWanted === 'object'
+            ? meta.toolsetWanted
+            : null
+        };
+      }
       if (type === protocol.CS_SCAN_RESULT) {
         return this._handleScanResult({ message: msg, tabId });
       }
       if (type === protocol.CS_APPLY_ACK) {
         return this._handleApplyAck({ message: msg, tabId });
       }
+      if (type === protocol.CS_APPLY_DELTA_ACK) {
+        return this._handleApplyDeltaAck({ message: msg, tabId });
+      }
       return { ok: false, error: { code: 'UNKNOWN_CONTENT_MESSAGE', message: `Неподдерживаемый тип сообщения: ${type}` } };
+    }
+
+    _updateContentCapabilities(tabId, caps) {
+      const numericTabId = Number(tabId);
+      if (!Number.isFinite(numericTabId)) {
+        return;
+      }
+      const source = caps && typeof caps === 'object' ? caps : {};
+      const normalized = {
+        domIndexerVersion: typeof source.domIndexerVersion === 'string' ? source.domIndexerVersion : 'v1',
+        supportsApplyDelta: source.supportsApplyDelta !== false,
+        supportsRestoreOriginal: source.supportsRestoreOriginal !== false,
+        maxDomWritesPerSecondHint: Number.isFinite(Number(source.maxDomWritesPerSecondHint))
+          ? Math.max(1, Math.round(Number(source.maxDomWritesPerSecondHint)))
+          : 24,
+        selectorStability: source.selectorStability === 'high' || source.selectorStability === 'low'
+          ? source.selectorStability
+          : 'medium',
+        updatedAt: Date.now()
+      };
+      this.contentCapsByTab[String(numericTabId)] = normalized;
+      if (this.onCapabilitiesChanged) {
+        this.onCapabilitiesChanged({
+          source: 'content',
+          tabId: numericTabId,
+          contentCaps: normalized
+        });
+      }
+    }
+
+    getContentCapabilitiesSnapshot() {
+      return this.contentCapsByTab && typeof this.contentCapsByTab === 'object'
+        ? JSON.parse(JSON.stringify(this.contentCapsByTab))
+        : {};
+    }
+
+    _buildRuntimeCapabilities(tabId) {
+      const external = this.capabilitiesProvider
+        ? this.capabilitiesProvider({ tabId })
+        : {};
+      const contentCapsByTab = this.getContentCapabilitiesSnapshot();
+      const contentCaps = contentCapsByTab && typeof contentCapsByTab === 'object'
+        ? contentCapsByTab[String(tabId)] || null
+        : null;
+      return {
+        ...(external && typeof external === 'object' ? external : {}),
+        content: contentCaps
+      };
     }
 
     async _handleScanResult({ message, tabId }) {
@@ -716,6 +1155,21 @@
 
       const normalized = this._normalizeBlocks(message.blocks);
       const settings = await this._readAgentSettings();
+      job.compareDiffThreshold = this._normalizeCompareDiffThreshold(settings.translationCompareDiffThreshold);
+      await this._computeMemoryContext({
+        job,
+        blocks: normalized,
+        settings
+      });
+      const memoryRestore = await this._restoreFromTranslationMemory({
+        job,
+        blocks: normalized,
+        settings,
+        applyToTab: true
+      });
+      if (memoryRestore && memoryRestore.appliedCount > 0) {
+        job.memoryRestore = memoryRestore;
+      }
       this._recordRuntimeAction(job, {
         tool: 'pageRuntime',
         status: 'ok',
@@ -734,16 +1188,80 @@
           return resumed;
         }
       }
+      if (
+        memoryRestore
+        && memoryRestore.ok
+        && memoryRestore.coverage === 'full_page'
+        && memoryRestore.matchType === 'exact_page_key'
+        && !resumeCandidate
+      ) {
+        const latest = await this.jobStore.getJob(job.id);
+        if (!latest || this._isTerminalStatus(latest.status)) {
+          return { ok: true, ignored: true };
+        }
+        if (message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
+          latest.contentSessionId = message.contentSessionId;
+        }
+        const blocksById = {};
+        normalized.forEach((item) => {
+          blocksById[item.blockId] = item;
+        });
+        const availableCategories = this._collectAvailableCategories(blocksById);
+        const recommendedCategories = this._normalizeSelectedCategories(
+          Array.isArray(memoryRestore.recommendedCategories) ? memoryRestore.recommendedCategories : availableCategories,
+          availableCategories,
+          availableCategories
+        );
+        latest.scanReceived = true;
+        latest.blocksById = blocksById;
+        latest.totalBlocks = 0;
+        latest.pendingBlockIds = [];
+        latest.failedBlockIds = [];
+        latest.completedBlocks = 0;
+        latest.status = 'awaiting_categories';
+        latest.message = `Восстановлено из памяти: ${memoryRestore.restoredCount} блоков. Выберите категории.`;
+        latest.pageSignature = this._buildPageSignature(normalized);
+        latest.cacheKey = this.pageCacheStore
+          ? this.pageCacheStore.buildKey({ url: latest.url || '', targetLang: latest.targetLang || 'ru' })
+          : null;
+        latest.availableCategories = availableCategories;
+        latest.selectedCategories = recommendedCategories;
+        latest.apiCacheEnabled = settings.translationApiCacheEnabled !== false;
+        this._ensureMemoryAgentState(latest, settings, memoryRestore);
+        await this._saveJob(latest, { setActive: true });
+        return {
+          ok: true,
+          blockCount: normalized.length,
+          awaitingCategorySelection: true,
+          fromMemory: true,
+          availableCategories,
+          selectedCategories: recommendedCategories
+        };
+      }
       const planningSettings = {
         ...settings,
         translationCategoryMode: 'auto',
         translationCategoryList: []
       };
+      this._ensureJobRunSettings(job, { settings: planningSettings });
       const prepared = await this._prepareAgentJob({
         job,
         blocks: normalized,
         settings: planningSettings
       });
+      if (prepared && prepared.fatalPlanningError) {
+        await this._markFailed(job, {
+          code: prepared.fatalPlanningError.code || 'AGENT_LOOP_GUARD_STOP',
+          message: prepared.fatalPlanningError.message || 'Планирование остановлено safety-guard'
+        });
+        return {
+          ok: false,
+          error: {
+            code: prepared.fatalPlanningError.code || 'AGENT_LOOP_GUARD_STOP',
+            message: prepared.fatalPlanningError.message || 'Планирование остановлено safety-guard'
+          }
+        };
+      }
       let latest = null;
       try {
         latest = await this.jobStore.getJob(job.id);
@@ -1095,6 +1613,69 @@
       return { ok: true };
     }
 
+    async _handleApplyDeltaAck({ message, tabId }) {
+      const jobId = message && message.jobId ? message.jobId : null;
+      const blockId = message && message.blockId ? message.blockId : null;
+      const deltaId = message && typeof message.deltaId === 'string' && message.deltaId
+        ? message.deltaId
+        : null;
+      if (!jobId || !blockId) {
+        return { ok: false, error: { code: 'INVALID_APPLY_DELTA_ACK', message: 'Требуются jobId и blockId' } };
+      }
+      const sessionIdFromMsg = message && typeof message.contentSessionId === 'string' && message.contentSessionId
+        ? message.contentSessionId
+        : null;
+      let job = null;
+      try {
+        job = await this.jobStore.getJob(jobId);
+      } catch (_) {
+        job = null;
+      }
+      const sessionIdFromJob = job && typeof job.contentSessionId === 'string' && job.contentSessionId
+        ? job.contentSessionId
+        : null;
+      if (sessionIdFromMsg && sessionIdFromJob && sessionIdFromMsg !== sessionIdFromJob) {
+        return { ok: true, ignored: true };
+      }
+
+      const keys = [];
+      const pushKey = (key) => {
+        if (key && !keys.includes(key)) {
+          keys.push(key);
+        }
+      };
+      pushKey(this._deltaAckKey(jobId, blockId, deltaId, sessionIdFromMsg));
+      pushKey(this._deltaAckKey(jobId, blockId, deltaId, sessionIdFromJob));
+      pushKey(this._deltaAckKey(jobId, blockId, deltaId, null));
+      pushKey(this._deltaAckKey(jobId, blockId, null, sessionIdFromMsg));
+      pushKey(this._deltaAckKey(jobId, blockId, null, sessionIdFromJob));
+      pushKey(this._deltaAckKey(jobId, blockId, null, null));
+
+      let waiter = null;
+      for (let i = 0; i < keys.length; i += 1) {
+        waiter = this.pendingDeltaAcks.get(keys[i]);
+        if (waiter) {
+          break;
+        }
+      }
+      if (!waiter) {
+        return { ok: true, ignored: true };
+      }
+      waiter.resolve({
+        ok: message.ok !== false,
+        applied: message.applied === true,
+        isFinal: message.isFinal === true,
+        prevTextHash: typeof message.prevTextHash === 'string' ? message.prevTextHash : null,
+        nextTextHash: typeof message.nextTextHash === 'string' ? message.nextTextHash : null,
+        nodeCountTouched: Number.isFinite(Number(message.nodeCountTouched))
+          ? Number(message.nodeCountTouched)
+          : 0,
+        displayMode: typeof message.displayMode === 'string' ? message.displayMode : null,
+        tabId
+      });
+      return { ok: true };
+    }
+
     async _processJob(jobId) {
       if (!jobId || this.processingJobs.has(jobId)) {
         return;
@@ -1111,6 +1692,16 @@
               this.translationAgent.runProgressAuditTool({ job, reason: 'loop_start', mandatory: true });
             } else if (typeof this.translationAgent.maybeAudit === 'function') {
               this.translationAgent.maybeAudit({ job, reason: 'loop_start', mandatory: true });
+            }
+          }
+          const agentSettings = await this._readAgentSettings();
+          if (this._shouldUseAgentExecution(agentSettings)) {
+            const agentResult = await this._processJobAgentExecution(job, agentSettings);
+            if (!agentResult || !agentResult.fallbackLegacy) {
+              if (agentResult && agentResult.continueLoop) {
+                continue;
+              }
+              break;
             }
           }
           const nextBatch = this._buildNextBatch(job);
@@ -1298,10 +1889,10 @@
             refreshed.pendingBlockIds = refreshed.pendingBlockIds.filter((id) => !batch.blockIds.includes(id));
             refreshed.failedBlockIds = this._mergeUnique(refreshed.failedBlockIds, batch.blockIds);
             refreshed.currentBatchId = null;
-            refreshed.lastError = {
-              code: error && error.code ? error.code : 'BATCH_FAILED',
-              message: error && error.message ? error.message : 'Ошибка перевода батча'
-            };
+            refreshed.lastError = this._normalizeJobError(error, {
+              fallbackCode: 'BATCH_FAILED',
+              fallbackMessage: 'Ошибка перевода батча'
+            });
             refreshed.message = `Ошибка батча: ${refreshed.lastError.message}`;
             this._recordRuntimeAction(refreshed, {
               tool: 'pageRuntime',
@@ -1329,6 +1920,297 @@
           this._dropJobAbortController(jobId);
         }
       }
+    }
+
+    _shouldUseAgentExecution(settings) {
+      const mode = settings && settings.translationAgentExecutionMode === 'agent'
+        ? 'agent'
+        : 'legacy';
+      return mode === 'agent';
+    }
+
+    async _processJobAgentExecution(job, settings) {
+      const AgentToolRegistry = NT.AgentToolRegistry || null;
+      const AgentRunner = NT.AgentRunner || null;
+      const runLlmRequest = this.translationAgent && typeof this.translationAgent.runLlmRequest === 'function'
+        ? this.translationAgent.runLlmRequest
+        : null;
+      if (!AgentToolRegistry || !AgentRunner || !runLlmRequest) {
+        return { continueLoop: false, fallbackLegacy: true };
+      }
+      this._ensureJobRunSettings(job, { settings });
+      const toolRegistry = new AgentToolRegistry({
+        translationAgent: this.translationAgent,
+        persistJobState: async (nextJob) => {
+          if (!nextJob || !nextJob.id) {
+            return;
+          }
+          await this._saveJob(nextJob, { setActive: true });
+        },
+        runLlmRequest,
+        toolManifest: this.toolManifest,
+        toolPolicyResolver: this.toolPolicyResolver,
+        toolExecutionEngine: NT.ToolExecutionEngine
+          ? new NT.ToolExecutionEngine({
+            toolManifest: this.toolManifest,
+            persistJobState: async (nextJob) => {
+              if (!nextJob || !nextJob.id) {
+                return;
+              }
+              await this._saveJob(nextJob, { setActive: true });
+            }
+          })
+          : null,
+        capabilities: this._buildRuntimeCapabilities(job.tabId),
+        translationMemoryStore: this.translationMemoryStore,
+        memorySettings: settings && typeof settings === 'object'
+          ? {
+            enabled: settings.translationMemoryEnabled !== false,
+            maxPages: settings.translationMemoryMaxPages,
+            maxBlocks: settings.translationMemoryMaxBlocks,
+            maxAgeDays: settings.translationMemoryMaxAgeDays
+          }
+          : null,
+        applyDelta: async ({ job: deltaJob, blockId, text, isFinal }) => this._applyDeltaToTab({
+          job: deltaJob || job,
+          blockId,
+          text,
+          isFinal
+        }),
+        getJobSignal: (jobId) => {
+          const controller = this._getJobAbortController(jobId);
+          return controller && controller.signal ? controller.signal : null;
+        }
+      });
+      const runner = new AgentRunner({
+        toolRegistry,
+        persistJobState: async (nextJob) => {
+          if (!nextJob || !nextJob.id) {
+            return;
+          }
+          await this._saveJob(nextJob, { setActive: true });
+        }
+      });
+
+      let result = null;
+      try {
+        result = await runner.runExecution({
+          job,
+          blocks: Object.keys(job.blocksById || {}).map((id) => job.blocksById[id]).filter(Boolean),
+          settings,
+          runLlmRequest
+        });
+      } catch (error) {
+        const normalizedError = (error && typeof error === 'object')
+          ? error
+          : {
+            code: 'AGENT_EXECUTION_FAILED',
+            message: 'Ошибка агент-исполнения'
+          };
+        const requeued = await this._requeueJobForBackpressure(job, normalizedError);
+        if (requeued) {
+          return { continueLoop: false };
+        }
+        await this._markFailed(
+          job,
+          normalizedError
+        );
+        return { continueLoop: false };
+      }
+
+      const refreshed = await this.jobStore.getJob(job.id);
+      if (!refreshed) {
+        return { continueLoop: false };
+      }
+      if (!result || result.ok === false) {
+        const normalizedError = (result && result.error && typeof result.error === 'object')
+          ? result.error
+          : {
+            code: 'AGENT_EXECUTION_FAILED',
+            message: 'Исполнение агентом завершилось ошибкой'
+          };
+        const requeued = await this._requeueJobForBackpressure(refreshed, normalizedError);
+        if (requeued) {
+          return { continueLoop: false };
+        }
+        await this._markFailed(
+          refreshed,
+          normalizedError
+        );
+        return { continueLoop: false };
+      }
+      if (refreshed.status !== 'running') {
+        return { continueLoop: false };
+      }
+
+      const pendingCount = Array.isArray(refreshed.pendingBlockIds) ? refreshed.pendingBlockIds.length : 0;
+      if (pendingCount > 0) {
+        refreshed.message = `Агент выполняет перевод; осталось блоков: ${pendingCount}`;
+        if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.markPhase === 'function') {
+          this.translationAgent.markPhase(refreshed, 'translating', refreshed.message);
+        }
+        await this._saveJob(refreshed, { setActive: true });
+        if (result && result.yielded) {
+          global.setTimeout(() => {
+            this._processJob(refreshed.id).catch(() => {});
+          }, 0);
+          return { continueLoop: false };
+        }
+        return { continueLoop: true };
+      }
+
+      const proofreadRan = await this._runProofreadingPassIfNeeded(refreshed);
+      if (proofreadRan) {
+        return { continueLoop: true };
+      }
+      refreshed.status = refreshed.failedBlockIds.length ? 'failed' : 'done';
+      refreshed.message = refreshed.failedBlockIds.length ? 'Завершено с ошибками в блоках' : 'Перевод завершён';
+      if (this.translationAgent && refreshed.agentState) {
+        if (refreshed.status === 'done' && typeof this.translationAgent.finalizeJob === 'function') {
+          this.translationAgent.finalizeJob(refreshed);
+        }
+        if (refreshed.status === 'failed' && typeof this.translationAgent.markFailed === 'function') {
+          this.translationAgent.markFailed(refreshed, {
+            code: 'FAILED_BLOCKS_PRESENT',
+            message: 'Перевод завершён с ошибками в блоках'
+          });
+        }
+      }
+      if (refreshed.status === 'done') {
+        await this._persistJobCache(refreshed).catch(() => {});
+      }
+      const keepActiveAfterDone = refreshed.status === 'done' && this._shouldKeepJobActiveForCategoryExtensions(refreshed);
+      if (keepActiveAfterDone) {
+        refreshed.message = 'Перевод завершён для выбранных категорий. Можно добавить ещё категории.';
+      }
+      await this._saveJob(refreshed, keepActiveAfterDone ? { setActive: true } : { clearActive: true });
+      if (refreshed.failedBlockIds.length) {
+        this._emitEvent('error', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Перевод завершён с ошибками', {
+          tabId: refreshed.tabId,
+          jobId: refreshed.id,
+          failedBlocksCount: refreshed.failedBlockIds.length,
+          blockCount: refreshed.totalBlocks
+        });
+      }
+      return { continueLoop: false };
+    }
+
+    async _applyDeltaToTab({ job, blockId, text, isFinal = false, meta = null } = {}) {
+      if (!job || !job.id || !Number.isFinite(Number(job.tabId)) || !blockId || typeof text !== 'string') {
+        return { ok: false, applied: false };
+      }
+      const protocol = NT.TranslationProtocol || {};
+      const deltaId = `${job.id}:${blockId}:delta:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      const startedAt = Date.now();
+      const block = job.blocksById && job.blocksById[blockId] ? job.blocksById[blockId] : null;
+      const prevText = block && typeof block.translatedText === 'string' && block.translatedText
+        ? block.translatedText
+        : (block && typeof block.originalText === 'string' ? block.originalText : '');
+      this._recordRuntimeAction(job, {
+        tool: 'pageRuntime',
+        status: 'ok',
+        message: 'content.apply_delta.sent',
+        meta: {
+          blockId,
+          isFinal: Boolean(isFinal),
+          charCount: text.length
+        }
+      });
+      const sent = await this._sendToTab(job.tabId, {
+        type: protocol.BG_APPLY_DELTA,
+        jobId: job.id,
+        blockId,
+        deltaId,
+        text,
+        isFinal: Boolean(isFinal),
+        contentSessionId: job.contentSessionId || null
+      });
+      if (!sent.ok) {
+        this._recordRuntimeAction(job, {
+          tool: 'pageRuntime',
+          status: 'error',
+          message: 'content.apply_delta.failed',
+          meta: {
+            blockId,
+            error: sent && sent.error && sent.error.message ? sent.error.message : 'send_failed'
+          }
+        });
+        return { ok: false, applied: false };
+      }
+      const ack = await this._waitForApplyDeltaAck(job.id, blockId, deltaId, this.APPLY_DELTA_ACK_TIMEOUT_MS);
+      if (!ack.ok) {
+        this._recordRuntimeAction(job, {
+          tool: 'pageRuntime',
+          status: 'error',
+          message: 'content.apply_delta.failed',
+          meta: {
+            blockId,
+            error: 'ack_timeout'
+          }
+        });
+        return { ok: false, applied: false };
+      }
+      this._recordRuntimeAction(job, {
+        tool: 'pageRuntime',
+        status: 'ok',
+        message: 'content.apply_delta.ack',
+        meta: {
+          blockId,
+          applied: ack.applied !== false,
+          isFinal: Boolean(isFinal),
+          latencyMs: Math.max(0, Date.now() - startedAt),
+          nodeCountTouched: Number.isFinite(Number(ack.nodeCountTouched))
+            ? Number(ack.nodeCountTouched)
+            : 0
+        }
+      });
+      if (ack.applied !== false && block) {
+        block.translatedText = text;
+      }
+      if (ack.applied !== false) {
+        this._queuePatchEvent(job, {
+          blockId,
+          phase: this._resolvePatchPhase(job),
+          kind: isFinal ? 'final' : 'delta',
+          prev: {
+            textHash: ack.prevTextHash || this._hashTextStable(prevText),
+            textPreview: this._buildPatchPreview(prevText)
+          },
+          next: {
+            textHash: ack.nextTextHash || this._hashTextStable(text),
+            textPreview: this._buildPatchPreview(text)
+          },
+          meta: {
+            modelUsed: block && block.modelUsed ? block.modelUsed : null,
+            routeUsed: block && block.routeUsed ? block.routeUsed : null,
+            callId: meta && typeof meta.callId === 'string' ? meta.callId : null,
+            responseId: meta && typeof meta.responseId === 'string' ? meta.responseId : null,
+            latencyMs: Math.max(0, Date.now() - startedAt),
+            nodeCountTouched: Number.isFinite(Number(ack.nodeCountTouched))
+              ? Number(ack.nodeCountTouched)
+              : 0,
+            displayMode: ack && typeof ack.displayMode === 'string' ? ack.displayMode : null
+          }
+        }, {
+          debounceKey: isFinal ? null : `delta:${blockId}`,
+          forceFlush: Boolean(isFinal)
+        });
+        if (isFinal) {
+          await this._flushPatchEvents(job.id, { forceSave: true });
+        }
+      }
+      return {
+        ok: true,
+        applied: ack.applied !== false,
+        prevTextHash: ack.prevTextHash || null,
+        nextTextHash: ack.nextTextHash || null,
+        nodeCountTouched: Number.isFinite(Number(ack.nodeCountTouched))
+          ? Number(ack.nodeCountTouched)
+          : 0,
+        displayMode: ack && typeof ack.displayMode === 'string'
+          ? ack.displayMode
+          : null
+      };
     }
 
     _buildNextBatch(job) {
@@ -1555,10 +2437,10 @@
           if (!refreshed || refreshed.status !== 'running') {
             return true;
           }
-          refreshed.lastError = {
-            code: error && error.code ? error.code : 'PROOFREAD_BATCH_FAILED',
-            message: error && error.message ? error.message : 'Ошибка батча вычитки'
-          };
+          refreshed.lastError = this._normalizeJobError(error, {
+            fallbackCode: 'PROOFREAD_BATCH_FAILED',
+            fallbackMessage: 'Ошибка батча вычитки'
+          });
           refreshed.message = `Предупреждение вычитки: ${refreshed.lastError.message}`;
           this._recordRuntimeAction(refreshed, {
             tool: 'pageRuntime',
@@ -1646,6 +2528,10 @@
       return `${jobId}:${batchId}:${sessionId || 'none'}`;
     }
 
+    _deltaAckKey(jobId, blockId, deltaId, sessionId) {
+      return `${jobId}:${blockId}:delta:${deltaId || 'none'}:${sessionId || 'none'}`;
+    }
+
     async _waitForApplyAck(jobId, batchId, timeoutMs) {
       let sessionId = null;
       try {
@@ -1685,6 +2571,56 @@
       });
     }
 
+    async _waitForApplyDeltaAck(jobId, blockId, deltaId, timeoutMs) {
+      let sessionId = null;
+      try {
+        const job = await this.jobStore.getJob(jobId);
+        sessionId = job && typeof job.contentSessionId === 'string' && job.contentSessionId
+          ? job.contentSessionId
+          : null;
+      } catch (_) {
+        sessionId = null;
+      }
+      const key = this._deltaAckKey(jobId, blockId, deltaId || null, sessionId);
+      const legacyKey = this._deltaAckKey(jobId, blockId, deltaId || null, null);
+      const noDeltaKey = this._deltaAckKey(jobId, blockId, null, sessionId);
+      const noDeltaLegacyKey = this._deltaAckKey(jobId, blockId, null, null);
+      return new Promise((resolve) => {
+        const keys = [];
+        const pushKey = (entryKey) => {
+          if (entryKey && !keys.includes(entryKey)) {
+            keys.push(entryKey);
+          }
+        };
+        pushKey(key);
+        pushKey(legacyKey);
+        pushKey(noDeltaKey);
+        pushKey(noDeltaLegacyKey);
+        let waiter = null;
+        const cleanup = () => {
+          keys.forEach((entryKey) => {
+            if (this.pendingDeltaAcks.get(entryKey) === waiter) {
+              this.pendingDeltaAcks.delete(entryKey);
+            }
+          });
+        };
+        const timer = global.setTimeout(() => {
+          cleanup();
+          resolve({ ok: false, timeout: true });
+        }, timeoutMs);
+        waiter = {
+          resolve: (value) => {
+            global.clearTimeout(timer);
+            cleanup();
+            resolve(value || { ok: true });
+          }
+        };
+        keys.forEach((entryKey) => {
+          this.pendingDeltaAcks.set(entryKey, waiter);
+        });
+      });
+    }
+
     async _saveJob(job, { setActive = false, clearActive = false } = {}) {
       if (!job || !job.id) {
         return;
@@ -1707,14 +2643,57 @@
         job.completedBlocks = Math.max(prevCompleted, nextCompleted);
         job.totalBlocks = Math.max(prevTotal, nextTotal);
       }
+      if (!job.displayMode && prev && prev.displayMode) {
+        job.displayMode = prev.displayMode;
+      }
+      if ((!job.runSettings || typeof job.runSettings !== 'object') && prev && prev.runSettings && typeof prev.runSettings === 'object') {
+        job.runSettings = prev.runSettings;
+      }
+      this._ensureJobRunSettings(job, { settings: null });
+      job.displayMode = this._normalizeDisplayMode(job.displayMode, true);
+      if (
+        (!Number.isFinite(Number(job.compareDiffThreshold)) || Number(job.compareDiffThreshold) <= 0)
+        && prev
+        && Number.isFinite(Number(prev.compareDiffThreshold))
+      ) {
+        job.compareDiffThreshold = prev.compareDiffThreshold;
+      }
+      job.compareDiffThreshold = this._normalizeCompareDiffThreshold(job.compareDiffThreshold);
       if (this._isTerminalStatus(job.status)) {
         setActive = false;
         clearActive = true;
       }
       const now = Date.now();
+      this._ensureJobRuntime(job, { prev, now });
       const leaseMs = this._leaseMsForStatus(job.status);
       job.updatedAt = now;
-      job.leaseUntilTs = leaseMs ? now + leaseMs : null;
+      const runtimeLease = job.runtime
+        && job.runtime.lease
+        && Number.isFinite(Number(job.runtime.lease.leaseUntilTs))
+        ? Number(job.runtime.lease.leaseUntilTs)
+        : null;
+      const runtimeStatus = job.runtime && typeof job.runtime.status === 'string'
+        ? String(job.runtime.status).toUpperCase()
+        : null;
+      const hasBackoff = Boolean(
+        job.runtime
+        && job.runtime.retry
+        && Number.isFinite(Number(job.runtime.retry.nextRetryAtTs))
+        && Number(job.runtime.retry.nextRetryAtTs) > now
+      );
+      if (runtimeStatus === 'IDLE' || (runtimeStatus === 'QUEUED' && hasBackoff)) {
+        job.leaseUntilTs = null;
+        if (job.runtime && job.runtime.lease) {
+          job.runtime.lease.leaseUntilTs = null;
+        }
+      } else if (runtimeLease !== null && runtimeLease > now) {
+        job.leaseUntilTs = runtimeLease;
+      } else {
+        job.leaseUntilTs = leaseMs ? now + leaseMs : null;
+        if (job.runtime && job.runtime.lease) {
+          job.runtime.lease.leaseUntilTs = job.leaseUntilTs;
+        }
+      }
       await this.jobStore.upsertJob(job);
       if (setActive) {
         await this.jobStore.setActiveJob(job.tabId, job.id);
@@ -1724,6 +2703,97 @@
       }
       await this._syncTabStatus(job);
       this._emitUiPatch(job);
+    }
+
+    _runtimeStatusFromJobStatus(status) {
+      const value = String(status || '').toLowerCase();
+      if (value === 'done') return 'DONE';
+      if (value === 'failed') return 'FAILED';
+      if (value === 'cancelled') return 'CANCELLED';
+      if (value === 'awaiting_categories') return 'IDLE';
+      if (value === 'preparing') return 'QUEUED';
+      if (value === 'running' || value === 'completing') return 'RUNNING';
+      return 'IDLE';
+    }
+
+    _runtimeStageFromJob(job) {
+      const status = String(job && job.status ? job.status : '').toLowerCase();
+      if (status === 'preparing') {
+        return 'scanning';
+      }
+      if (status === 'awaiting_categories') {
+        return 'awaiting_categories';
+      }
+      const phase = job && job.agentState && typeof job.agentState.phase === 'string'
+        ? String(job.agentState.phase).toLowerCase()
+        : '';
+      if (phase.includes('proofread')) {
+        return 'proofreading';
+      }
+      if (phase.includes('planning') || phase.includes('awaiting_categories') || phase.includes('planned')) {
+        return 'planning';
+      }
+      return 'execution';
+    }
+
+    _ensureJobRuntime(job, { prev = null, now = Date.now() } = {}) {
+      if (!job || typeof job !== 'object') {
+        return null;
+      }
+      const prevRuntime = prev && prev.runtime && typeof prev.runtime === 'object'
+        ? prev.runtime
+        : {};
+      const src = job.runtime && typeof job.runtime === 'object'
+        ? job.runtime
+        : {};
+      const lease = src.lease && typeof src.lease === 'object' ? src.lease : {};
+      const retry = src.retry && typeof src.retry === 'object' ? src.retry : {};
+      const watchdog = src.watchdog && typeof src.watchdog === 'object' ? src.watchdog : {};
+      const hasLeaseUntil = Object.prototype.hasOwnProperty.call(lease, 'leaseUntilTs');
+      const hasHeartbeat = Object.prototype.hasOwnProperty.call(lease, 'heartbeatTs');
+      job.runtime = {
+        ownerInstanceId: src.ownerInstanceId
+          || prevRuntime.ownerInstanceId
+          || null,
+        status: src.status || this._runtimeStatusFromJobStatus(job.status),
+        stage: src.stage || this._runtimeStageFromJob(job),
+        lease: {
+          leaseUntilTs: hasLeaseUntil
+            ? (Number.isFinite(Number(lease.leaseUntilTs)) ? Number(lease.leaseUntilTs) : null)
+            : (Number.isFinite(Number(job.leaseUntilTs)) ? Number(job.leaseUntilTs) : null),
+          heartbeatTs: hasHeartbeat
+            ? (Number.isFinite(Number(lease.heartbeatTs)) ? Number(lease.heartbeatTs) : now)
+            : now,
+          op: typeof lease.op === 'string' ? lease.op : null,
+          opId: lease.opId || null
+        },
+        retry: {
+          attempt: Math.max(0, Number(retry.attempt) || 0),
+          maxAttempts: Math.max(1, Number(retry.maxAttempts) || 4),
+          nextRetryAtTs: Number.isFinite(Number(retry.nextRetryAtTs))
+            ? Number(retry.nextRetryAtTs)
+            : 0,
+          firstAttemptTs: Number.isFinite(Number(retry.firstAttemptTs))
+            ? Number(retry.firstAttemptTs)
+            : null,
+          lastError: retry.lastError && typeof retry.lastError === 'object'
+            ? { ...retry.lastError }
+            : null
+        },
+        watchdog: {
+          lastProgressTs: Number.isFinite(Number(watchdog.lastProgressTs))
+            ? Number(watchdog.lastProgressTs)
+            : now,
+          lastProgressKey: typeof watchdog.lastProgressKey === 'string'
+            ? watchdog.lastProgressKey
+            : ''
+        }
+      };
+      if (this._isTerminalStatus(job.status)) {
+        job.runtime.status = this._runtimeStatusFromJobStatus(job.status);
+        job.runtime.lease.leaseUntilTs = null;
+      }
+      return job.runtime;
     }
 
     _isTerminalStatus(status) {
@@ -1747,20 +2817,35 @@
       const total = Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : 0;
       const completed = Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0;
       const failed = Array.isArray(job.failedBlockIds) ? job.failedBlockIds.length : 0;
+      const isTerminal = this._isTerminalStatus(job.status);
+      const inProgress = isTerminal ? 0 : Math.max(0, total - completed - failed);
+      const lastErrorMessage = job.lastError
+        && typeof job.lastError === 'object'
+        && typeof job.lastError.message === 'string'
+        && job.lastError.message.trim()
+        ? job.lastError.message.trim()
+        : '';
+      const statusMessage = lastErrorMessage || job.message || job.status;
       const progress = total > 0
         ? Math.max(0, Math.min(100, Math.round((completed / total) * 100)))
         : (job.status === 'done' ? 100 : 0);
       const agentState = this.translationAgent && typeof this.translationAgent.toUiSnapshot === 'function'
         ? this.translationAgent.toUiSnapshot(job.agentState || null)
         : (job.agentState || null);
+      const displayMode = await this._resolveTabDisplayMode(job.tabId);
+      const compareDiffThreshold = this._normalizeCompareDiffThreshold(job.compareDiffThreshold);
+      const patchHistoryCount = job && job.agentState && Array.isArray(job.agentState.patchHistory)
+        ? job.agentState.patchHistory.length
+        : 0;
+      const runtime = this._ensureJobRuntime(job, { now: Date.now() });
 
       await this.tabStateStore.upsertStatusPatch(job.tabId, {
         status: job.status,
         progress,
         total,
         completed,
-        inProgress: Math.max(0, total - completed - failed),
-        message: job.message || job.status,
+        inProgress,
+        message: statusMessage,
         failedBlocksCount: failed,
         translationJobId: job.id,
         lastError: job.lastError || null,
@@ -1769,6 +2854,30 @@
         pageSignature: job.pageSignature || null,
         agentState,
         recentDiffItems: Array.isArray(job.recentDiffItems) ? job.recentDiffItems.slice(-20) : [],
+        displayMode,
+        compareDiffThreshold,
+        patchHistoryCount,
+        runtime: runtime && typeof runtime === 'object'
+          ? {
+            status: runtime.status || null,
+            stage: runtime.stage || null,
+            leaseUntilTs: runtime.lease && Number.isFinite(Number(runtime.lease.leaseUntilTs))
+              ? Number(runtime.lease.leaseUntilTs)
+              : null,
+            heartbeatTs: runtime.lease && Number.isFinite(Number(runtime.lease.heartbeatTs))
+              ? Number(runtime.lease.heartbeatTs)
+              : null,
+            attempt: runtime.retry && Number.isFinite(Number(runtime.retry.attempt))
+              ? Number(runtime.retry.attempt)
+              : 0,
+            nextRetryAtTs: runtime.retry && Number.isFinite(Number(runtime.retry.nextRetryAtTs))
+              ? Number(runtime.retry.nextRetryAtTs)
+              : 0,
+            lastErrorCode: runtime.retry && runtime.retry.lastError && runtime.retry.lastError.code
+              ? runtime.retry.lastError.code
+              : null
+          }
+          : null,
         updatedAt: job.updatedAt
       });
     }
@@ -1786,6 +2895,9 @@
       const agentState = this.translationAgent && typeof this.translationAgent.toUiSnapshot === 'function'
         ? this.translationAgent.toUiSnapshot(job.agentState || null)
         : (job.agentState || null);
+      const displayMode = this._normalizeDisplayMode(job.displayMode, true);
+      const compareDiffThreshold = this._normalizeCompareDiffThreshold(job.compareDiffThreshold);
+      const runtime = this._ensureJobRuntime(job, { now: Date.now() });
 
       this.onUiPatch({
         translationJob: this._toJobSummary(job),
@@ -1795,8 +2907,291 @@
         agentState,
         selectedCategories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 24) : [],
         availableCategories: Array.isArray(job.availableCategories) ? job.availableCategories.slice(0, 24) : [],
-        recentDiffItems: Array.isArray(job.recentDiffItems) ? job.recentDiffItems.slice(-20) : []
+        recentDiffItems: Array.isArray(job.recentDiffItems) ? job.recentDiffItems.slice(-20) : [],
+        translationCompareDiffThreshold: compareDiffThreshold,
+        translationDisplayModeByTab: { [job.tabId]: displayMode },
+        translationVisibilityByTab: { [job.tabId]: displayMode !== 'original' },
+        runtime: runtime && typeof runtime === 'object'
+          ? {
+            status: runtime.status || null,
+            stage: runtime.stage || null,
+            leaseUntilTs: runtime.lease && Number.isFinite(Number(runtime.lease.leaseUntilTs))
+              ? Number(runtime.lease.leaseUntilTs)
+              : null,
+            heartbeatTs: runtime.lease && Number.isFinite(Number(runtime.lease.heartbeatTs))
+              ? Number(runtime.lease.heartbeatTs)
+              : null,
+            attempt: runtime.retry && Number.isFinite(Number(runtime.retry.attempt))
+              ? Number(runtime.retry.attempt)
+              : 0,
+            nextRetryAtTs: runtime.retry && Number.isFinite(Number(runtime.retry.nextRetryAtTs))
+              ? Number(runtime.retry.nextRetryAtTs)
+              : 0,
+            lastErrorCode: runtime.retry && runtime.retry.lastError && runtime.retry.lastError.code
+              ? runtime.retry.lastError.code
+              : null
+          }
+          : null
       });
+    }
+
+    _normalizeDisplayMode(mode, visibleFallback = true) {
+      if (mode === 'original' || mode === 'compare' || mode === 'translated') {
+        return mode;
+      }
+      return visibleFallback === false ? 'original' : 'translated';
+    }
+
+    _normalizeCompareDiffThreshold(value) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return this.COMPARE_DIFF_THRESHOLD_DEFAULT;
+      }
+      return Math.max(500, Math.min(50000, Math.round(numeric)));
+    }
+
+    async _getCompareDiffThreshold({ job = null } = {}) {
+      if (job && Number.isFinite(Number(job.compareDiffThreshold))) {
+        return this._normalizeCompareDiffThreshold(job.compareDiffThreshold);
+      }
+      if (this.settingsStore && typeof this.settingsStore.get === 'function') {
+        try {
+          const state = await this.settingsStore.get(['translationCompareDiffThreshold']);
+          return this._normalizeCompareDiffThreshold(state.translationCompareDiffThreshold);
+        } catch (_) {
+          // fall back below
+        }
+      }
+      return this.COMPARE_DIFF_THRESHOLD_DEFAULT;
+    }
+
+    _resolvePatchPhase(job, batchPrefix = '') {
+      const prefix = String(batchPrefix || '').toLowerCase();
+      if (prefix.includes('proofread')) {
+        return 'proofreading';
+      }
+      if (prefix.includes('restore') || prefix.includes('cache') || prefix.includes('memory')) {
+        return 'restore';
+      }
+      const phase = job && job.agentState && typeof job.agentState.phase === 'string'
+        ? String(job.agentState.phase).toLowerCase()
+        : '';
+      if (phase.includes('proofread')) {
+        return 'proofreading';
+      }
+      if (phase.includes('planning') || phase.includes('awaiting_categories') || phase.includes('planned')) {
+        return 'planning';
+      }
+      if (phase.includes('restore') || phase.includes('cache')) {
+        return 'restore';
+      }
+      return 'execution';
+    }
+
+    _resolvePatchKindForBatchPrefix(batchPrefix) {
+      const prefix = String(batchPrefix || '').toLowerCase();
+      if (prefix.includes('restore') || prefix.includes('cache') || prefix.includes('memory')) {
+        return 'restore';
+      }
+      return 'final';
+    }
+
+    _buildPatchPreview(text) {
+      const src = String(text || '').replace(/\s+/g, ' ').trim();
+      const edge = Math.max(40, Number(this.PATCH_PREVIEW_CHARS || 160));
+      if (!src) {
+        return '(len=0)';
+      }
+      if (src.length <= (edge * 2) + 10) {
+        return `${src} (len=${src.length})`;
+      }
+      return `${src.slice(0, edge)} ... ${src.slice(-edge)} (len=${src.length})`;
+    }
+
+    _queuePatchEvent(job, rawEvent, { debounceKey = null, forceFlush = false } = {}) {
+      if (!job || !job.id || !rawEvent || typeof rawEvent !== 'object') {
+        return;
+      }
+      const jobId = job.id;
+      const bucket = this.pendingPatchFlushByJob.get(jobId) || {
+        events: [],
+        debounced: new Map(),
+        timerId: null
+      };
+      const event = {
+        ts: Number.isFinite(Number(rawEvent.ts)) ? Number(rawEvent.ts) : Date.now(),
+        jobId: job.id,
+        tabId: Number.isFinite(Number(job.tabId)) ? Number(job.tabId) : null,
+        blockId: rawEvent.blockId ? String(rawEvent.blockId) : 'unknown',
+        phase: rawEvent.phase || this._resolvePatchPhase(job),
+        kind: rawEvent.kind || 'delta',
+        prev: rawEvent.prev && typeof rawEvent.prev === 'object' ? rawEvent.prev : { textHash: null, textPreview: '' },
+        next: rawEvent.next && typeof rawEvent.next === 'object' ? rawEvent.next : { textHash: null, textPreview: '' },
+        meta: rawEvent.meta && typeof rawEvent.meta === 'object' ? rawEvent.meta : {}
+      };
+      if (debounceKey) {
+        if (bucket.debounced.has(debounceKey)) {
+          bucket.debounced.delete(debounceKey);
+        }
+        bucket.debounced.set(debounceKey, event);
+      } else {
+        bucket.events.push(event);
+      }
+
+      this.pendingPatchFlushByJob.set(jobId, bucket);
+      if (forceFlush) {
+        if (bucket.timerId) {
+          global.clearTimeout(bucket.timerId);
+          bucket.timerId = null;
+        }
+        this._flushPatchEvents(jobId, { forceSave: true }).catch(() => {});
+        return;
+      }
+
+      if (!bucket.timerId) {
+        bucket.timerId = global.setTimeout(() => {
+          this._flushPatchEvents(jobId, { forceSave: false }).catch(() => {});
+        }, Math.max(80, Number(this.PATCH_DELTA_DEBOUNCE_MS || 320)));
+      }
+    }
+
+    async _flushPatchEvents(jobId, { forceSave = false } = {}) {
+      if (!jobId) {
+        return { ok: false, flushed: 0 };
+      }
+      const bucket = this.pendingPatchFlushByJob.get(jobId);
+      if (!bucket) {
+        return { ok: true, flushed: 0 };
+      }
+      if (bucket.timerId) {
+        global.clearTimeout(bucket.timerId);
+        bucket.timerId = null;
+      }
+      this.pendingPatchFlushByJob.delete(jobId);
+      const mergedEvents = []
+        .concat(Array.isArray(bucket.events) ? bucket.events : [])
+        .concat(Array.from(bucket.debounced instanceof Map ? bucket.debounced.values() : []));
+      if (!mergedEvents.length && !forceSave) {
+        return { ok: true, flushed: 0 };
+      }
+
+      let job = null;
+      try {
+        job = await this.jobStore.getJob(jobId);
+      } catch (_) {
+        job = null;
+      }
+      if (!job) {
+        return { ok: false, flushed: 0 };
+      }
+      const flushed = this._appendPatchHistory(job, mergedEvents);
+      if (flushed <= 0 && !forceSave) {
+        return { ok: true, flushed: 0 };
+      }
+      await this._saveJob(job, this._isTerminalStatus(job.status) ? { clearActive: true } : { setActive: true });
+      return { ok: true, flushed };
+    }
+
+    _appendPatchHistory(job, events) {
+      if (!job || !Array.isArray(events) || !events.length) {
+        return 0;
+      }
+      job.agentState = job.agentState && typeof job.agentState === 'object'
+        ? job.agentState
+        : {};
+      const state = job.agentState;
+      state.patchHistory = Array.isArray(state.patchHistory) ? state.patchHistory : [];
+      state.patchSeq = Number.isFinite(Number(state.patchSeq))
+        ? Number(state.patchSeq)
+        : 0;
+      let appended = 0;
+      events.forEach((item) => {
+        if (!item || typeof item !== 'object') {
+          return;
+        }
+        const nextSeq = state.patchSeq + 1;
+        state.patchSeq = nextSeq;
+        const kind = item.kind === 'final' || item.kind === 'restore' || item.kind === 'toggle'
+          ? item.kind
+          : 'delta';
+        const normalized = {
+          seq: nextSeq,
+          ts: Number.isFinite(Number(item.ts)) ? Number(item.ts) : Date.now(),
+          jobId: job.id,
+          tabId: Number.isFinite(Number(job.tabId)) ? Number(job.tabId) : null,
+          blockId: item.blockId ? String(item.blockId) : 'unknown',
+          phase: item.phase || this._resolvePatchPhase(job),
+          kind,
+          prev: {
+            textHash: item.prev && typeof item.prev.textHash === 'string' ? item.prev.textHash : null,
+            textPreview: item.prev && typeof item.prev.textPreview === 'string'
+              ? item.prev.textPreview.slice(0, 1000)
+              : ''
+          },
+          next: {
+            textHash: item.next && typeof item.next.textHash === 'string' ? item.next.textHash : null,
+            textPreview: item.next && typeof item.next.textPreview === 'string'
+              ? item.next.textPreview.slice(0, 1000)
+              : ''
+          },
+          meta: item.meta && typeof item.meta === 'object'
+            ? { ...item.meta }
+            : {}
+        };
+        state.patchHistory.push(normalized);
+        appended += 1;
+        if (normalized.kind !== 'toggle' && normalized.blockId !== '__display_mode__') {
+          const block = job.blocksById && job.blocksById[normalized.blockId]
+            ? job.blocksById[normalized.blockId]
+            : null;
+          const nextDiff = {
+            blockId: normalized.blockId,
+            category: this._normalizeCategory(block && (block.category || block.pathHint) || 'other'),
+            before: normalized.prev.textPreview || '',
+            after: normalized.next.textPreview || ''
+          };
+          job.recentDiffItems = Array.isArray(job.recentDiffItems) ? job.recentDiffItems : [];
+          job.recentDiffItems = job.recentDiffItems.concat([nextDiff]).slice(-20);
+        }
+      });
+      if (state.patchHistory.length > this.PATCH_HISTORY_LIMIT) {
+        state.patchHistory = state.patchHistory.slice(-this.PATCH_HISTORY_LIMIT);
+      }
+      state.updatedAt = Date.now();
+      job.updatedAt = Date.now();
+      return appended;
+    }
+
+    _buildBlockSummaries(job, { limit = 500 } = {}) {
+      if (!job || !job.blocksById || typeof job.blocksById !== 'object') {
+        return [];
+      }
+      const pending = new Set(Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds : []);
+      const failed = new Set(Array.isArray(job.failedBlockIds) ? job.failedBlockIds : []);
+      const max = Number.isFinite(Number(limit)) ? Math.max(20, Math.round(Number(limit))) : 500;
+      return Object.keys(job.blocksById)
+        .slice(0, max)
+        .map((blockId) => {
+          const block = job.blocksById[blockId] || {};
+          const originalText = typeof block.originalText === 'string' ? block.originalText : '';
+          const translatedText = typeof block.translatedText === 'string' ? block.translatedText : '';
+          const status = failed.has(blockId)
+            ? 'FAILED'
+            : pending.has(blockId)
+              ? 'PENDING'
+              : (translatedText ? 'DONE' : 'PENDING');
+          return {
+            blockId,
+            category: this._normalizeCategory(block.category || block.pathHint || 'other'),
+            status,
+            originalLength: originalText.length,
+            translatedLength: translatedText.length,
+            originalHash: block.originalHash || this._hashTextStable(originalText),
+            translatedHash: translatedText ? this._hashTextStable(translatedText) : null,
+            originalSnippet: this._buildPatchPreview(originalText),
+            translatedSnippet: translatedText ? this._buildPatchPreview(translatedText) : ''
+          };
+        });
     }
 
     _recordRuntimeAction(job, payload) {
@@ -1814,6 +3209,17 @@
       if (!job) {
         return null;
       }
+      const runtime = this._ensureJobRuntime(job, { now: Date.now() });
+      const runSettings = this._ensureJobRunSettings(job, { settings: null });
+      const autoTune = runSettings && runSettings.autoTune && typeof runSettings.autoTune === 'object'
+        ? runSettings.autoTune
+        : null;
+      const pendingProposal = autoTune && Array.isArray(autoTune.proposals)
+        ? autoTune.proposals.slice().reverse().find((item) => item && item.status === 'proposed')
+        : null;
+      const lastDecision = autoTune && Array.isArray(autoTune.decisionLog) && autoTune.decisionLog.length
+        ? autoTune.decisionLog[autoTune.decisionLog.length - 1]
+        : null;
       return {
         id: job.id,
         tabId: job.tabId,
@@ -1826,10 +3232,333 @@
         selectedCategories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 24) : [],
         availableCategories: Array.isArray(job.availableCategories) ? job.availableCategories.slice(0, 24) : [],
         pageSignature: job.pageSignature || null,
+        memoryContext: job.memoryContext && typeof job.memoryContext === 'object'
+          ? {
+            pageKey: job.memoryContext.pageKey || null,
+            normalizedUrl: job.memoryContext.normalizedUrl || null,
+            domHash: job.memoryContext.domHash || null,
+            domSigVersion: job.memoryContext.domSigVersion || null
+          }
+          : null,
+        memoryRestore: job.memoryRestore && typeof job.memoryRestore === 'object'
+          ? job.memoryRestore
+          : null,
         agentPhase: job.agentState && job.agentState.phase ? job.agentState.phase : null,
         agentProfile: job.agentState && job.agentState.profile ? job.agentState.profile : null,
+        displayMode: this._normalizeDisplayMode(job.displayMode, true),
+        compareDiffThreshold: this._normalizeCompareDiffThreshold(job.compareDiffThreshold),
+        runSettings: runSettings
+          ? {
+            effectiveSummary: this.runSettings && typeof this.runSettings.serializeForAgent === 'function'
+              ? this.runSettings.serializeForAgent(runSettings.effective)
+              : (runSettings.effective || null),
+            agentOverrides: runSettings.agentOverrides && typeof runSettings.agentOverrides === 'object'
+              ? runSettings.agentOverrides
+              : {},
+            userOverrides: runSettings.userOverrides && typeof runSettings.userOverrides === 'object'
+              ? runSettings.userOverrides
+              : {},
+            autoTune: {
+              enabled: autoTune ? autoTune.enabled !== false : true,
+              mode: autoTune && autoTune.mode === 'ask_user' ? 'ask_user' : 'auto_apply',
+              lastProposalId: autoTune && typeof autoTune.lastProposalId === 'string' ? autoTune.lastProposalId : null,
+              pendingProposal: pendingProposal || null,
+              lastDecision: lastDecision || null,
+              proposals: autoTune && Array.isArray(autoTune.proposals) ? autoTune.proposals.slice(-60) : [],
+              decisionLog: autoTune && Array.isArray(autoTune.decisionLog) ? autoTune.decisionLog.slice(-120) : []
+            }
+          }
+          : null,
+        patchHistoryCount: job.agentState && Array.isArray(job.agentState.patchHistory)
+          ? job.agentState.patchHistory.length
+          : 0,
+        runtime: runtime && typeof runtime === 'object'
+          ? {
+            status: runtime.status || null,
+            stage: runtime.stage || null,
+            leaseUntilTs: runtime.lease && Number.isFinite(Number(runtime.lease.leaseUntilTs))
+              ? Number(runtime.lease.leaseUntilTs)
+              : null,
+            heartbeatTs: runtime.lease && Number.isFinite(Number(runtime.lease.heartbeatTs))
+              ? Number(runtime.lease.heartbeatTs)
+              : null,
+            op: runtime.lease && runtime.lease.op ? runtime.lease.op : null,
+            opId: runtime.lease && runtime.lease.opId ? runtime.lease.opId : null,
+            attempt: runtime.retry && Number.isFinite(Number(runtime.retry.attempt))
+              ? Number(runtime.retry.attempt)
+              : 0,
+            nextRetryAtTs: runtime.retry && Number.isFinite(Number(runtime.retry.nextRetryAtTs))
+              ? Number(runtime.retry.nextRetryAtTs)
+              : 0,
+            maxAttempts: runtime.retry && Number.isFinite(Number(runtime.retry.maxAttempts))
+              ? Number(runtime.retry.maxAttempts)
+              : 0,
+            lastErrorCode: runtime.retry && runtime.retry.lastError && runtime.retry.lastError.code
+              ? runtime.retry.lastError.code
+              : null
+          }
+          : null,
+        blockSummaries: this._buildBlockSummaries(job, { limit: 500 }),
         updatedAt: job.updatedAt || null
       };
+    }
+
+    _extractErrorDebug(errorLike) {
+      const source = errorLike && typeof errorLike === 'object' ? errorLike : null;
+      if (!source) {
+        return null;
+      }
+      const nested = source.error && typeof source.error === 'object'
+        ? source.error
+        : null;
+      const debug = nested && nested.debug && typeof nested.debug === 'object'
+        ? nested.debug
+        : (source.debug && typeof source.debug === 'object' ? source.debug : null);
+      if (!debug) {
+        return null;
+      }
+      const out = {};
+      if (typeof debug.baseUrl === 'string' && debug.baseUrl) {
+        out.baseUrl = debug.baseUrl.slice(0, 180);
+      }
+      if (Array.isArray(debug.transportTried)) {
+        const transports = debug.transportTried
+          .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+          .filter((value) => value === 'fetch' || value === 'xhr');
+        if (transports.length) {
+          out.transportTried = transports.slice(0, 3);
+        }
+      }
+      if (typeof debug.endpoint === 'string' && debug.endpoint) {
+        out.endpoint = debug.endpoint;
+      }
+      if (typeof debug.endpointHost === 'string' && debug.endpointHost) {
+        out.endpointHost = debug.endpointHost;
+      }
+      if (typeof debug.online === 'boolean') {
+        out.online = debug.online;
+      } else if (debug.online === null) {
+        out.online = null;
+      }
+      if (typeof debug.ua === 'string' && debug.ua) {
+        out.ua = debug.ua.slice(0, 280);
+      }
+      const probe = debug.probe && typeof debug.probe === 'object' ? debug.probe : null;
+      if (probe) {
+        const safeProbe = {
+          ok: probe.ok === true
+        };
+        if (typeof probe.online === 'boolean') {
+          safeProbe.online = probe.online;
+          if (!Object.prototype.hasOwnProperty.call(out, 'online')) {
+            out.online = probe.online;
+          }
+        } else if (probe.online === null) {
+          safeProbe.online = null;
+          if (!Object.prototype.hasOwnProperty.call(out, 'online')) {
+            out.online = null;
+          }
+        }
+        if (typeof probe.ua === 'string' && probe.ua) {
+          safeProbe.ua = probe.ua.slice(0, 280);
+          if (!Object.prototype.hasOwnProperty.call(out, 'ua')) {
+            out.ua = probe.ua.slice(0, 280);
+          }
+        }
+        if (Number.isFinite(Number(probe.status))) {
+          safeProbe.status = Number(probe.status);
+        }
+        if (typeof probe.note === 'string' && probe.note) {
+          safeProbe.note = probe.note;
+        }
+        if (typeof probe.errorMessage === 'string' && probe.errorMessage) {
+          safeProbe.errorMessage = probe.errorMessage.slice(0, 260);
+        }
+        if (typeof probe.name === 'string' && probe.name) {
+          safeProbe.name = probe.name.slice(0, 120);
+        }
+        if (Array.isArray(probe.steps)) {
+          safeProbe.steps = probe.steps.slice(0, 8).map((step, index) => {
+            const row = step && typeof step === 'object' ? step : {};
+            const outStep = {
+              name: typeof row.name === 'string' && row.name
+                ? row.name.slice(0, 80)
+                : `step_${index + 1}`,
+              ok: row.ok === true
+            };
+            if (Number.isFinite(Number(row.status))) {
+              outStep.status = Number(row.status);
+            }
+            if (typeof row.errName === 'string' && row.errName) {
+              outStep.errName = row.errName.slice(0, 120);
+            }
+            if (typeof row.errMessage === 'string' && row.errMessage) {
+              outStep.errMessage = row.errMessage.slice(0, 220);
+            }
+            if (Number.isFinite(Number(row.ms))) {
+              outStep.ms = Math.max(0, Math.round(Number(row.ms)));
+            }
+            return outStep;
+          });
+        }
+        out.probe = safeProbe;
+      }
+      return Object.keys(out).length ? out : null;
+    }
+
+    _buildFetchFailedHint(errorLike) {
+      const source = errorLike && typeof errorLike === 'object' ? errorLike : null;
+      if (!source) {
+        return '';
+      }
+      const directCode = source.code && typeof source.code === 'string'
+        ? source.code
+        : null;
+      const nestedCode = source.error && typeof source.error === 'object' && typeof source.error.code === 'string'
+        ? source.error.code
+        : null;
+      const code = directCode || nestedCode || '';
+      if (code !== 'FETCH_FAILED') {
+        return '';
+      }
+      const debug = this._extractErrorDebug(source);
+      const probe = debug && debug.probe && typeof debug.probe === 'object'
+        ? debug.probe
+        : null;
+      if (!probe || typeof probe.ok !== 'boolean') {
+        return '';
+      }
+      if (probe.ok === false) {
+        return 'Похоже, домен api.openai.com недоступен из сети/блокируется (DNS/фаервол/AdGuard/uBlock/сертификат).';
+      }
+      return 'Сеть до api.openai.com есть, ищи CSP/permissions или блок POST.';
+    }
+
+    _normalizeJobError(errorLike, { fallbackCode = 'TRANSLATION_FAILED', fallbackMessage = 'Перевод завершился ошибкой' } = {}) {
+      const source = errorLike && typeof errorLike === 'object'
+        ? errorLike
+        : {};
+      const code = source.code && typeof source.code === 'string'
+        ? source.code
+        : (source.error && source.error.code && typeof source.error.code === 'string'
+          ? source.error.code
+          : fallbackCode);
+      const rawMessage = source.message && typeof source.message === 'string'
+        ? source.message
+        : (source.error && source.error.message && typeof source.error.message === 'string'
+          ? source.error.message
+          : fallbackMessage);
+      const hint = this._buildFetchFailedHint(source);
+      const separator = rawMessage && /[.!?…]$/.test(rawMessage.trim()) ? ' ' : '. ';
+      const message = hint
+        ? `${rawMessage}${separator}${hint}`
+        : rawMessage;
+      const normalized = {
+        code,
+        message
+      };
+      const debug = this._extractErrorDebug(source);
+      if (debug) {
+        normalized.error = {
+          code,
+          message: rawMessage,
+          debug
+        };
+      }
+      return normalized;
+    }
+
+    _retryAfterMsFromError(errorLike) {
+      const source = errorLike && typeof errorLike === 'object' ? errorLike : {};
+      const direct = Number(source.retryAfterMs || source.retry_after_ms || source.retryAfter);
+      if (Number.isFinite(direct)) {
+        return Math.max(250, Math.min(Math.round(direct), 15 * 60 * 1000));
+      }
+      const headers = source.headers && typeof source.headers === 'object' ? source.headers : null;
+      if (!headers) {
+        return null;
+      }
+      const readHeader = (name) => {
+        if (typeof headers.get === 'function') {
+          try {
+            return headers.get(name);
+          } catch (_) {
+            return null;
+          }
+        }
+        const keys = Object.keys(headers || {});
+        for (let i = 0; i < keys.length; i += 1) {
+          if (String(keys[i]).toLowerCase() === String(name).toLowerCase()) {
+            return headers[keys[i]];
+          }
+        }
+        return null;
+      };
+      const msRaw = Number(readHeader('retry-after-ms'));
+      if (Number.isFinite(msRaw)) {
+        return Math.max(250, Math.min(Math.round(msRaw), 15 * 60 * 1000));
+      }
+      const secRaw = Number(readHeader('retry-after'));
+      if (Number.isFinite(secRaw)) {
+        return Math.max(250, Math.min(Math.round(secRaw * 1000), 15 * 60 * 1000));
+      }
+      return null;
+    }
+
+    _isBackpressureError(errorLike) {
+      const source = errorLike && typeof errorLike === 'object' ? errorLike : {};
+      const code = source.code && typeof source.code === 'string' ? source.code : '';
+      const status = Number(source.status || source.httpStatus || (source.http && source.http.status));
+      if (code === 'RATE_LIMIT_BUDGET_WAIT' || code === 'OPENAI_429' || code === 'OFFSCREEN_BACKPRESSURE') {
+        return true;
+      }
+      if (Number.isFinite(status) && status === 429) {
+        return true;
+      }
+      return false;
+    }
+
+    async _requeueJobForBackpressure(job, errorLike) {
+      if (!job || !job.id || !this._isBackpressureError(errorLike)) {
+        return false;
+      }
+      const latest = await this.jobStore.getJob(job.id).catch(() => null);
+      if (!latest || this._isTerminalStatus(latest.status)) {
+        return false;
+      }
+      const now = Date.now();
+      const sourceCode = errorLike && typeof errorLike.code === 'string'
+        ? String(errorLike.code)
+        : 'RATE_LIMIT_BUDGET_WAIT';
+      const isOffscreenBackpressure = sourceCode === 'OFFSCREEN_BACKPRESSURE';
+      const waitMs = this._retryAfterMsFromError(errorLike) || 30 * 1000;
+      const runtime = this._ensureJobRuntime(latest, { now });
+      runtime.status = 'QUEUED';
+      runtime.retry = runtime.retry && typeof runtime.retry === 'object' ? runtime.retry : {};
+      runtime.retry.nextRetryAtTs = now + waitMs;
+      runtime.retry.lastError = {
+        code: isOffscreenBackpressure ? 'OFFSCREEN_BACKPRESSURE' : 'RATE_LIMIT_BUDGET_WAIT',
+        message: isOffscreenBackpressure
+          ? `Ожидаю слот offscreen ${Math.ceil(waitMs / 1000)}с`
+          : `Ожидаю лимит API ${Math.ceil(waitMs / 1000)}с`
+      };
+      runtime.lease = runtime.lease && typeof runtime.lease === 'object' ? runtime.lease : {};
+      runtime.lease.leaseUntilTs = null;
+      runtime.lease.heartbeatTs = now;
+      runtime.lease.op = isOffscreenBackpressure ? 'offscreen_wait' : 'rate_limit_wait';
+      runtime.lease.opId = latest.id;
+      latest.status = 'preparing';
+      latest.message = isOffscreenBackpressure
+        ? `Ожидаю слот offscreen ${Math.ceil(waitMs / 1000)}с`
+        : `Ожидаю лимит API ${Math.ceil(waitMs / 1000)}с`;
+      latest.runtime = runtime;
+      await this._saveJob(latest, { setActive: true });
+      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.AI_RATE_LIMIT : 'ai.rate_limit', latest.message, {
+        tabId: latest.tabId,
+        jobId: latest.id,
+        waitMs
+      });
+      return true;
     }
 
     async _markFailed(job, error) {
@@ -1837,11 +3566,13 @@
         return;
       }
       this._abortJobRequests(job.id, 'FAILED');
+      this._clearPendingAckWaiters(job.id);
+      await this._flushPatchEvents(job.id, { forceSave: true }).catch(() => ({ ok: false }));
       job.status = 'failed';
-      job.lastError = {
-        code: error && error.code ? error.code : 'TRANSLATION_FAILED',
-        message: error && error.message ? error.message : 'Перевод завершился ошибкой'
-      };
+      job.lastError = this._normalizeJobError(error, {
+        fallbackCode: 'TRANSLATION_FAILED',
+        fallbackMessage: 'Перевод завершился ошибкой'
+      });
       job.message = job.lastError.message;
       if (this.translationAgent && job.agentState && typeof this.translationAgent.markFailed === 'function') {
         this.translationAgent.markFailed(job, job.lastError);
@@ -1873,6 +3604,7 @@
             resolvePath('core/message-envelope.js'),
             resolvePath('core/translation-protocol.js'),
             resolvePath('content/dom-indexer.js'),
+            resolvePath('content/diff-highlighter.js'),
             resolvePath('content/dom-applier.js'),
             resolvePath('content/content-runtime.js')
           ]
@@ -1956,6 +3688,9 @@
         out.push({
           blockId,
           originalText,
+          originalHash: this._hashTextStable(originalText),
+          charCount: originalText.length,
+          stableNodeKey: typeof item.stableNodeKey === 'string' && item.stableNodeKey ? item.stableNodeKey : null,
           pathHint: item.pathHint || null,
           category: item.category || null
         });
@@ -2122,12 +3857,15 @@
           blocks: safeBlocks,
           settings
         });
-        if (!prepared || !Array.isArray(prepared.blocks)) {
+        if (!prepared) {
           return {
             blocks: safeBlocks,
             selectedCategories: [],
             agentState: null
           };
+        }
+        if (!Array.isArray(prepared.blocks)) {
+          prepared.blocks = safeBlocks;
         }
         return prepared;
       } catch (error) {
@@ -2150,43 +3888,512 @@
           translationAgentModelPolicy: null,
           translationAgentProfile: 'auto',
           translationAgentTools: {},
-          translationAgentTuning: {},
+          translationAgentTuning: {
+            autoTuneEnabled: true,
+            autoTuneMode: 'auto_apply'
+          },
+          translationAgentExecutionMode: 'agent',
+          translationAgentAllowedModels: [],
+          translationMemoryEnabled: true,
+          translationMemoryMaxPages: 200,
+          translationMemoryMaxBlocks: 5000,
+          translationMemoryMaxAgeDays: 30,
+          translationMemoryGcOnStartup: true,
+          translationMemoryIgnoredQueryParams: ['utm_*', 'fbclid', 'gclid'],
           translationCategoryMode: 'auto',
           translationCategoryList: [],
           translationPageCacheEnabled: true,
-          translationApiCacheEnabled: true
+          translationApiCacheEnabled: true,
+          translationCompareDiffThreshold: this.COMPARE_DIFF_THRESHOLD_DEFAULT,
+          schemaVersion: 1,
+          userSettings: null,
+          effectiveSettings: null,
+          reasoning: null,
+          caching: null,
+          models: null,
+          toolConfigEffective: {}
         };
       }
+      const resolved = typeof this.settingsStore.getResolvedSettings === 'function'
+        ? await this.settingsStore.getResolvedSettings().catch(() => null)
+        : null;
+      const effective = resolved && resolved.effectiveSettings && typeof resolved.effectiveSettings === 'object'
+        ? resolved.effectiveSettings
+        : null;
       const settings = await this.settingsStore.get([
+        'settingsSchemaVersion',
         'translationAgentModelPolicy',
         'translationAgentProfile',
         'translationAgentTools',
         'translationAgentTuning',
+        'translationAgentExecutionMode',
+        'translationAgentAllowedModels',
+        'translationMemoryEnabled',
+        'translationMemoryMaxPages',
+        'translationMemoryMaxBlocks',
+        'translationMemoryMaxAgeDays',
+        'translationMemoryGcOnStartup',
+        'translationMemoryIgnoredQueryParams',
         'translationCategoryMode',
         'translationCategoryList',
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
+        'translationCompareDiffThreshold',
         'translationModelList'
       ]);
       return {
         translationAgentModelPolicy: settings.translationAgentModelPolicy && typeof settings.translationAgentModelPolicy === 'object'
           ? settings.translationAgentModelPolicy
           : null,
-        translationAgentProfile: settings.translationAgentProfile || 'auto',
+        translationAgentProfile: settings.translationAgentProfile
+          || (effective && effective.legacyProjection ? effective.legacyProjection.translationAgentProfile : null)
+          || 'auto',
         translationAgentTools: settings.translationAgentTools && typeof settings.translationAgentTools === 'object'
           ? settings.translationAgentTools
           : {},
         translationAgentTuning: settings.translationAgentTuning && typeof settings.translationAgentTuning === 'object'
-          ? settings.translationAgentTuning
-          : {},
+          ? {
+            ...settings.translationAgentTuning,
+            autoTuneEnabled: settings.translationAgentTuning.autoTuneEnabled !== false,
+            autoTuneMode: settings.translationAgentTuning.autoTuneMode === 'ask_user' ? 'ask_user' : 'auto_apply'
+          }
+          : {
+            autoTuneEnabled: true,
+            autoTuneMode: 'auto_apply'
+          },
+        translationAgentExecutionMode: effective && effective.agent && effective.agent.agentMode === 'legacy'
+          ? 'legacy'
+          : (settings.translationAgentExecutionMode === 'legacy' ? 'legacy' : 'agent'),
+        translationAgentAllowedModels: effective && effective.models
+          ? (Array.isArray(effective.models.agentAllowedModels)
+            ? effective.models.agentAllowedModels.filter((item, idx, arr) => typeof item === 'string' && item && arr.indexOf(item) === idx)
+            : [])
+          : (Array.isArray(settings.translationAgentAllowedModels)
+            ? settings.translationAgentAllowedModels.filter((item, idx, arr) => typeof item === 'string' && item && arr.indexOf(item) === idx)
+            : []),
         translationCategoryMode: settings.translationCategoryMode || 'auto',
         translationCategoryList: Array.isArray(settings.translationCategoryList)
           ? settings.translationCategoryList
           : [],
         translationPageCacheEnabled: settings.translationPageCacheEnabled !== false,
         translationApiCacheEnabled: settings.translationApiCacheEnabled !== false,
-        translationModelList: Array.isArray(settings.translationModelList) ? settings.translationModelList : []
+        translationCompareDiffThreshold: this._normalizeCompareDiffThreshold(settings.translationCompareDiffThreshold),
+        translationModelList: Array.isArray(settings.translationModelList) ? settings.translationModelList : [],
+        translationMemoryEnabled: effective && effective.memory
+          ? effective.memory.enabled !== false
+          : (settings.translationMemoryEnabled !== false),
+        translationMemoryMaxPages: effective && effective.memory && Number.isFinite(Number(effective.memory.maxPages))
+          ? Number(effective.memory.maxPages)
+          : (Number.isFinite(Number(settings.translationMemoryMaxPages)) ? Number(settings.translationMemoryMaxPages) : 200),
+        translationMemoryMaxBlocks: effective && effective.memory && Number.isFinite(Number(effective.memory.maxBlocks))
+          ? Number(effective.memory.maxBlocks)
+          : (Number.isFinite(Number(settings.translationMemoryMaxBlocks)) ? Number(settings.translationMemoryMaxBlocks) : 5000),
+        translationMemoryMaxAgeDays: effective && effective.memory && Number.isFinite(Number(effective.memory.maxAgeDays))
+          ? Number(effective.memory.maxAgeDays)
+          : (Number.isFinite(Number(settings.translationMemoryMaxAgeDays)) ? Number(settings.translationMemoryMaxAgeDays) : 30),
+        translationMemoryGcOnStartup: effective && effective.memory
+          ? effective.memory.gcOnStartup !== false
+          : (settings.translationMemoryGcOnStartup !== false),
+        translationMemoryIgnoredQueryParams: effective && effective.memory && Array.isArray(effective.memory.ignoredQueryParams)
+          ? effective.memory.ignoredQueryParams.slice()
+          : (Array.isArray(settings.translationMemoryIgnoredQueryParams)
+            ? settings.translationMemoryIgnoredQueryParams.slice()
+            : ['utm_*', 'fbclid', 'gclid']),
+        schemaVersion: resolved && Number.isFinite(Number(resolved.schemaVersion))
+          ? Number(resolved.schemaVersion)
+          : Number(settings.settingsSchemaVersion || 1),
+        userSettings: resolved && resolved.userSettings ? resolved.userSettings : null,
+        effectiveSettings: effective,
+        reasoning: effective && effective.reasoning ? effective.reasoning : null,
+        caching: effective && effective.caching ? effective.caching : null,
+        models: effective && effective.models ? effective.models : null,
+        toolConfigEffective: effective && effective.agent && effective.agent.toolConfigEffective && typeof effective.agent.toolConfigEffective === 'object'
+          ? effective.agent.toolConfigEffective
+          : {}
       };
+    }
+
+    _ensureJobRunSettings(job, { settings = null } = {}) {
+      if (!job || typeof job !== 'object') {
+        return null;
+      }
+      const src = job.runSettings && typeof job.runSettings === 'object'
+        ? job.runSettings
+        : {};
+      const userOverrides = src.userOverrides && typeof src.userOverrides === 'object'
+        ? src.userOverrides
+        : {};
+      const agentOverrides = src.agentOverrides && typeof src.agentOverrides === 'object'
+        ? src.agentOverrides
+        : {};
+      const autoTune = src.autoTune && typeof src.autoTune === 'object'
+        ? src.autoTune
+        : {};
+      const canComputeBase = Boolean(
+        this.runSettings
+        && typeof this.runSettings.computeBaseEffective === 'function'
+        && settings
+        && settings.effectiveSettings
+      );
+      const baseEffective = canComputeBase
+        ? this.runSettings.computeBaseEffective({
+          globalEffectiveSettings: settings.effectiveSettings,
+          jobContext: job
+        })
+        : null;
+      let effective = src.effective && typeof src.effective === 'object'
+        ? src.effective
+        : {};
+      if (baseEffective && this.runSettings && typeof this.runSettings.applyPatch === 'function') {
+        const withUser = this.runSettings.applyPatch(baseEffective, userOverrides);
+        effective = this.runSettings.applyPatch(withUser, agentOverrides);
+      } else if (!src.effective && this.runSettings && typeof this.runSettings.computeBaseEffective === 'function') {
+        effective = this.runSettings.computeBaseEffective({
+          globalEffectiveSettings: {},
+          jobContext: job
+        });
+      }
+      job.runSettings = {
+        effective,
+        userOverrides,
+        agentOverrides,
+        autoTune: {
+          enabled: this._resolveAutoTuneEnabledFromSettings(settings, autoTune.enabled),
+          mode: this._resolveAutoTuneModeFromSettings(settings, autoTune.mode),
+          lastProposalId: typeof autoTune.lastProposalId === 'string' ? autoTune.lastProposalId : null,
+          proposals: Array.isArray(autoTune.proposals) ? autoTune.proposals.slice(-100) : [],
+          decisionLog: Array.isArray(autoTune.decisionLog) ? autoTune.decisionLog.slice(-160) : [],
+          lastAppliedTs: Number.isFinite(Number(autoTune.lastAppliedTs)) ? Number(autoTune.lastAppliedTs) : 0,
+          antiFlap: autoTune.antiFlap && typeof autoTune.antiFlap === 'object'
+            ? autoTune.antiFlap
+            : { byKey: {} }
+        }
+      };
+      return job.runSettings;
+    }
+
+    _resolveAutoTuneEnabledFromSettings(settings, fallback) {
+      const tuning = settings && settings.translationAgentTuning && typeof settings.translationAgentTuning === 'object'
+        ? settings.translationAgentTuning
+        : {};
+      if (Object.prototype.hasOwnProperty.call(tuning, 'autoTuneEnabled')) {
+        return tuning.autoTuneEnabled !== false;
+      }
+      if (typeof fallback === 'boolean') {
+        return fallback;
+      }
+      return true;
+    }
+
+    _resolveAutoTuneModeFromSettings(settings, fallback) {
+      const tuning = settings && settings.translationAgentTuning && typeof settings.translationAgentTuning === 'object'
+        ? settings.translationAgentTuning
+        : {};
+      const raw = typeof tuning.autoTuneMode === 'string' ? tuning.autoTuneMode : fallback;
+      return raw === 'ask_user' ? 'ask_user' : 'auto_apply';
+    }
+
+    _hashTextStable(text) {
+      const src = typeof text === 'string' ? text : String(text || '');
+      let hash = 2166136261;
+      for (let i = 0; i < src.length; i += 1) {
+        hash ^= src.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+      }
+      return `h${(hash >>> 0).toString(16).padStart(8, '0')}`;
+    }
+
+    async _computeMemoryContext({ job, blocks, settings } = {}) {
+      if (!job || !Array.isArray(blocks)) {
+        return null;
+      }
+      const urlNormalizer = NT.UrlNormalizer || null;
+      const domSignature = NT.DomSignature || null;
+      const ignored = settings && Array.isArray(settings.translationMemoryIgnoredQueryParams)
+        ? settings.translationMemoryIgnoredQueryParams
+        : ['utm_*', 'fbclid', 'gclid'];
+      const normalizedUrl = urlNormalizer && typeof urlNormalizer.normalizeUrl === 'function'
+        ? urlNormalizer.normalizeUrl(job.url || '', { ignoredQueryParams: ignored })
+        : (job.url || '');
+      const domInfo = domSignature && typeof domSignature.buildDomSignature === 'function'
+        ? await domSignature.buildDomSignature(blocks).catch(() => null)
+        : null;
+      const domHash = domInfo && typeof domInfo.domHash === 'string' && domInfo.domHash
+        ? domInfo.domHash
+        : this._hashTextStable(
+          blocks.map((item, idx) => `${idx}|${item.category || ''}|${item.pathHint || ''}|${(item.originalText || '').length}`).join('\n')
+        );
+      const domSigVersion = domInfo && typeof domInfo.domSigVersion === 'string'
+        ? domInfo.domSigVersion
+        : 'v1';
+      const pageKeySource = `${normalizedUrl}|${String(job.targetLang || 'ru').toLowerCase()}|${domHash}`;
+      const pageKey = domSignature && typeof domSignature.hashTextSha256 === 'function'
+        ? await domSignature.hashTextSha256(pageKeySource).catch(() => this._hashTextStable(pageKeySource))
+        : this._hashTextStable(pageKeySource);
+
+      blocks.forEach((block) => {
+        if (!block || typeof block !== 'object') {
+          return;
+        }
+        if (!block.originalHash) {
+          block.originalHash = this._hashTextStable(String(block.originalText || '').trim());
+        }
+      });
+
+      job.memoryContext = {
+        normalizedUrl,
+        domHash,
+        domSigVersion,
+        signaturePreview: domInfo && typeof domInfo.signaturePreview === 'string' ? domInfo.signaturePreview : null,
+        pageKey,
+        updatedAt: Date.now()
+      };
+      return job.memoryContext;
+    }
+
+    _buildBlockMemoryKey(targetLang, originalHash) {
+      const lang = typeof targetLang === 'string' && targetLang ? targetLang.toLowerCase() : 'ru';
+      const hash = typeof originalHash === 'string' ? originalHash : '';
+      return this._hashTextStable(`${lang}|${hash}`);
+    }
+
+    _buildPageRecommendedCategories(pageRecord, fallback) {
+      const out = [];
+      const categories = pageRecord && pageRecord.categories && typeof pageRecord.categories === 'object'
+        ? Object.keys(pageRecord.categories)
+        : [];
+      categories.forEach((value) => {
+        const category = this._normalizeCategory(value);
+        if (!out.includes(category)) {
+          out.push(category);
+        }
+      });
+      if (out.length) {
+        return out;
+      }
+      return Array.isArray(fallback) ? fallback.slice() : [];
+    }
+
+    _ensureMemoryAgentState(job, settings, memoryRestore) {
+      if (!job) {
+        return;
+      }
+      const now = Date.now();
+      const state = job.agentState && typeof job.agentState === 'object'
+        ? job.agentState
+        : {};
+      if (!Array.isArray(state.reports)) {
+        state.reports = [];
+      }
+      if (!Array.isArray(state.toolExecutionTrace)) {
+        state.toolExecutionTrace = [];
+      }
+      if (!Array.isArray(state.toolHistory)) {
+        state.toolHistory = [];
+      }
+      if (!Array.isArray(state.checklist)) {
+        state.checklist = this.translationAgent && typeof this.translationAgent._buildInitialChecklist === 'function'
+          ? this.translationAgent._buildInitialChecklist()
+          : [];
+      }
+      state.profile = state.profile || (settings && settings.translationAgentProfile ? settings.translationAgentProfile : 'auto');
+      state.phase = 'memory_restored';
+      state.status = 'ready';
+      state.updatedAt = now;
+      const restoredCount = memoryRestore && Number.isFinite(Number(memoryRestore.restoredCount))
+        ? Number(memoryRestore.restoredCount)
+        : 0;
+      const report = {
+        ts: now,
+        type: 'memory',
+        title: 'Восстановление из памяти',
+        body: `Восстановлено блоков: ${restoredCount}`,
+        meta: {
+          matchType: memoryRestore && memoryRestore.matchType ? memoryRestore.matchType : 'unknown',
+          pageKey: memoryRestore && memoryRestore.pageKey ? memoryRestore.pageKey : null,
+          restoredCount
+        }
+      };
+      state.reports.push(report);
+      state.reports = state.reports.slice(-120);
+      const traceItem = {
+        ts: now,
+        tool: 'memory.restore',
+        mode: 'forced',
+        status: restoredCount > 0 ? 'ok' : 'warn',
+        forced: true,
+        message: `restored=${restoredCount}`,
+        meta: {
+          callId: `system:memory_restore:${now}`,
+          source: 'system',
+          output: `restored=${restoredCount}`,
+          args: {
+            matchType: memoryRestore && memoryRestore.matchType ? memoryRestore.matchType : 'unknown'
+          }
+        }
+      };
+      state.toolExecutionTrace.push(traceItem);
+      state.toolExecutionTrace = state.toolExecutionTrace.slice(-320);
+      state.toolHistory.push({
+        ts: now,
+        tool: 'memory.restore',
+        mode: 'forced',
+        status: restoredCount > 0 ? 'ok' : 'warn',
+        message: `restored=${restoredCount}`
+      });
+      state.toolHistory = state.toolHistory.slice(-140);
+      const checklistItem = state.checklist.find((item) => item && item.id === 'memory_restored');
+      if (checklistItem) {
+        checklistItem.status = restoredCount > 0 ? 'done' : (checklistItem.status || 'pending');
+        checklistItem.details = restoredCount > 0 ? `восстановлено=${restoredCount}` : checklistItem.details;
+        checklistItem.updatedAt = now;
+      }
+      state.memory = {
+        lastRestore: memoryRestore || null,
+        context: job.memoryContext || null
+      };
+      job.agentState = state;
+      job.recentDiffItems = Array.isArray(state.recentDiffItems) ? state.recentDiffItems.slice(-20) : (job.recentDiffItems || []);
+    }
+
+    async _restoreFromTranslationMemory({ job, blocks, settings, applyToTab = true } = {}) {
+      if (!job || !Array.isArray(blocks) || !this.translationMemoryStore) {
+        return { ok: false, restoredCount: 0, coverage: 'none', reason: 'memory_store_unavailable' };
+      }
+      if (settings && settings.translationMemoryEnabled === false) {
+        return { ok: false, restoredCount: 0, coverage: 'none', reason: 'memory_disabled' };
+      }
+      const context = job.memoryContext && typeof job.memoryContext === 'object'
+        ? job.memoryContext
+        : await this._computeMemoryContext({ job, blocks, settings });
+      if (!context || !context.pageKey) {
+        return { ok: false, restoredCount: 0, coverage: 'none', reason: 'memory_context_missing' };
+      }
+      let match = null;
+      try {
+        match = await this.translationMemoryStore.findBestPage({
+          pageKey: context.pageKey,
+          normalizedUrl: context.normalizedUrl || '',
+          domHash: context.domHash || ''
+        });
+      } catch (_) {
+        match = { page: null, matchType: 'lookup_failed' };
+      }
+      const page = match && match.page && typeof match.page === 'object' ? match.page : null;
+      const restoredItems = [];
+      const sourceBlocks = blocks.slice();
+      for (let i = 0; i < sourceBlocks.length; i += 1) {
+        const block = sourceBlocks[i];
+        if (!block || !block.blockId) {
+          continue;
+        }
+        const originalHash = block.originalHash || this._hashTextStable(String(block.originalText || '').trim());
+        block.originalHash = originalHash;
+        let translatedText = null;
+        if (page && page.blocks && page.blocks[block.blockId] && typeof page.blocks[block.blockId] === 'object') {
+          const record = page.blocks[block.blockId];
+          if (record.originalHash && record.originalHash === originalHash && typeof record.translatedText === 'string' && record.translatedText) {
+            translatedText = record.translatedText;
+          }
+        }
+        if (!translatedText) {
+          const blockKey = this._buildBlockMemoryKey(job.targetLang || 'ru', originalHash);
+          const blockRecord = await this.translationMemoryStore.getBlock(blockKey).catch(() => null);
+          if (blockRecord && typeof blockRecord.translatedText === 'string' && blockRecord.translatedText) {
+            translatedText = blockRecord.translatedText;
+            await this.translationMemoryStore.touchBlock(blockKey).catch(() => ({ ok: false }));
+          }
+        }
+        if (!translatedText) {
+          continue;
+        }
+        block.translatedText = translatedText;
+        restoredItems.push({
+          blockId: block.blockId,
+          text: translatedText
+        });
+      }
+
+      let appliedCount = 0;
+      if (applyToTab && restoredItems.length) {
+        const applied = await this._applyItemsToTab({
+          job,
+          items: restoredItems,
+          batchPrefix: 'memory_restore'
+        });
+        if (!applied.ok) {
+          restoredItems.forEach((item) => {
+            const block = blocks.find((row) => row && row.blockId === item.blockId);
+            if (block) {
+              block.translatedText = '';
+            }
+          });
+          return {
+            ok: false,
+            restoredCount: 0,
+            coverage: 'none',
+            reason: 'memory_apply_failed'
+          };
+        }
+        appliedCount = Number.isFinite(Number(applied.appliedTotal)) ? Number(applied.appliedTotal) : restoredItems.length;
+      } else {
+        appliedCount = restoredItems.length;
+      }
+
+      if (restoredItems.length) {
+        this._updateTranslationMemory(job, blocks, restoredItems);
+      }
+      if (page && page.pageKey) {
+        await this.translationMemoryStore.touchPage(page.pageKey).catch(() => ({ ok: false }));
+      }
+      const recommendedCategories = this._buildPageRecommendedCategories(
+        page,
+        this._collectAvailableCategories(
+          blocks.reduce((acc, block) => {
+            if (block && block.blockId) {
+              acc[block.blockId] = block;
+            }
+            return acc;
+          }, {})
+        )
+      );
+      const coverage = restoredItems.length >= blocks.length && blocks.length > 0
+        ? 'full_page'
+        : (restoredItems.length > 0 ? 'partial' : 'none');
+      const result = {
+        ok: true,
+        restoredCount: restoredItems.length,
+        appliedCount,
+        coverage,
+        matchType: match && match.matchType ? match.matchType : 'miss',
+        pageKey: page && page.pageKey ? page.pageKey : null,
+        recommendedCategories
+      };
+      if (restoredItems.length) {
+        this._recordRuntimeAction(job, {
+          tool: 'memory.restore',
+          status: 'ok',
+          message: 'memory.restore.applied',
+          meta: {
+            restoredCount: restoredItems.length,
+            coverage,
+            matchType: result.matchType,
+            pageKey: result.pageKey
+          }
+        });
+        this._ensureMemoryAgentState(job, settings, result);
+      } else {
+        this._recordRuntimeAction(job, {
+          tool: 'memory.restore',
+          status: 'warn',
+          message: 'memory.restore.miss',
+          meta: {
+            matchType: result.matchType,
+            pageKey: result.pageKey
+          }
+        });
+      }
+      return result;
     }
 
     _buildPageSignature(blocks) {
@@ -2455,6 +4662,46 @@
               phase: batchPrefix || 'restore'
             }
           });
+          let hasPatchEvents = false;
+          chunk.forEach((item) => {
+            if (!item || !item.blockId || typeof item.text !== 'string') {
+              return;
+            }
+            const block = job.blocksById && job.blocksById[item.blockId]
+              ? job.blocksById[item.blockId]
+              : null;
+            const prevText = block && typeof block.translatedText === 'string' && block.translatedText
+              ? block.translatedText
+              : (block && typeof block.originalText === 'string' ? block.originalText : '');
+            if (block) {
+              block.translatedText = item.text;
+            }
+            this._queuePatchEvent(job, {
+              blockId: item.blockId,
+              phase: this._resolvePatchPhase(job, batchPrefix || ''),
+              kind: this._resolvePatchKindForBatchPrefix(batchPrefix),
+              prev: {
+                textHash: this._hashTextStable(prevText),
+                textPreview: this._buildPatchPreview(prevText)
+              },
+              next: {
+                textHash: this._hashTextStable(item.text),
+                textPreview: this._buildPatchPreview(item.text)
+              },
+              meta: {
+                modelUsed: block && block.modelUsed ? block.modelUsed : null,
+                routeUsed: block && block.routeUsed ? block.routeUsed : null,
+                responseId: null,
+                callId: null
+              }
+            });
+            hasPatchEvents = true;
+          });
+          if (hasPatchEvents) {
+            await this._flushPatchEvents(job.id, {
+              forceSave: this._resolvePatchKindForBatchPrefix(batchPrefix) !== 'delta'
+            });
+          }
           appliedTotal += Number.isFinite(Number(ack.appliedCount))
             ? Number(ack.appliedCount)
             : chunk.length;
@@ -2633,6 +4880,124 @@
           delete job.translationMemoryBySource[key];
         });
       }
+      this._upsertPersistentMemoryEntries({ job, blocks, items }).catch(() => {});
+    }
+
+    async _upsertPersistentMemoryEntries({ job, blocks, items } = {}) {
+      if (!this.translationMemoryStore || !job || !Array.isArray(items) || !items.length) {
+        return;
+      }
+      const settings = await this._readAgentSettings().catch(() => null);
+      if (settings && settings.translationMemoryEnabled === false) {
+        return;
+      }
+      const sourceBlocks = Array.isArray(blocks) ? blocks : [];
+      const byId = {};
+      sourceBlocks.forEach((block) => {
+        if (block && block.blockId) {
+          byId[block.blockId] = block;
+        }
+      });
+      const context = job.memoryContext && typeof job.memoryContext === 'object'
+        ? job.memoryContext
+        : await this._computeMemoryContext({
+          job,
+          blocks: sourceBlocks.length
+            ? sourceBlocks
+            : Object.keys(job.blocksById || {}).map((blockId) => job.blocksById[blockId]).filter(Boolean),
+          settings: settings || {}
+        });
+      if (!context || !context.pageKey) {
+        return;
+      }
+      let pageRecord = await this.translationMemoryStore.getPage(context.pageKey).catch(() => null);
+      const expectedPageRev = Number.isFinite(Number(pageRecord && pageRecord.rev))
+        ? Number(pageRecord.rev)
+        : 0;
+      const now = Date.now();
+      if (!pageRecord) {
+        pageRecord = {
+          pageKey: context.pageKey,
+          url: context.normalizedUrl || '',
+          title: '',
+          domHash: context.domHash || '',
+          domSigVersion: context.domSigVersion || 'v1',
+          createdAt: now,
+          updatedAt: now,
+          lastUsedAt: now,
+          targetLang: job.targetLang || 'ru',
+          categories: {},
+          blocks: {}
+        };
+      }
+      if (!pageRecord.blocks || typeof pageRecord.blocks !== 'object' || Array.isArray(pageRecord.blocks)) {
+        pageRecord.blocks = {};
+      }
+      if (!pageRecord.categories || typeof pageRecord.categories !== 'object' || Array.isArray(pageRecord.categories)) {
+        pageRecord.categories = {};
+      }
+
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (!item || !item.blockId || typeof item.text !== 'string') {
+          continue;
+        }
+        const block = byId[item.blockId]
+          || (job.blocksById && job.blocksById[item.blockId] ? job.blocksById[item.blockId] : null);
+        if (!block) {
+          continue;
+        }
+        const originalHash = block.originalHash || this._hashTextStable(String(block.originalText || '').trim());
+        const blockKey = this._buildBlockMemoryKey(job.targetLang || 'ru', originalHash);
+        await this.translationMemoryStore.upsertBlock({
+          blockKey,
+          originalHash,
+          targetLang: job.targetLang || 'ru',
+          translatedText: item.text,
+          qualityTag: 'raw',
+          modelUsed: block.modelUsed || null,
+          routeUsed: block.routeUsed || null,
+          sourcePageKeys: [context.pageKey]
+        }).catch(() => ({ ok: false }));
+
+        pageRecord.blocks[item.blockId] = {
+          originalHash,
+          translatedText: item.text,
+          modelUsed: block.modelUsed || null,
+          routeUsed: block.routeUsed || null,
+          updatedAt: now
+        };
+        const category = this._normalizeCategory(block.category || block.pathHint || 'other');
+        if (!pageRecord.categories[category] || typeof pageRecord.categories[category] !== 'object') {
+          pageRecord.categories[category] = {
+            translatedBlockIds: [],
+            stats: {
+              count: 0,
+              passCount: 1
+            },
+            doneAt: null
+          };
+        }
+        const categoryEntry = pageRecord.categories[category];
+        categoryEntry.translatedBlockIds = Array.isArray(categoryEntry.translatedBlockIds)
+          ? categoryEntry.translatedBlockIds
+          : [];
+        if (!categoryEntry.translatedBlockIds.includes(item.blockId)) {
+          categoryEntry.translatedBlockIds.push(item.blockId);
+        }
+        categoryEntry.stats = categoryEntry.stats && typeof categoryEntry.stats === 'object'
+          ? categoryEntry.stats
+          : { count: 0, passCount: 1 };
+        categoryEntry.stats.count = categoryEntry.translatedBlockIds.length;
+        categoryEntry.doneAt = now;
+      }
+
+      pageRecord.updatedAt = now;
+      pageRecord.lastUsedAt = now;
+      await this.translationMemoryStore.upsertPage(pageRecord, {
+        expectedRev: expectedPageRev,
+        maxRetries: 3
+      }).catch(() => ({ ok: false }));
     }
 
     _translationMemoryKey(sourceText, category, lang) {
@@ -2835,6 +5200,32 @@
         return;
       }
       this.jobAbortControllers.delete(jobId);
+    }
+
+    _clearPendingAckWaiters(jobId) {
+      if (!jobId) {
+        return;
+      }
+      const prefix = `${jobId}:`;
+      Array.from(this.pendingApplyAcks.keys()).forEach((key) => {
+        if (typeof key === 'string' && key.indexOf(prefix) === 0) {
+          this.pendingApplyAcks.delete(key);
+        }
+      });
+      Array.from(this.pendingDeltaAcks.keys()).forEach((key) => {
+        if (typeof key === 'string' && key.indexOf(prefix) === 0) {
+          this.pendingDeltaAcks.delete(key);
+        }
+      });
+      const patchBucket = this.pendingPatchFlushByJob.get(jobId);
+      if (patchBucket && patchBucket.timerId) {
+        try {
+          global.clearTimeout(patchBucket.timerId);
+        } catch (_) {
+          // best-effort
+        }
+      }
+      this.pendingPatchFlushByJob.delete(jobId);
     }
   }
 

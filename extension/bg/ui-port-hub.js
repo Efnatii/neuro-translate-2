@@ -20,8 +20,26 @@
  *   and relays command/event callbacks to background app.
  */
 (function initUiPortHub(global) {
+  function cloneJson(value, fallback = null) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   class UiPortHub {
-    constructor({ settingsStore, tabStateStore, translationJobStore, eventLogStore, aiModule, onCommand, onEvent } = {}) {
+    constructor({
+      settingsStore,
+      tabStateStore,
+      translationJobStore,
+      eventLogStore,
+      aiModule,
+      onCommand,
+      onEvent,
+      runtimeSnapshotProvider,
+      onHello
+    } = {}) {
       this.subscribers = new Set();
       this.settingsStore = settingsStore || null;
       this.tabStateStore = tabStateStore || null;
@@ -30,6 +48,9 @@
       this.aiModule = aiModule || null;
       this.onCommand = typeof onCommand === 'function' ? onCommand : null;
       this.onEvent = typeof onEvent === 'function' ? onEvent : null;
+      this.runtimeSnapshotProvider = typeof runtimeSnapshotProvider === 'function' ? runtimeSnapshotProvider : null;
+      this.onHello = typeof onHello === 'function' ? onHello : null;
+      this.uiCapsByPort = {};
     }
 
     attachToRuntime() {
@@ -57,6 +78,27 @@
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
 
       if (envelope.type === UiProtocol.UI_HELLO) {
+        const payload = envelope && envelope.payload && typeof envelope.payload === 'object'
+          ? envelope.payload
+          : {};
+        const meta = envelope && envelope.meta && typeof envelope.meta === 'object'
+          ? envelope.meta
+          : {};
+        const uiCaps = payload.uiCaps && typeof payload.uiCaps === 'object'
+          ? payload.uiCaps
+          : (meta.clientCaps && meta.clientCaps.ui && typeof meta.clientCaps.ui === 'object'
+            ? meta.clientCaps.ui
+            : null);
+        if (uiCaps && port && port.name) {
+          this.uiCapsByPort[port.name] = { ...(this.uiCapsByPort[port.name] || {}), ...uiCaps };
+        }
+        if (this.onHello) {
+          this.onHello({
+            portName: port.name,
+            uiCaps: uiCaps || null,
+            toolsetWanted: payload.toolsetWanted || meta.toolsetWanted || null
+          });
+        }
         this.logEvent('info', 'ui', 'UI hello', { source: port.name, stage: 'hello' });
         await this.sendSnapshot(port, envelope);
         return;
@@ -98,6 +140,8 @@
           settings: {},
           tabId: null,
           translationStatusByTab: {},
+          translationVisibilityByTab: {},
+          translationDisplayModeByTab: {},
           eventLog: { seq: 0, items: [] },
           modelBenchmarkStatus: null,
           modelBenchmarks: {},
@@ -116,7 +160,11 @@
       const helloPayload = envelope && envelope.payload && typeof envelope.payload === 'object' ? envelope.payload : {};
       const lastEventSeq = typeof helloPayload.lastEventSeq === 'number' ? helloPayload.lastEventSeq : null;
       const settings = await this.settingsStore.getPublicSnapshot();
-      const visibilityData = await this.settingsStore.get(['translationVisibilityByTab', 'activeTabId']);
+      const visibilityData = await this.settingsStore.get([
+        'translationVisibilityByTab',
+        'translationDisplayModeByTab',
+        'activeTabId'
+      ]);
       const translationStatusByTab = await this.tabStateStore.getAllStatus();
       const benchmarkData = this.aiModule && typeof this.aiModule.getBenchmarkSnapshot === 'function'
         ? await this.aiModule.getBenchmarkSnapshot()
@@ -126,15 +174,31 @@
       const modelRegistry = this.aiModule && typeof this.aiModule.getRegistry === 'function'
         ? this.aiModule.getRegistry()
         : { entries: [], byKey: {} };
-      const tabId = this.resolveTabId(envelope && envelope.meta ? envelope.meta : null, visibilityData);
+      const tabId = this.resolveTabId(
+        envelope && envelope.meta ? envelope.meta : null,
+        visibilityData,
+        helloPayload
+      );
       const translationState = await this.buildTranslationStateSnapshot(tabId);
       const effectiveTabId = tabId === null || tabId === undefined ? translationState.tabId : tabId;
+      const runtime = this.runtimeSnapshotProvider
+        ? await this.runtimeSnapshotProvider({
+          tabId: effectiveTabId,
+          portName: envelope && envelope.meta ? envelope.meta.source || null : null,
+          uiCaps: helloPayload.uiCaps || null,
+          toolsetWanted: helloPayload.toolsetWanted
+            || (envelope && envelope.meta && envelope.meta.toolsetWanted && typeof envelope.meta.toolsetWanted === 'object'
+              ? envelope.meta.toolsetWanted
+              : null)
+        }).catch(() => null)
+        : null;
 
       return {
         settings,
         tabId: effectiveTabId === null || effectiveTabId === undefined ? null : effectiveTabId,
         translationStatusByTab,
         translationVisibilityByTab: visibilityData.translationVisibilityByTab || {},
+        translationDisplayModeByTab: visibilityData.translationDisplayModeByTab || {},
         modelBenchmarkStatus: benchmarkData.modelBenchmarkStatus || null,
         modelBenchmarks: benchmarkData.modelBenchmarks || {},
         modelLimitsBySpec,
@@ -147,7 +211,13 @@
         agentState: translationState.agentState,
         selectedCategories: translationState.selectedCategories,
         availableCategories: translationState.availableCategories,
-        recentDiffItems: translationState.recentDiffItems
+        recentDiffItems: translationState.recentDiffItems,
+        toolset: runtime && runtime.toolset ? runtime.toolset : null,
+        effectiveToolPolicy: runtime && runtime.effectiveToolPolicy ? runtime.effectiveToolPolicy : null,
+        effectiveToolPolicyReasons: runtime && runtime.effectiveToolPolicyReasons ? runtime.effectiveToolPolicyReasons : null,
+        security: runtime && runtime.security ? runtime.security : null,
+        negotiation: runtime && runtime.negotiation ? runtime.negotiation : null,
+        serverCaps: runtime && runtime.serverCaps ? runtime.serverCaps : null
       };
     }
 
@@ -199,6 +269,15 @@
       const total = Number.isFinite(Number(fallback.totalBlocks)) ? Number(fallback.totalBlocks) : 0;
       const completed = Number.isFinite(Number(fallback.completedBlocks)) ? Number(fallback.completedBlocks) : 0;
       const failedBlocksCount = Array.isArray(fallback.failedBlockIds) ? fallback.failedBlockIds.length : 0;
+      const runSettings = fallback.runSettings && typeof fallback.runSettings === 'object'
+        ? fallback.runSettings
+        : null;
+      const autoTune = runSettings && runSettings.autoTune && typeof runSettings.autoTune === 'object'
+        ? runSettings.autoTune
+        : null;
+      const pendingProposal = autoTune && Array.isArray(autoTune.proposals)
+        ? autoTune.proposals.slice().reverse().find((item) => item && item.status === 'proposed')
+        : null;
       return {
         tabId: resolvedTabId,
         translationJob: {
@@ -212,6 +291,48 @@
           currentBatchId: fallback.currentBatchId || null,
           selectedCategories: Array.isArray(fallback.selectedCategories) ? fallback.selectedCategories.slice(0, 24) : [],
           availableCategories: Array.isArray(fallback.availableCategories) ? fallback.availableCategories.slice(0, 24) : [],
+          runtime: fallback.runtime && typeof fallback.runtime === 'object'
+            ? {
+              status: fallback.runtime.status || null,
+              stage: fallback.runtime.stage || null,
+              leaseUntilTs: fallback.runtime.lease && Number.isFinite(Number(fallback.runtime.lease.leaseUntilTs))
+                ? Number(fallback.runtime.lease.leaseUntilTs)
+                : (Number.isFinite(Number(fallback.leaseUntilTs)) ? Number(fallback.leaseUntilTs) : null),
+              heartbeatTs: fallback.runtime.lease && Number.isFinite(Number(fallback.runtime.lease.heartbeatTs))
+                ? Number(fallback.runtime.lease.heartbeatTs)
+                : null,
+              attempt: fallback.runtime.retry && Number.isFinite(Number(fallback.runtime.retry.attempt))
+                ? Number(fallback.runtime.retry.attempt)
+                : 0,
+              nextRetryAtTs: fallback.runtime.retry && Number.isFinite(Number(fallback.runtime.retry.nextRetryAtTs))
+                ? Number(fallback.runtime.retry.nextRetryAtTs)
+                : 0,
+              lastErrorCode: fallback.runtime.retry && fallback.runtime.retry.lastError && fallback.runtime.retry.lastError.code
+                ? fallback.runtime.retry.lastError.code
+                : null
+            }
+            : null,
+          runSettings: runSettings
+            ? {
+              effectiveSummary: runSettings.effective && typeof runSettings.effective === 'object'
+                ? runSettings.effective
+                : {},
+              agentOverrides: runSettings.agentOverrides && typeof runSettings.agentOverrides === 'object'
+                ? runSettings.agentOverrides
+                : {},
+              userOverrides: runSettings.userOverrides && typeof runSettings.userOverrides === 'object'
+                ? runSettings.userOverrides
+                : {},
+              autoTune: {
+                enabled: autoTune ? autoTune.enabled !== false : true,
+                mode: autoTune && autoTune.mode === 'ask_user' ? 'ask_user' : 'auto_apply',
+                lastProposalId: autoTune && typeof autoTune.lastProposalId === 'string' ? autoTune.lastProposalId : null,
+                pendingProposal: pendingProposal || null,
+                proposals: autoTune && Array.isArray(autoTune.proposals) ? autoTune.proposals.slice(-60) : [],
+                decisionLog: autoTune && Array.isArray(autoTune.decisionLog) ? autoTune.decisionLog.slice(-120) : []
+              }
+            }
+            : null,
           updatedAt: fallback.updatedAt || null
         },
         translationProgress: total > 0
@@ -273,12 +394,15 @@
       return tail;
     }
 
-    resolveTabId(meta, result) {
-      if (meta && typeof meta.tabId === 'number') {
-        return meta.tabId;
+    resolveTabId(meta, result, helloPayload = null) {
+      if (meta && Number.isFinite(Number(meta.tabId))) {
+        return Number(meta.tabId);
       }
-      if (result && typeof result.activeTabId === 'number') {
-        return result.activeTabId;
+      if (helloPayload && Number.isFinite(Number(helloPayload.tabId))) {
+        return Number(helloPayload.tabId);
+      }
+      if (result && Number.isFinite(Number(result.activeTabId))) {
+        return Number(result.activeTabId);
       }
       return null;
     }
@@ -366,6 +490,10 @@
         return;
       }
       this.onEvent({ level, tag, message, meta });
+    }
+
+    getUiCapsSnapshot() {
+      return cloneJson(this.uiCapsByPort, {});
     }
   }
 

@@ -12,14 +12,24 @@
           <h1 class="popup__title">Neuro Translate</h1>
           <p class="popup__subtitle">ИИ-агент перевода страницы</p>
         </div>
-        <button
-          class="popup__debug"
-          type="button"
-          data-action="open-debug"
-          title="Открыть расширенную страницу отладки"
-        >
-          Отладка ↗
-        </button>
+        <div class="popup__header-actions">
+          <button
+            class="popup__debug"
+            type="button"
+            data-action="open-debug"
+            title="Открыть расширенную страницу отладки"
+          >
+            Отладка ↗
+          </button>
+          <button
+            class="popup__debug popup__debug--secondary"
+            type="button"
+            data-action="open-export"
+            title="Открыть раздел экспорта отчёта в debug"
+          >
+            Экспорт отчёта ↗
+          </button>
+        </div>
       </header>
 
       <section class="popup__top-strip" aria-label="Статус и быстрые действия">
@@ -42,6 +52,13 @@
           </div>
           <label class="popup__label popup__label--muted" for="status-progress">Прогресс шага</label>
           <progress id="status-progress" class="popup__progress" value="0" max="100" data-field="status-progress"></progress>
+          <div class="popup__multi-jobs">
+            <span class="popup__label popup__label--muted" data-field="active-jobs-summary">Активные задачи: 0</span>
+            <select class="popup__select popup__select--mode" data-field="active-jobs-select" aria-label="Активные задачи"></select>
+            <button class="popup__debug popup__debug--secondary" type="button" data-action="goto-job-tab" title="Перейти к вкладке выбранной задачи">
+              Перейти
+            </button>
+          </div>
         </div>
 
         <div class="popup__action-grid">
@@ -51,6 +68,12 @@
             </svg>
             <span class="popup__action-label">Перевести</span>
           </button>
+          <button class="popup__icon-button popup__action-button" type="button" data-action="cancel-translation" title="Остановить текущий процесс перевода" aria-label="Остановить перевод">
+            <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10"></rect>
+            </svg>
+            <span class="popup__action-label">Отменить</span>
+          </button>
           <button class="popup__icon-button popup__action-button" type="button" data-action="clear-translation-data" title="Отменить перевод и стереть данные страницы" aria-label="Отменить и стереть">
             <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
               <rect x="6" y="6" width="12" height="12"></rect>
@@ -58,19 +81,16 @@
               <path d="M9 7V5H15V7"></path>
               <path d="M7 7L8 20H16L17 7"></path>
             </svg>
-            <span class="popup__action-label">Отменить и стереть</span>
+            <span class="popup__action-label">Стереть</span>
           </button>
-          <button class="popup__icon-button popup__action-button popup__action-button--wide" type="button" data-action="toggle-visibility" aria-label="Показать перевод" title="Переключить видимость перевода на странице">
-            <svg class="popup__icon popup__icon--visible" viewBox="0 0 24 24" aria-hidden="true" data-field="visibility-on">
-              <path d="M2 12C4.8 7.2 8 5 12 5C16 5 19.2 7.2 22 12C19.2 16.8 16 19 12 19C8 19 4.8 16.8 2 12Z"></path>
-              <circle cx="12" cy="12" r="3.2"></circle>
-            </svg>
-            <svg class="popup__icon popup__icon--hidden" viewBox="0 0 24 24" aria-hidden="true" data-field="visibility-off">
-              <path d="M2 12C4.8 7.2 8 5 12 5C16 5 19.2 7.2 22 12C19.2 16.8 16 19 12 19C8 19 4.8 16.8 2 12Z"></path>
-              <line x1="5" y1="19" x2="19" y2="5"></line>
-            </svg>
-            <span class="popup__action-label" data-field="visibility-label">Показать оригинал</span>
-          </button>
+          <div class="popup__action-mode popup__action-button--wide" title="Сравнение подсвечивает изменения. Для больших блоков см. debug.">
+            <label class="popup__action-mode-label" for="display-mode-select">Режим отображения</label>
+            <select id="display-mode-select" class="popup__select popup__select--mode" data-field="display-mode-select" aria-label="Режим отображения">
+              <option value="translated">Перевод</option>
+              <option value="original">Оригинал</option>
+              <option value="compare">Сравнение (diff)</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -162,14 +182,26 @@
               <label class="popup__label" for="agent-profile">Профиль агента</label>
               <select id="agent-profile" class="popup__select" data-field="agent-profile" title="Профиль влияет на стиль, батчинг и стратегию перевода">
                 <option value="auto">Авто (адаптивный)</option>
+                <option value="fast">Быстрый</option>
                 <option value="balanced">Сбалансированный</option>
-                <option value="literal">Ближе к дословному</option>
-                <option value="readable">Более читабельный</option>
-                <option value="technical">Технический</option>
+                <option value="bulk">Массовый</option>
+                <option value="accurate">Точный</option>
+                <option value="research">Исследовательский</option>
+                <option value="custom">Custom</option>
               </select>
             </div>
 
             <div class="popup__tool-grid popup__tool-grid--compact">
+              <div class="popup__tool-row">
+                <label for="model-routing-mode" title="Auto: агент выбирает сам; user_priority: предпочитает user priority; profile_priority: предпочитает профильный список">
+                  Роутинг моделей
+                </label>
+                <select id="model-routing-mode" data-field="model-routing-mode" title="Режим маршрутизации выбора модели">
+                  <option value="auto">AUTO</option>
+                  <option value="user_priority">USER PRIORITY</option>
+                  <option value="profile_priority">PROFILE PRIORITY</option>
+                </select>
+              </div>
               <div class="popup__tool-row">
                 <label for="agent-model-policy-mode" title="Авто: агент может усиливать/ускорять выбор модели по контексту; Фиксировано: используйте заданные параметры как базу">
                   Режим приоритета
@@ -207,6 +239,44 @@
             <div class="popup__impact" data-section="agent-profile-impact"></div>
           </details>
 
+          <details class="popup__details" data-section="agent-autotune" open>
+            <summary title="Job-scoped авто-настройка reasoning/cache/models/tools через инструменты агента">
+              Авто-настройка
+            </summary>
+            <div class="popup__tool-grid popup__tool-grid--compact">
+              <label class="popup__label popup__checkbox-row" title="Разрешить агенту предлагать и применять job-scoped run settings">
+                <input type="checkbox" data-field="autotune-enabled">
+                <span>Авто-настройка агентом</span>
+              </label>
+              <div class="popup__tool-row">
+                <label for="autotune-mode" title="auto_apply: применять автоматически; ask_user: ждать подтверждения">
+                  Режим применения
+                </label>
+                <select id="autotune-mode" data-field="autotune-mode">
+                  <option value="auto_apply">Применять автоматически</option>
+                  <option value="ask_user">Спрашивать перед применением</option>
+                </select>
+              </div>
+              <div class="popup__tool-row">
+                <label>Последнее решение</label>
+                <div class="popup__label popup__label--muted" data-field="autotune-last-decision">—</div>
+              </div>
+              <div class="popup__tool-row">
+                <label>Pending diff</label>
+                <div class="popup__label popup__label--muted" data-field="autotune-pending-diff">—</div>
+              </div>
+              <div class="popup__tool-row">
+                <label>Причина</label>
+                <div class="popup__label popup__label--muted" data-field="autotune-pending-reason">—</div>
+              </div>
+              <div class="popup__tool-grid popup__tool-grid--compact">
+                <button class="popup__button" type="button" data-action="autotune-apply">Принять</button>
+                <button class="popup__button" type="button" data-action="autotune-reject">Отклонить</button>
+                <button class="popup__button" type="button" data-action="autotune-reset">Откатить</button>
+              </div>
+            </div>
+          </details>
+
           <details class="popup__details" data-section="agent-expert-settings">
             <summary title="Расширенная настройка планирования, аудита и автосжатия контекста">
               Экспертные настройки
@@ -223,6 +293,38 @@
             <details class="popup__details popup__details--nested" data-section="agent-thinking" open>
               <summary title="Тонкая настройка планирования и батчинга">Размышление и планирование</summary>
               <div class="popup__tool-grid popup__tool-grid--compact">
+                <div class="popup__tool-row">
+                  <label for="reasoning-mode" title="Auto: использовать профильные дефолты reasoning; Custom: ручная настройка effort/summary">
+                    Reasoning режим
+                  </label>
+                  <select id="reasoning-mode" data-field="reasoning-mode" title="Режим настройки reasoning">
+                    <option value="auto">AUTO</option>
+                    <option value="custom">CUSTOM</option>
+                  </select>
+                </div>
+                <div class="popup__tool-row">
+                  <label for="reasoning-effort" title="Интенсивность reasoning для Responses API (best-effort)">
+                    Reasoning effort
+                  </label>
+                  <select id="reasoning-effort" data-field="reasoning-effort" title="Уровень effort">
+                    <option value="minimal">minimal</option>
+                    <option value="low">low</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                    <option value="max">max</option>
+                  </select>
+                </div>
+                <div class="popup__tool-row">
+                  <label for="reasoning-summary" title="Формат summary reasoning для Responses API (best-effort)">
+                    Reasoning summary
+                  </label>
+                  <select id="reasoning-summary" data-field="reasoning-summary" title="Формат summary">
+                    <option value="auto">auto</option>
+                    <option value="none">none</option>
+                    <option value="short">short</option>
+                    <option value="detailed">detailed</option>
+                  </select>
+                </div>
                 <div class="popup__tool-row">
                   <label for="agent-style-override" title="Оверрайд стилистики перевода поверх профиля">Стиль</label>
                   <select id="agent-style-override" data-field="agent-style-override" title="Если AUTO, стиль берётся из профиля">
@@ -281,6 +383,10 @@
                   <input id="agent-context-limit" class="popup__input popup__input--narrow" type="number" min="1" step="500" data-field="agent-context-limit" title="Если контекст растёт выше лимита, запускается сжатие">
                 </div>
                 <div class="popup__tool-row">
+                  <label for="compare-diff-threshold" title="Порог длины блока для compare mode. Если блок длиннее, на странице будет только outline-подсветка.">Порог compare diff (симв.)</label>
+                  <input id="compare-diff-threshold" class="popup__input popup__input--narrow" type="number" min="500" step="100" data-field="compare-diff-threshold" title="Большие блоки выше порога не диффятся inline, смотрите debug">
+                </div>
+                <div class="popup__tool-row">
                   <label for="agent-compression-cooldown" title="Минимальная пауза между операциями сжатия (мс)">Пауза между сжатиями (мс)</label>
                   <input id="agent-compression-cooldown" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-compression-cooldown" title="Защита от слишком частого сжатия">
                 </div>
@@ -297,21 +403,76 @@
           aria-labelledby="popup-tab-button-models"
           hidden
         >
-          <details class="popup__details popup__details--inline" data-section="api-key" open>
-            <summary title="Ключ нужен для вызовов OpenAI API">OpenAI API-ключ</summary>
-            <div class="popup__field">
-              <input
-                class="popup__input"
-                type="password"
-                placeholder="sk-..."
-                autocomplete="off"
-                data-field="api-key"
-                title="Ваш OpenAI API-ключ сохраняется локально в настройках расширения"
-              >
-              <button class="popup__button" type="button" data-action="toggle-api" title="Показать или скрыть API-ключ">
-                Показать
-              </button>
+          <details class="popup__details popup__details--inline" data-section="credentials" open>
+            <summary title="Безопасное подключение к API: Proxy (рекомендуется) или BYOK">Ключи и подключение</summary>
+            <div class="popup__field popup__field--stack">
+              <label class="popup__label popup__checkbox-row" title="Рекомендуемый режим: ключ OpenAI хранится на вашем сервере">
+                <input type="radio" name="connection-mode" data-field="connection-mode-proxy" value="PROXY">
+                <span>Через Proxy (рекомендуется)</span>
+              </label>
+              <label class="popup__label popup__checkbox-row" title="BYOK: используете свой OpenAI ключ на свой риск">
+                <input type="radio" name="connection-mode" data-field="connection-mode-byok" value="BYOK">
+                <span>Мой ключ OpenAI (BYOK)</span>
+              </label>
             </div>
+
+            <div class="popup__tool-grid popup__tool-grid--compact" data-section="proxy-config">
+              <div class="popup__tool-row">
+                <label for="proxy-url">Proxy URL</label>
+                <input id="proxy-url" class="popup__input popup__input--narrow" type="text" data-field="proxy-url" placeholder="https://proxy.example.com" autocomplete="off">
+              </div>
+              <div class="popup__tool-row">
+                <label for="proxy-token">Proxy token (optional)</label>
+                <input id="proxy-token" class="popup__input popup__input--narrow" type="password" data-field="proxy-token" placeholder="token" autocomplete="off">
+              </div>
+              <div class="popup__tool-row">
+                <label for="proxy-project-id">Project ID (optional)</label>
+                <input id="proxy-project-id" class="popup__input popup__input--narrow" type="text" data-field="proxy-project-id" placeholder="project id">
+              </div>
+              <div class="popup__tool-row">
+                <label for="proxy-header-name">Token header</label>
+                <input id="proxy-header-name" class="popup__input popup__input--narrow" type="text" data-field="proxy-header-name" value="X-NT-Token" placeholder="X-NT-Token">
+              </div>
+              <label class="popup__label popup__checkbox-row" title="Сохранять token прокси постоянно (риск выше)">
+                <input type="checkbox" data-field="proxy-token-persist">
+                <span>Сохранить token постоянно</span>
+              </label>
+              <div class="popup__tool-row">
+                <label>Proxy действия</label>
+                <div class="popup__buttons-row">
+                  <button class="popup__button" type="button" data-action="save-proxy-config">Сохранить Proxy</button>
+                  <button class="popup__button" type="button" data-action="clear-proxy-config">Очистить Proxy</button>
+                  <button class="popup__button" type="button" data-action="test-connection">Проверить</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="popup__tool-grid popup__tool-grid--compact" data-section="byok-config">
+              <div class="popup__tool-row">
+                <label for="byok-key">OpenAI key</label>
+                <input id="byok-key" class="popup__input popup__input--narrow" type="password" data-field="byok-key" placeholder="sk-..." autocomplete="off">
+              </div>
+              <label class="popup__label popup__checkbox-row" title="Постоянное хранение BYOK ключа повышает риск">
+                <input type="checkbox" data-field="byok-persist">
+                <span>Сохранить постоянно (НЕ рекомендовано)</span>
+              </label>
+              <label class="popup__label popup__checkbox-row" title="Подтвердите, что понимаете риск постоянного хранения ключа">
+                <input type="checkbox" data-field="byok-persist-confirm">
+                <span>Подтверждаю риск хранения ключа локально</span>
+              </label>
+              <div class="popup__tool-row">
+                <label>BYOK действия</label>
+                <div class="popup__buttons-row">
+                  <button class="popup__button" type="button" data-action="save-byok-session">Сохранить на сессию</button>
+                  <button class="popup__button" type="button" data-action="save-byok">Сохранить ключ</button>
+                  <button class="popup__button" type="button" data-action="clear-byok">Очистить</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="popup__label popup__label--warning" data-field="credentials-warning">Внимание: BYOK в браузере менее безопасен, чем Proxy режим.</div>
+            <div class="popup__label popup__label--muted" data-field="credentials-status">Подключение: —</div>
+            <div class="popup__label popup__label--muted" data-field="connection-test-status">Проверка: —</div>
           </details>
 
           <details class="popup__details popup__details--models" data-section="models-details" open>
@@ -332,6 +493,25 @@
 
           <details class="popup__details" data-section="agent-cache" open>
             <summary title="Настройки кэширования перевода и API">Кэширование</summary>
+            <div class="popup__tool-grid popup__tool-grid--compact">
+              <div class="popup__tool-row">
+                <label for="prompt-cache-retention" title="Retention для prompt cache в Responses API (best-effort)">
+                  Prompt cache retention
+                </label>
+                <select id="prompt-cache-retention" data-field="prompt-cache-retention" title="Режим retention для prompt cache">
+                  <option value="auto">auto</option>
+                  <option value="in_memory">in_memory</option>
+                  <option value="extended">extended</option>
+                  <option value="disabled">disabled</option>
+                </select>
+              </div>
+              <div class="popup__tool-row">
+                <label for="prompt-cache-key" title="Опциональный cache key для prompt cache (если провайдер поддерживает)">
+                  Prompt cache key
+                </label>
+                <input id="prompt-cache-key" class="popup__input popup__input--narrow" type="text" data-field="prompt-cache-key" placeholder="опционально" title="Ключ prompt cache">
+              </div>
+            </div>
             <label class="popup__label popup__checkbox-row" title="При повторном открытии той же страницы агент сможет восстановить готовый перевод из кэша">
               <input type="checkbox" data-field="cache-enabled">
               <span>Запоминать переведённые страницы</span>
@@ -340,6 +520,29 @@
               <input type="checkbox" data-field="api-cache-enabled">
               <span>Кэшировать ответы API</span>
             </label>
+            <label class="popup__label popup__checkbox-row" title="Сохранять перевод в долговременную память по URL + DOM hash и block hash">
+              <input type="checkbox" data-field="memory-enabled">
+              <span>Память перевода (страницы и блоки)</span>
+            </label>
+            <div class="popup__tool-grid popup__tool-grid--compact">
+              <div class="popup__tool-row">
+                <label title="Удаляет записи памяти только для текущей страницы и языка">
+                  Очистка памяти страницы
+                </label>
+                <button class="popup__button" type="button" data-action="erase-page-memory" title="Стереть память только этой страницы">
+                  Стереть страницу
+                </button>
+              </div>
+              <div class="popup__tool-row">
+                <label title="Полностью очищает IndexedDB память перевода">
+                  Полная очистка памяти
+                </label>
+                <button class="popup__button" type="button" data-action="erase-all-memory" title="Стереть всю память перевода">
+                  Стереть всё
+                </button>
+              </div>
+            </div>
+            <div class="popup__label popup__label--muted" data-field="memory-restore-stats">Память: —</div>
           </details>
         </section>
       </section>
@@ -351,6 +554,7 @@
     <script src="../core/retry-loop.js"></script>
     <script src="../core/chrome-local-store-base.js"></script>
     <script src="../core/event-types.js"></script>
+    <script src="../core/agent-settings-policy.js"></script>
     <script src="../core/settings-store.js"></script>
     <script src="../core/message-envelope.js"></script>
     <script src="../core/ui-protocol.js"></script>

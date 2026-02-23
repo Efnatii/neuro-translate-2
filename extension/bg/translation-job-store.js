@@ -137,6 +137,78 @@
       return jobs;
     }
 
+    async compactInactiveJobs({ traceLimit = 140, patchLimit = 220, diffLimit = 20 } = {}) {
+      const data = await this.getSnapshot();
+      const activeJobIds = new Set(
+        Object.keys(data.translationJobsByTab || {})
+          .map((tabKey) => data.translationJobsByTab[tabKey])
+          .filter(Boolean)
+      );
+      const safeTraceLimit = Number.isFinite(Number(traceLimit)) ? Math.max(20, Number(traceLimit)) : 140;
+      const safePatchLimit = Number.isFinite(Number(patchLimit)) ? Math.max(40, Number(patchLimit)) : 220;
+      const safeDiffLimit = Number.isFinite(Number(diffLimit)) ? Math.max(10, Number(diffLimit)) : 20;
+      let compactedJobs = 0;
+      let changed = false;
+
+      Object.keys(data.translationJobsById || {}).forEach((jobId) => {
+        if (!jobId || activeJobIds.has(jobId)) {
+          return;
+        }
+        const job = data.translationJobsById[jobId];
+        if (!job || typeof job !== 'object') {
+          return;
+        }
+        const nextJob = { ...job };
+        const state = nextJob.agentState && typeof nextJob.agentState === 'object'
+          ? { ...nextJob.agentState }
+          : null;
+        let jobChanged = false;
+        const trimList = (value, maxSize) => (Array.isArray(value) ? value.slice(-maxSize) : value);
+
+        if (state) {
+          const beforeTrace = Array.isArray(state.toolExecutionTrace) ? state.toolExecutionTrace.length : 0;
+          const beforeHistory = Array.isArray(state.toolHistory) ? state.toolHistory.length : 0;
+          const beforeReports = Array.isArray(state.reports) ? state.reports.length : 0;
+          const beforePatch = Array.isArray(state.patchHistory) ? state.patchHistory.length : 0;
+          state.toolExecutionTrace = trimList(state.toolExecutionTrace, safeTraceLimit);
+          state.toolHistory = trimList(state.toolHistory, safeTraceLimit);
+          state.reports = trimList(state.reports, safeTraceLimit);
+          state.patchHistory = trimList(state.patchHistory, safePatchLimit);
+          const afterTrace = Array.isArray(state.toolExecutionTrace) ? state.toolExecutionTrace.length : 0;
+          const afterHistory = Array.isArray(state.toolHistory) ? state.toolHistory.length : 0;
+          const afterReports = Array.isArray(state.reports) ? state.reports.length : 0;
+          const afterPatch = Array.isArray(state.patchHistory) ? state.patchHistory.length : 0;
+          if (beforeTrace !== afterTrace || beforeHistory !== afterHistory || beforeReports !== afterReports || beforePatch !== afterPatch) {
+            jobChanged = true;
+          }
+          nextJob.agentState = state;
+        }
+        if (Array.isArray(nextJob.recentDiffItems)) {
+          const before = nextJob.recentDiffItems.length;
+          nextJob.recentDiffItems = nextJob.recentDiffItems.slice(-safeDiffLimit);
+          if (nextJob.recentDiffItems.length !== before) {
+            jobChanged = true;
+          }
+        }
+        if (jobChanged) {
+          nextJob.updatedAt = Date.now();
+          data.translationJobsById[jobId] = nextJob;
+          compactedJobs += 1;
+          changed = true;
+        }
+      });
+
+      if (!changed) {
+        return { ok: true, compactedJobs: 0 };
+      }
+
+      await this.storageSet({
+        translationSchemaVersion: this.SCHEMA_VERSION,
+        translationJobsById: data.translationJobsById
+      });
+      return { ok: true, compactedJobs };
+    }
+
     async removeJob(jobId) {
       if (!jobId) {
         return false;

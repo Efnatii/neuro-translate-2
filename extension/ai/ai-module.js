@@ -25,7 +25,7 @@
   const NT = global.NT || (global.NT = {});
 
   class AiModule {
-    constructor({ chromeApi, fetchFn, loadScheduler, eventLogger, benchmarkStore, rateLimitStore, perfStore, offscreenExecutor } = {}) {
+    constructor({ chromeApi, fetchFn, loadScheduler, eventLogger, benchmarkStore, rateLimitStore, perfStore, offscreenExecutor, credentialsProvider } = {}) {
       this.chromeApi = chromeApi;
       this.fetchFn = fetchFn;
       this.loadScheduler = loadScheduler;
@@ -34,6 +34,7 @@
       this.injectedRateLimitStore = rateLimitStore || null;
       this.injectedPerfStore = perfStore || null;
       this.offscreenExecutor = offscreenExecutor || null;
+      this.credentialsProvider = credentialsProvider || null;
 
       this.modelRegistry = null;
       this.benchmarkStore = null;
@@ -60,7 +61,8 @@
         chromeApi: this.chromeApi,
         fetchFn: this.fetchFn,
         time: NT.Time,
-        offscreenExecutor: this.offscreenExecutor
+        offscreenExecutor: this.offscreenExecutor,
+        credentialsProvider: this.credentialsProvider
       });
       this.eventFactory = new NT.EventFactory({ time: NT.Time, source: 'ai' });
 
@@ -213,7 +215,7 @@
       return this.benchmarker.benchmarkSelected(modelSpecs, { force });
     }
 
-    request({ tabId, taskType, selectedModelSpecs, modelSelection, input, maxOutputTokens, temperature, store, background, signal, hintPrevModelSpec, hintBatchSize, requestMeta } = {}) {
+    request({ tabId, taskType, selectedModelSpecs, modelSelection, input, maxOutputTokens, temperature, store, background, signal, hintPrevModelSpec, hintBatchSize, requestMeta, responsesOptions, stream = false, onEvent = null } = {}) {
       return this.llmEngine.request({
         tabId,
         taskType,
@@ -227,7 +229,10 @@
         signal,
         hintPrevModelSpec,
         hintBatchSize: Number.isFinite(Number(hintBatchSize)) ? Number(hintBatchSize) : 1,
-        requestMeta
+        requestMeta,
+        responsesOptions,
+        stream,
+        onEvent
       });
     }
   }

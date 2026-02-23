@@ -21,6 +21,14 @@
           <div class="debug__row"><span>Всего</span><span data-field="total">—</span></div>
           <div class="debug__row"><span>В работе</span><span data-field="inProgress">—</span></div>
           <div class="debug__row"><span>Сообщение</span><span data-field="message">нет данных</span></div>
+          <div class="debug__controls">
+            <button type="button" data-action="kick-scheduler" title="Создаёт wake alarm и запускает scheduler tick">Пнуть планировщик</button>
+            <button type="button" data-action="pause-other-tabs" title="Временно снижает приоритет задач в других вкладках">Пауза других вкладок</button>
+            <label class="debug__checkbox">
+              <input type="checkbox" data-field="sessions-only-active">
+              Только активные
+            </label>
+          </div>
         </div>
       </details>
 
@@ -38,9 +46,41 @@
         <div class="debug__status">
           <div class="debug__row"><span>ID задачи</span><span data-field="translation-job-id">—</span></div>
           <div class="debug__row"><span>Статус</span><span data-field="translation-job-status">—</span></div>
+          <div class="debug__row"><span>Stage</span><span data-field="runtime-stage">—</span></div>
+          <div class="debug__row"><span>Lease</span><span data-field="runtime-lease">—</span></div>
+          <div class="debug__row"><span>Retry</span><span data-field="runtime-retry">—</span></div>
+          <div class="debug__row"><span>Offscreen</span><span data-field="offscreen-state">—</span></div>
+          <div class="debug__row"><span>Sessions</span><span data-field="scheduler-sessions">—</span></div>
+          <div class="debug__row">
+            <span>Sessions detail</span>
+            <table class="debug__table">
+              <thead>
+                <tr>
+                  <th>tabId</th>
+                  <th>url</th>
+                  <th>jobId</th>
+                  <th>stage</th>
+                  <th>status</th>
+                  <th>lease</th>
+                  <th>nextRetry</th>
+                  <th>lastError</th>
+                </tr>
+              </thead>
+              <tbody data-field="scheduler-sessions-table"></tbody>
+            </table>
+          </div>
+          <div class="debug__row"><span>Queue</span><span data-field="scheduler-queue">—</span></div>
+          <div class="debug__row"><span>Shared budget</span><span data-field="scheduler-budget">—</span></div>
           <div class="debug__row"><span>Прогресс</span><span data-field="translation-progress">0%</span></div>
           <div class="debug__row"><span>Ошибки блоков</span><span data-field="translation-failed-count">0</span></div>
           <div class="debug__row"><span>Последняя ошибка</span><span data-field="translation-last-error">—</span></div>
+          <div class="debug__row"><span>Fetch debug baseUrl</span><span data-field="translation-last-error-base-url">—</span></div>
+          <div class="debug__row"><span>Fetch debug transport</span><span data-field="translation-last-error-transport">—</span></div>
+          <div class="debug__row"><span>Fetch debug host</span><span data-field="translation-last-error-endpoint-host">—</span></div>
+          <div class="debug__row"><span>Fetch debug online</span><span data-field="translation-last-error-online">—</span></div>
+          <div class="debug__row"><span>Fetch debug probe</span><span data-field="translation-last-error-probe-status">—</span></div>
+          <div class="debug__row"><span>Fetch debug error</span><span data-field="translation-last-error-probe-error">—</span></div>
+          <div class="debug__row"><span>Fetch debug steps</span><div data-field="translation-last-error-probe-steps" class="debug__list"></div></div>
         </div>
       </details>
 
@@ -53,10 +93,41 @@
           <div class="debug__row"><span>Термины глоссария</span><span data-field="agent-glossary-size">0</span></div>
           <div class="debug__row"><span>Сжатия контекста</span><span data-field="agent-compressions">0</span></div>
           <div class="debug__row"><span>Сводка контекста</span><span data-field="agent-context-summary">—</span></div>
+          <div class="debug__row"><span>Последний rate-limit</span><span data-field="agent-rate-last">—</span></div>
+          <div class="debug__row"><span>История rate-limit</span><div data-field="agent-rate-history" class="debug__list"></div></div>
           <div class="debug__row"><span>Чеклист</span><div data-field="agent-checklist" class="debug__list"></div></div>
           <div class="debug__row"><span>Вызовы инструментов</span><div data-field="agent-tools" class="debug__list"></div></div>
           <div class="debug__row"><span>Трасса инструментов</span><div data-field="agent-tool-trace" class="debug__list"></div></div>
           <div class="debug__row"><span>Отчёты</span><div data-field="agent-reports" class="debug__list"></div></div>
+          <div class="debug__row"><span>AutoTune</span><span data-field="autotune-status">—</span></div>
+          <div class="debug__row"><span>AutoTune proposals</span><div data-field="autotune-proposals" class="debug__list"></div></div>
+          <div class="debug__row"><span>AutoTune details</span><pre data-field="autotune-proposal-details" class="debug__pre">—</pre></div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="settings" open>
+        <summary title="Текущие user/effective настройки из SettingsStore">Настройки (effective и overrides)</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Schema</span><span data-field="settings-schema">—</span></div>
+          <div class="debug__row"><span>Профиль</span><span data-field="settings-profile">—</span></div>
+          <div class="debug__row"><span>Reasoning</span><span data-field="settings-reasoning">—</span></div>
+          <div class="debug__row"><span>Кэш</span><span data-field="settings-cache">—</span></div>
+          <div class="debug__row"><span>Инструменты</span><span data-field="settings-tools">—</span></div>
+          <div class="debug__row"><span>Модели</span><span data-field="settings-models">—</span></div>
+          <div class="debug__row"><span>Overrides</span><span data-field="settings-overrides">—</span></div>
+          <div class="debug__row"><span>Toolset hash</span><span data-field="toolset-hash">—</span></div>
+          <div class="debug__row"><span>Capabilities</span><span data-field="capabilities-summary">—</span></div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="memory" open>
+        <summary title="Диагностика памяти перевода страницы и block dedupe">Memory</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>pageKey</span><span data-field="memory-page-key">—</span></div>
+          <div class="debug__row"><span>DOM hash</span><span data-field="memory-dom-hash">—</span></div>
+          <div class="debug__row"><span>URL (normalized)</span><span data-field="memory-url">—</span></div>
+          <div class="debug__row"><span>Последний restore</span><span data-field="memory-restore">—</span></div>
+          <div class="debug__row"><span>Операции</span><div data-field="memory-ops" class="debug__list"></div></div>
         </div>
       </details>
 
@@ -64,6 +135,60 @@
         <summary title="Недавние изменения текста на странице">Изменения текста</summary>
         <div class="debug__status">
           <div class="debug__row"><span>Последние изменения</span><div data-field="diff-list" class="debug__list"></div></div>
+          <div class="debug__row"><span>Patch events</span><span data-field="patch-events-count">0</span></div>
+          <div class="debug__row"><span>Coalesced apply_delta</span><span data-field="coalesced-count">0</span></div>
+          <div class="debug__row"><span>Avg delta->apply</span><span data-field="delta-apply-latency">—</span></div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="compare" open>
+        <summary title="Сравнение оригинала и перевода по блокам + история патчей">Сравнение и патчи</summary>
+        <div class="debug__status">
+          <div class="debug__controls">
+            <input type="text" data-field="compare-search" placeholder="Поиск blockId/category" title="Фильтр блоков по id или категории">
+            <select data-field="compare-status" title="Фильтр по статусу блока">
+              <option value="all">Статус: все</option>
+              <option value="DONE">Статус: DONE</option>
+              <option value="PENDING">Статус: PENDING</option>
+              <option value="FAILED">Статус: FAILED</option>
+            </select>
+          </div>
+          <div class="debug__row"><span>Блоки</span><div data-field="compare-blocks" class="debug__list"></div></div>
+          <div class="debug__row"><span>Оригинал</span><pre data-field="diff-original" class="debug__pre">—</pre></div>
+          <div class="debug__row"><span>Перевод</span><pre data-field="diff-translated" class="debug__pre">—</pre></div>
+          <div class="debug__row"><span>Diff</span><div data-field="diff-rendered" class="debug__diff-rendered">—</div></div>
+          <div class="debug__row"><span>Patch timeline</span><div data-field="patch-timeline" class="debug__list"></div></div>
+          <div class="debug__row"><span>Patch details</span><pre data-field="patch-details" class="debug__pre">—</pre></div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="export" open>
+        <summary title="Экспорт отчёта с обязательной redaction секретов">Экспорт отчёта</summary>
+        <div class="debug__status">
+          <div class="debug__controls">
+            <select data-field="export-text-mode" title="Объём текстовых данных в отчёте">
+              <option value="snippets">Текст: snippets</option>
+              <option value="none">Текст: none</option>
+              <option value="full">Текст: full</option>
+            </select>
+            <button type="button" data-action="export-json" title="Скачать JSON отчёт">Экспорт JSON</button>
+            <button type="button" data-action="export-html" title="Скачать HTML отчёт">Экспорт HTML</button>
+            <button type="button" data-action="export-copy" title="Скопировать JSON отчёт в буфер">Копировать отчёт</button>
+          </div>
+          <div class="debug__row"><span>Статус</span><span data-field="export-status">—</span></div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="security" open>
+        <summary title="Быстрый аудит безопасности расширения">Security audit</summary>
+        <div class="debug__status">
+          <div class="debug__controls">
+            <button type="button" data-action="security-audit">Запустить Security audit</button>
+          </div>
+          <div class="debug__row"><span>Credentials</span><span data-field="security-credentials">—</span></div>
+          <div class="debug__row"><span>Test connection</span><span data-field="security-test-connection">—</span></div>
+          <div class="debug__row"><span>Audit status</span><span data-field="security-audit-status">—</span></div>
+          <div class="debug__row"><span>Audit report</span><pre data-field="security-audit-report" class="debug__pre">—</pre></div>
         </div>
       </details>
 
@@ -126,12 +251,16 @@
     <script src="../core/retry-loop.js"></script>
     <script src="../core/chrome-local-store-base.js"></script>
     <script src="../core/event-types.js"></script>
+    <script src="../core/agent-settings-policy.js"></script>
     <script src="../core/settings-store.js"></script>
     <script src="../core/message-envelope.js"></script>
     <script src="../core/ui-protocol.js"></script>
     <script src="../core/ui-port-client.js"></script>
+    <script src="../core/redaction.js"></script>
     <script src="../core/runtime-paths.js"></script>
+    <script src="../content/diff-highlighter.js"></script>
     <script src="./ui-module.js"></script>
+    <script src="./report-exporter.js"></script>
     <script src="./debug.js"></script>
   </body>
 </html>

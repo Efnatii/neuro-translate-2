@@ -206,3 +206,41 @@ progress {
   border-bottom: 0;
   padding-bottom: 0;
 }
+
+.debug__pre {
+  margin: 0;
+  border: 1px solid #000;
+  background: #fff;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+}
+
+.debug__diff-rendered {
+  border: 1px solid #000;
+  background: #fff;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  word-break: break-word;
+  font-size: 12px;
+}
+
+.debug__diff-rendered .nt-diff-ins {
+  background: #ffe58f;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+.debug__list-item .debug__mini-btn {
+  margin-left: 8px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+}

@@ -215,6 +215,23 @@
       });
     }
 
+    async touchStreamHeartbeat(requestId, { leaseUntilTs = null, preview = null } = {}) {
+      if (!requestId) {
+        return null;
+      }
+      const now = Date.now();
+      return this.upsert({
+        requestId,
+        status: 'pending',
+        updatedAt: now,
+        lastEventTs: now,
+        streamPreview: typeof preview === 'string' ? preview.slice(-200) : null,
+        leaseUntilTs: Number.isFinite(Number(leaseUntilTs))
+          ? Number(leaseUntilTs)
+          : this.nextLease(now)
+      });
+    }
+
     async listByStatus(status, { limit = 200 } = {}) {
       try {
         const normalized = this._normalizeStatus(status);

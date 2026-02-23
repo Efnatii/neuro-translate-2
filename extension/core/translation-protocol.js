@@ -9,14 +9,18 @@
 
   const TranslationProtocol = Object.freeze({
     CS_READY: 'translation:cs:ready',
+    CS_HELLO_CAPS: 'translation:cs:hello-caps',
     CS_SCAN_RESULT: 'translation:cs:scan-result',
     CS_APPLY_ACK: 'translation:cs:apply-ack',
+    CS_APPLY_DELTA_ACK: 'translation:cs:apply-delta-ack',
 
     BG_START_JOB: 'translation:bg:start-job',
     BG_APPLY_BATCH: 'translation:bg:apply-batch',
+    BG_APPLY_DELTA: 'translation:bg:apply-delta',
     BG_CANCEL_JOB: 'translation:bg:cancel-job',
     BG_SET_VISIBILITY: 'translation:bg:set-visibility',
     BG_RESTORE_ORIGINALS: 'translation:bg:restore-originals',
+    BG_ERASE_JOB_DATA: 'translation:bg:erase-job-data',
 
     wrap(type, payload, meta) {
       const MessageEnvelope = NT.MessageEnvelope || null;
@@ -48,16 +52,20 @@
 
     isContentToBackground(type) {
       return type === TranslationProtocol.CS_READY
+        || type === TranslationProtocol.CS_HELLO_CAPS
         || type === TranslationProtocol.CS_SCAN_RESULT
-        || type === TranslationProtocol.CS_APPLY_ACK;
+        || type === TranslationProtocol.CS_APPLY_ACK
+        || type === TranslationProtocol.CS_APPLY_DELTA_ACK;
     },
 
     isBackgroundToContent(type) {
       return type === TranslationProtocol.BG_START_JOB
         || type === TranslationProtocol.BG_APPLY_BATCH
+        || type === TranslationProtocol.BG_APPLY_DELTA
         || type === TranslationProtocol.BG_CANCEL_JOB
         || type === TranslationProtocol.BG_SET_VISIBILITY
-        || type === TranslationProtocol.BG_RESTORE_ORIGINALS;
+        || type === TranslationProtocol.BG_RESTORE_ORIGINALS
+        || type === TranslationProtocol.BG_ERASE_JOB_DATA;
     }
   });
 

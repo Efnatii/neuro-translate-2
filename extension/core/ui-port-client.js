@@ -10,11 +10,12 @@
  */
 (function initUiPortClient(global) {
   class UiPortClient {
-    constructor({ portName, onSnapshot, onPatch, getHelloPayload } = {}) {
+    constructor({ portName, onSnapshot, onPatch, getHelloPayload, getHelloMeta } = {}) {
       this.portName = portName;
       this.onSnapshot = onSnapshot;
       this.onPatch = onPatch;
       this.getHelloPayload = typeof getHelloPayload === 'function' ? getHelloPayload : null;
+      this.getHelloMeta = typeof getHelloMeta === 'function' ? getHelloMeta : null;
       this.port = null;
       this.connected = false;
       this.retryController = null;
@@ -81,7 +82,12 @@
 
       const source = this.portName;
       const helloPayload = this.getHelloPayload ? this.getHelloPayload() : {};
-      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_HELLO, helloPayload || {}, { source, stage: 'handshake' }));
+      const helloMeta = this.getHelloMeta ? this.getHelloMeta() : {};
+      this.postEnvelope(MessageEnvelope.wrap(UiProtocol.UI_HELLO, helloPayload || {}, {
+        source,
+        stage: 'handshake',
+        ...(helloMeta && typeof helloMeta === 'object' ? helloMeta : {})
+      }));
     }
 
     sendCommand(name, payload, meta = {}) {

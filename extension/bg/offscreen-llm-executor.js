@@ -12,12 +12,15 @@
     HELLO_ACK: 'OFFSCREEN_HELLO_ACK',
     EXECUTE_REQUEST: 'OFFSCREEN_EXECUTE_REQUEST',
     CANCEL_REQUEST: 'OFFSCREEN_CANCEL_REQUEST',
+    STREAM_EVENT: 'OFFSCREEN_STREAM_EVENT',
+    STREAM_DONE: 'OFFSCREEN_STREAM_DONE',
     RESULT: 'OFFSCREEN_RESULT',
     ERROR: 'OFFSCREEN_ERROR',
     PING: 'OFFSCREEN_PING',
     PING_ACK: 'OFFSCREEN_PING_ACK',
     QUERY_STATUS: 'OFFSCREEN_QUERY_STATUS',
-    QUERY_STATUS_ACK: 'OFFSCREEN_QUERY_STATUS_ACK'
+    QUERY_STATUS_ACK: 'OFFSCREEN_QUERY_STATUS_ACK',
+    ATTACH: 'OFFSCREEN_ATTACH'
   });
 
   function buildRequestId() {
@@ -40,6 +43,9 @@
       this._helloDone = false;
       this._requestWaiters = new Map();
       this._listeners = new Set();
+      this._offscreenCaps = null;
+      this._offscreenInstanceId = null;
+      this._activeRequests = [];
     }
 
     _emit(level, tag, message, meta) {
@@ -84,6 +90,37 @@
         meta: {},
         envelopeId: null
       };
+    }
+
+    _normalizeActiveRequests(input) {
+      const source = Array.isArray(input) ? input : [];
+      return source
+        .map((item) => ({
+          requestId: item && item.requestId ? String(item.requestId) : null,
+          startedTs: Number.isFinite(Number(item && item.startedTs)) ? Number(item.startedTs) : null,
+          lastEventTs: Number.isFinite(Number(item && item.lastEventTs)) ? Number(item.lastEventTs) : null,
+          mode: item && item.mode === 'nonstream' ? 'nonstream' : 'stream'
+        }))
+        .filter((item) => Boolean(item.requestId));
+    }
+
+    _upsertActiveRequest(requestLike) {
+      const normalized = this._normalizeActiveRequests([requestLike]);
+      if (!normalized.length) {
+        return;
+      }
+      const next = normalized[0];
+      const prevList = this._normalizeActiveRequests(this._activeRequests);
+      const byId = new Map(prevList.map((item) => [item.requestId, item]));
+      byId.set(next.requestId, { ...(byId.get(next.requestId) || {}), ...next });
+      this._activeRequests = Array.from(byId.values());
+    }
+
+    _dropActiveRequest(requestId) {
+      if (!requestId) {
+        return;
+      }
+      this._activeRequests = this._normalizeActiveRequests(this._activeRequests).filter((item) => item.requestId !== requestId);
     }
 
     onMessage(handler) {
@@ -153,6 +190,7 @@
       this._port = null;
       this._helloDone = false;
       this._connecting = null;
+      this._activeRequests = [];
       const waiters = Array.from(this._requestWaiters.values());
       this._requestWaiters.clear();
       waiters.forEach((waiter) => {
@@ -171,6 +209,21 @@
 
     _handlePortMessage(message) {
       const parsed = this._unwrap(message);
+      const type = parsed && parsed.type ? parsed.type : null;
+      const payload = parsed && parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
+      if (type === TYPES.HELLO_ACK) {
+        this._offscreenInstanceId = payload.offscreenInstanceId || this._offscreenInstanceId;
+        this._activeRequests = this._normalizeActiveRequests(payload.activeRequests);
+      } else if (type === TYPES.STREAM_EVENT) {
+        this._upsertActiveRequest({
+          requestId: payload.requestId || null,
+          startedTs: Number.isFinite(Number(payload.startedTs)) ? Number(payload.startedTs) : null,
+          lastEventTs: Date.now(),
+          mode: 'stream'
+        });
+      } else if (type === TYPES.RESULT || type === TYPES.ERROR || type === TYPES.STREAM_DONE) {
+        this._dropActiveRequest(payload.requestId || null);
+      }
       const meta = parsed && parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {};
       const reqId = meta && meta.requestId ? meta.requestId : null;
       if (reqId && this._requestWaiters.has(reqId)) {
@@ -289,9 +342,37 @@
           if (this._helloDone) {
             return true;
           }
-          const ack = await this.request(TYPES.HELLO, helloPayload || {}, { timeoutMs: 2000 });
+          const hello = helloPayload && typeof helloPayload === 'object'
+            ? { ...helloPayload }
+            : {};
+          if (!hello.instanceId) {
+            hello.instanceId = `bg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          }
+          hello.wantActiveRequests = true;
+          const ack = await this.request(TYPES.HELLO, hello, {
+            timeoutMs: 2000,
+            meta: {
+              clientCaps: {
+                bg: {
+                  supportsStream: true,
+                  supportsAbort: true
+                }
+              },
+              toolsetWanted: {
+                toolsetId: 'neuro-translate',
+                minSemver: '1.0.0',
+                toolsetHash: null
+              }
+            }
+          });
           if (ack && ack.type === TYPES.HELLO_ACK) {
             this._helloDone = true;
+            const payload = ack.payload && typeof ack.payload === 'object' ? ack.payload : {};
+            this._offscreenCaps = payload.offscreenCaps && typeof payload.offscreenCaps === 'object'
+              ? { ...payload.offscreenCaps }
+              : this._offscreenCaps;
+            this._offscreenInstanceId = payload.offscreenInstanceId || this._offscreenInstanceId;
+            this._activeRequests = this._normalizeActiveRequests(payload.activeRequests);
             return true;
           }
         } catch (_) {
@@ -299,6 +380,45 @@
         }
       }
       return false;
+    }
+
+    getCapabilities() {
+      return this._offscreenCaps && typeof this._offscreenCaps === 'object'
+        ? { ...this._offscreenCaps }
+        : null;
+    }
+
+    getConnectionState() {
+      return {
+        connected: Boolean(this._port && this._helloDone),
+        offscreenInstanceId: this._offscreenInstanceId || null,
+        activeRequestsCount: Array.isArray(this._activeRequests) ? this._activeRequests.length : 0
+      };
+    }
+
+    getActiveRequests() {
+      return this._normalizeActiveRequests(this._activeRequests);
+    }
+
+    async attach(requestId) {
+      if (!requestId) {
+        return false;
+      }
+      const ready = await this.ensureReady({
+        helloPayload: {
+          clientVersion: 'bg-offscreen-llm-executor',
+          wantActiveRequests: true
+        }
+      }).catch(() => false);
+      if (!ready) {
+        return false;
+      }
+      const sent = await this.send(TYPES.ATTACH, {
+        requestId
+      }, {
+        meta: { requestId }
+      }).catch(() => false);
+      return Boolean(sent);
     }
 
     async ping() {
@@ -316,7 +436,22 @@
           requestIds: Array.isArray(requestIds) ? requestIds.slice(0, 500) : []
         }, { timeoutMs: 4000 });
         if (out && out.type === TYPES.QUERY_STATUS_ACK && out.payload && out.payload.statuses && typeof out.payload.statuses === 'object') {
-          return out.payload.statuses;
+          const statuses = out.payload.statuses;
+          const active = [];
+          Object.keys(statuses).forEach((requestId) => {
+            const row = statuses[requestId];
+            if (!row || row.status !== 'pending') {
+              return;
+            }
+            active.push({
+              requestId,
+              startedTs: Number.isFinite(Number(row.startedTs)) ? Number(row.startedTs) : null,
+              lastEventTs: Number.isFinite(Number(row.lastEventTs)) ? Number(row.lastEventTs) : null,
+              mode: row.mode === 'nonstream' ? 'nonstream' : 'stream'
+            });
+          });
+          this._activeRequests = active;
+          return statuses;
         }
       } catch (_) {
         // best-effort
@@ -333,12 +468,20 @@
       offscreenManager,
       eventFactory,
       eventLogFn,
-      hashFn
+      hashFn,
+      maxConcurrentRequests = 1,
+      maxQueuedRequests = 120,
+      activeTabIdProvider = null
     } = {}) {
       this.chromeApi = chromeApi;
       this.eventFactory = eventFactory || null;
       this.log = typeof eventLogFn === 'function' ? eventLogFn : null;
       this.hashFn = typeof hashFn === 'function' ? hashFn : this._stableHash.bind(this);
+      this.maxConcurrentRequests = Math.max(1, Math.min(2, Number(maxConcurrentRequests) || 1));
+      this.maxQueuedRequests = Number.isFinite(Number(maxQueuedRequests))
+        ? Math.max(20, Math.min(500, Number(maxQueuedRequests)))
+        : 120;
+      this.activeTabIdProvider = typeof activeTabIdProvider === 'function' ? activeTabIdProvider : null;
       this.inflightStore = inflightStore || (NT.InflightRequestStore ? new NT.InflightRequestStore({ chromeApi }) : null);
       this.offscreenManager = offscreenManager || new OffscreenManager({
         chromeApi,
@@ -348,7 +491,120 @@
       });
       this._pending = new Map();
       this._pendingByKey = new Map();
+      this._streamListeners = new Map();
+      this._streamHeartbeatTimers = new Map();
+      this._dispatchQueue = [];
+      this._dispatchInFlight = 0;
+      this._dispatchCursor = 0;
+      this._dispatchDrainActive = false;
+      this._lastDispatchedJobId = null;
       this._unsubscribeManager = this.offscreenManager.onMessage((parsed) => this._handleOffscreenMessage(parsed));
+    }
+
+    async _resolveActiveTabId() {
+      if (!this.activeTabIdProvider) {
+        return null;
+      }
+      try {
+        const out = await this.activeTabIdProvider();
+        return Number.isFinite(Number(out)) ? Number(out) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    _enqueueDispatch(task) {
+      return new Promise((resolve, reject) => {
+        if (this._dispatchQueue.length >= this.maxQueuedRequests) {
+          const error = new Error('Offscreen queue is under technical backpressure');
+          error.code = 'OFFSCREEN_BACKPRESSURE';
+          error.waitMs = Math.max(500, Math.ceil((this._dispatchQueue.length / Math.max(1, this.maxConcurrentRequests)) * 250));
+          reject(error);
+          return;
+        }
+        this._dispatchQueue.push({
+          task: task && typeof task === 'object' ? task : {},
+          resolve,
+          reject,
+          enqueuedAt: Date.now()
+        });
+        this._drainDispatchQueue().catch(() => null);
+      });
+    }
+
+    async _pickDispatchIndex() {
+      if (!this._dispatchQueue.length) {
+        return -1;
+      }
+      const queueLen = this._dispatchQueue.length;
+      if (queueLen === 1) {
+        this._dispatchCursor = 0;
+        return 0;
+      }
+      const activeTabId = await this._resolveActiveTabId();
+      if (Number.isFinite(Number(activeTabId))) {
+        for (let i = 0; i < queueLen; i += 1) {
+          const idx = (this._dispatchCursor + i) % queueLen;
+          const entry = this._dispatchQueue[idx];
+          const tabId = entry && entry.task && Number.isFinite(Number(entry.task.tabId))
+            ? Number(entry.task.tabId)
+            : null;
+          if (tabId !== null && tabId === Number(activeTabId)) {
+            this._dispatchCursor = (idx + 1) % queueLen;
+            return idx;
+          }
+        }
+      }
+      for (let i = 0; i < queueLen; i += 1) {
+        const idx = (this._dispatchCursor + i) % queueLen;
+        const entry = this._dispatchQueue[idx];
+        const jobId = entry && entry.task && entry.task.jobId ? String(entry.task.jobId) : null;
+        if (jobId && this._lastDispatchedJobId && jobId === this._lastDispatchedJobId) {
+          continue;
+        }
+        this._dispatchCursor = (idx + 1) % queueLen;
+        return idx;
+      }
+      const fallbackIdx = this._dispatchCursor % queueLen;
+      this._dispatchCursor = (fallbackIdx + 1) % queueLen;
+      return fallbackIdx;
+    }
+
+    async _drainDispatchQueue() {
+      if (this._dispatchDrainActive) {
+        return;
+      }
+      this._dispatchDrainActive = true;
+      try {
+        while (this._dispatchInFlight < this.maxConcurrentRequests && this._dispatchQueue.length) {
+          const idx = await this._pickDispatchIndex();
+          if (idx < 0 || idx >= this._dispatchQueue.length) {
+            break;
+          }
+          const entry = this._dispatchQueue.splice(idx, 1)[0];
+          if (!entry || !entry.task || typeof entry.task.run !== 'function') {
+            if (entry && typeof entry.reject === 'function') {
+              entry.reject({ code: 'OFFSCREEN_QUEUE_INVALID_TASK', message: 'invalid dispatch task' });
+            }
+            continue;
+          }
+          const jobId = entry.task.jobId ? String(entry.task.jobId) : null;
+          if (jobId) {
+            this._lastDispatchedJobId = jobId;
+          }
+          this._dispatchInFlight += 1;
+          Promise.resolve()
+            .then(() => entry.task.run())
+            .then((result) => entry.resolve(result))
+            .catch((error) => entry.reject(error))
+            .finally(() => {
+              this._dispatchInFlight = Math.max(0, this._dispatchInFlight - 1);
+              this._drainDispatchQueue().catch(() => null);
+            });
+        }
+      } finally {
+        this._dispatchDrainActive = false;
+      }
     }
 
     _stableHash(input) {
@@ -474,7 +730,26 @@
         return;
       }
       const type = parsed.type || null;
-      if (type !== TYPES.RESULT && type !== TYPES.ERROR) {
+      if (type === TYPES.STREAM_EVENT) {
+        const streamPayload = parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
+        const streamRequestId = streamPayload.requestId || null;
+        if (!streamRequestId) {
+          return;
+        }
+        this._touchStreamHeartbeat(streamRequestId, streamPayload.event);
+        const listeners = this._streamListeners.get(streamRequestId);
+        if (listeners && listeners.size) {
+          listeners.forEach((handler) => {
+            try {
+              handler(streamPayload.event);
+            } catch (_) {
+              // best-effort
+            }
+          });
+        }
+        return;
+      }
+      if (type !== TYPES.RESULT && type !== TYPES.ERROR && type !== TYPES.STREAM_DONE) {
         return;
       }
       const payload = parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
@@ -484,14 +759,135 @@
       }
       const waiter = this._pending.get(requestId);
       if (!waiter) {
+        if (type === TYPES.ERROR || type === TYPES.RESULT || type === TYPES.STREAM_DONE) {
+          this._streamListeners.delete(requestId);
+          if (this.inflightStore) {
+            if ((type === TYPES.RESULT || type === TYPES.STREAM_DONE) && typeof this.inflightStore.markDone === 'function') {
+              this.inflightStore.markDone(requestId, {
+                rawJson: payload && payload.json ? payload.json : null,
+                rawResult: payload
+              }).catch(() => null);
+            } else if (type === TYPES.ERROR && typeof this.inflightStore.markFailed === 'function') {
+              this.inflightStore.markFailed(requestId, {
+                error: payload && payload.error
+                  ? payload.error
+                  : { code: 'OFFSCREEN_ERROR', message: 'offscreen error without waiter' }
+              }).catch(() => null);
+            }
+          }
+        }
         return;
       }
       this._clearWaiter(requestId);
+      this._streamListeners.delete(requestId);
       try {
         waiter.resolve(payload);
       } catch (_) {
         // best-effort
       }
+    }
+
+    _addStreamListener(requestId, handler) {
+      if (!requestId || typeof handler !== 'function') {
+        return;
+      }
+      const current = this._streamListeners.get(requestId) || new Set();
+      current.add(handler);
+      this._streamListeners.set(requestId, current);
+    }
+
+    _removeStreamListener(requestId, handler) {
+      if (!requestId || typeof handler !== 'function') {
+        return;
+      }
+      const current = this._streamListeners.get(requestId);
+      if (!current) {
+        return;
+      }
+      current.delete(handler);
+      if (!current.size) {
+        this._streamListeners.delete(requestId);
+      }
+    }
+
+    _touchStreamHeartbeat(requestId, eventPayload) {
+      if (!requestId || !this.inflightStore || typeof this.inflightStore.upsert !== 'function') {
+        return;
+      }
+      if (this._streamHeartbeatTimers.has(requestId)) {
+        return;
+      }
+      const timerId = global.setTimeout(() => {
+        this._streamHeartbeatTimers.delete(requestId);
+        const now = Date.now();
+        let deltaPreview = null;
+        if (eventPayload && eventPayload.type === 'response.output_text.delta' && typeof eventPayload.delta === 'string') {
+          deltaPreview = String(eventPayload.delta).slice(-160);
+        }
+        if (typeof this.inflightStore.touchStreamHeartbeat === 'function') {
+          this.inflightStore.touchStreamHeartbeat(requestId, {
+            preview: deltaPreview,
+            leaseUntilTs: this.inflightStore && typeof this.inflightStore.nextLease === 'function'
+              ? this.inflightStore.nextLease(now)
+              : null
+          }).catch(() => null);
+        } else {
+          this.inflightStore.upsert(requestId, {
+            requestId,
+            status: 'pending',
+            updatedAt: now,
+            lastEventTs: now,
+            streamPreview: deltaPreview,
+            leaseUntilTs: this.inflightStore && typeof this.inflightStore.nextLease === 'function'
+              ? this.inflightStore.nextLease(now)
+              : null
+          }).catch(() => null);
+        }
+      }, 120);
+      this._streamHeartbeatTimers.set(requestId, timerId);
+    }
+
+    async _tryAttachPendingRequest({ requestId, requestKey, timeoutMs }) {
+      if (!requestId) {
+        return null;
+      }
+      const ready = await this.offscreenManager.ensureReady({
+        helloPayload: {
+          clientVersion: 'bg-offscreen-llm-executor',
+          wantActiveRequests: true
+        }
+      }).catch(() => false);
+      if (!ready) {
+        return null;
+      }
+      const statuses = await this.offscreenManager.queryStatus([requestId]).catch(() => ({}));
+      const status = statuses && statuses[requestId] ? statuses[requestId] : null;
+      if (!status) {
+        return null;
+      }
+      if (status.result && status.result.requestId) {
+        if (this.inflightStore && typeof this.inflightStore.markDone === 'function') {
+          await this.inflightStore.markDone(requestId, {
+            rawJson: status.result && status.result.json ? status.result.json : null,
+            rawResult: status.result
+          }).catch(() => null);
+        }
+        return status.result;
+      }
+      if (status.status !== 'pending') {
+        return null;
+      }
+      const waiter = this._createWaiter({
+        requestId,
+        requestKey: requestKey || null,
+        timeoutMs
+      });
+      const attached = await this.offscreenManager.attach(requestId).catch(() => false);
+      if (!attached) {
+        this._clearWaiter(requestId);
+        return null;
+      }
+      return waiter.promise;
     }
 
     async _readDoneFromStore(requestKey, payloadHash) {
@@ -523,11 +919,14 @@
       return null;
     }
 
-    async _writePending({ requestId, requestKey, payloadHash, taskType, attempt, requestMeta, timeoutMs }) {
+    async _writePending({ requestId, requestKey, payloadHash, taskType, attempt, requestMeta, timeoutMs, mode = 'nonstream' }) {
       if (!this.inflightStore || typeof this.inflightStore.upsert !== 'function') {
         return null;
       }
       const now = Date.now();
+      const connection = this.offscreenManager && typeof this.offscreenManager.getConnectionState === 'function'
+        ? this.offscreenManager.getConnectionState()
+        : {};
       return this.inflightStore.upsert({
         requestId,
         requestKey,
@@ -535,10 +934,13 @@
         taskType: taskType || 'unknown',
         attempt: Number.isFinite(Number(attempt)) ? Number(attempt) : 1,
         status: 'pending',
+        stage: requestMeta && requestMeta.stage ? requestMeta.stage : null,
+        mode: mode === 'stream' ? 'stream' : 'nonstream',
         meta: {
           jobId: requestMeta && requestMeta.jobId ? requestMeta.jobId : null,
           blockId: requestMeta && requestMeta.blockId ? requestMeta.blockId : null
         },
+        offscreenInstanceId: connection && connection.offscreenInstanceId ? connection.offscreenInstanceId : null,
         createdAt: now,
         updatedAt: now,
         startedAt: now,
@@ -549,7 +951,7 @@
       });
     }
 
-    async _dispatchOffscreenExecute({ requestId, requestKey, payloadHash, taskType, attempt, requestMeta, openaiRequest, timeoutMs }) {
+    async _dispatchOffscreenExecute({ requestId, requestKey, payloadHash, taskType, attempt, requestMeta, openaiRequest, timeoutMs, mode = 'nonstream' }) {
       const ready = await this.offscreenManager.ensureReady({
         helloPayload: {
           clientVersion: 'bg-offscreen-llm-executor'
@@ -578,6 +980,7 @@
         requestKey,
         taskType: taskType || 'unknown',
         attempt: Number.isFinite(Number(attempt)) ? Number(attempt) : 1,
+        mode: mode === 'stream' ? 'stream' : 'nonstream',
         input: null,
         openai: {
           endpoint: openaiRequest.endpoint || null,
@@ -608,6 +1011,14 @@
           ts: Date.now()
         };
       }
+      if (this.offscreenManager && typeof this.offscreenManager._upsertActiveRequest === 'function') {
+        this.offscreenManager._upsertActiveRequest({
+          requestId,
+          startedTs: Date.now(),
+          lastEventTs: Date.now(),
+          mode: mode === 'stream' ? 'stream' : 'nonstream'
+        });
+      }
       try {
         const out = await waiter.promise;
         return out && typeof out === 'object'
@@ -636,7 +1047,7 @@
       }
     }
 
-    async _executeCore({ requestId, requestKey, payloadHash, taskType, attempt, requestMeta, openaiRequest, timeoutMs, maxAttempts }) {
+    async _executeCore({ requestId, requestKey, payloadHash, taskType, attempt, requestMeta, openaiRequest, timeoutMs, maxAttempts, mode = 'nonstream' }) {
       const existingDone = await this._readDoneFromStore(requestKey, payloadHash);
       if (existingDone) {
         return existingDone;
@@ -651,6 +1062,14 @@
             const waiter = this._waiterFor(usedRequestId);
             if (waiter && waiter.promise) {
               return waiter.promise;
+            }
+            const attachedResult = await this._tryAttachPendingRequest({
+              requestId: usedRequestId,
+              requestKey,
+              timeoutMs
+            });
+            if (attachedResult) {
+              return attachedResult;
             }
           }
           if (byKey.status === 'done' && (!payloadHash || !byKey.payloadHash || byKey.payloadHash === payloadHash)) {
@@ -671,18 +1090,38 @@
           taskType,
           attempt,
           requestMeta,
-          timeoutMs
+          timeoutMs,
+          mode
         });
 
-        const result = await this._dispatchOffscreenExecute({
-          requestId: usedRequestId,
-          requestKey,
-          payloadHash,
-          taskType,
-          attempt,
-          requestMeta,
-          openaiRequest,
-          timeoutMs
+        const result = await this._enqueueDispatch({
+          jobId: requestMeta && requestMeta.jobId ? requestMeta.jobId : null,
+          tabId: requestMeta && Number.isFinite(Number(requestMeta.tabId)) ? Number(requestMeta.tabId) : null,
+          run: async () => {
+            if (this.inflightStore && typeof this.inflightStore.get === 'function') {
+              const row = await this.inflightStore.get(usedRequestId).catch(() => null);
+              if (row && row.status === 'cancelled') {
+                return {
+                  requestId: usedRequestId,
+                  requestKey,
+                  ok: false,
+                  error: { code: 'ABORTED', message: 'request cancelled before dispatch' },
+                  ts: Date.now()
+                };
+              }
+            }
+            return this._dispatchOffscreenExecute({
+              requestId: usedRequestId,
+              requestKey,
+              payloadHash,
+              taskType,
+              attempt,
+              requestMeta,
+              openaiRequest,
+              timeoutMs,
+              mode
+            });
+          }
         });
         lastResult = result;
         const ok = Boolean(result && result.ok);
@@ -749,6 +1188,9 @@
           requestId,
           jobId: payload.meta && payload.meta.jobId ? payload.meta.jobId : requestId,
           blockId: payload.meta && payload.meta.blockId ? payload.meta.blockId : null,
+          tabId: payload.meta && Number.isFinite(Number(payload.meta.tabId))
+            ? Number(payload.meta.tabId)
+            : (Number.isFinite(Number(payload.tabId)) ? Number(payload.tabId) : null),
           attempt: Number.isFinite(Number(payload.attempt)) ? Number(payload.attempt) : 1
         };
         const taskType = payload.taskType || 'unknown';
@@ -768,7 +1210,8 @@
           requestMeta,
           openaiRequest,
           timeoutMs: Number.isFinite(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120000,
-          maxAttempts: Number.isFinite(Number(payload.maxAttempts)) ? Number(payload.maxAttempts) : 2
+          maxAttempts: Number.isFinite(Number(payload.maxAttempts)) ? Number(payload.maxAttempts) : 2,
+          mode: openaiRequest && openaiRequest.body && openaiRequest.body.stream === true ? 'stream' : 'nonstream'
         });
       }
 
@@ -792,13 +1235,64 @@
         payloadHash,
         taskType,
         attempt,
-        requestMeta: { ...requestMeta, requestId, attempt },
+        requestMeta: {
+          ...requestMeta,
+          requestId,
+          attempt,
+          tabId: Number.isFinite(Number(requestMeta.tabId)) ? Number(requestMeta.tabId) : null
+        },
         openaiRequest,
         timeoutMs: Number.isFinite(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120000,
-        maxAttempts: Number.isFinite(Number(args.maxAttempts)) ? Number(args.maxAttempts) : 2
+        maxAttempts: Number.isFinite(Number(args.maxAttempts)) ? Number(args.maxAttempts) : 2,
+        mode: openaiRequest && openaiRequest.body && openaiRequest.body.stream === true ? 'stream' : 'nonstream'
       });
 
       return result;
+    }
+
+    async executeStream(args = {}) {
+      const safeArgs = args && typeof args === 'object' ? { ...args } : {};
+      const requestMeta = safeArgs.requestMeta && typeof safeArgs.requestMeta === 'object'
+        ? { ...safeArgs.requestMeta }
+        : {};
+      const requestId = requestMeta.requestId
+        || safeArgs.requestId
+        || buildRequestId();
+      const onEvent = typeof safeArgs.onEvent === 'function' ? safeArgs.onEvent : null;
+      const isLegacy = Object.prototype.hasOwnProperty.call(safeArgs, 'payload')
+        && Object.prototype.hasOwnProperty.call(safeArgs, 'requestId')
+        && !Object.prototype.hasOwnProperty.call(safeArgs, 'openaiRequest');
+      const listener = onEvent
+        ? (eventPayload) => {
+          try {
+            onEvent(eventPayload);
+          } catch (_) {
+            // best-effort
+          }
+        }
+        : null;
+      if (listener) {
+        this._addStreamListener(requestId, listener);
+      }
+      try {
+        if (isLegacy) {
+          return await this.execute({
+            ...safeArgs,
+            requestId
+          });
+        }
+        return await this.execute({
+          ...safeArgs,
+          requestMeta: {
+            ...requestMeta,
+            requestId
+          }
+        });
+      } finally {
+        if (listener) {
+          this._removeStreamListener(requestId, listener);
+        }
+      }
     }
 
     async cancel(requestId) {
@@ -814,6 +1308,9 @@
       }, {
         meta: { requestId }
       }).catch(() => false);
+      if (this.offscreenManager && typeof this.offscreenManager._dropActiveRequest === 'function') {
+        this.offscreenManager._dropActiveRequest(requestId);
+      }
 
       const waiter = this._waiterFor(requestId);
       if (waiter) {
@@ -913,6 +1410,124 @@
         }
       }
       return { ok: true, adopted };
+    }
+
+    async recoverInflightRequests({ limit = 120 } = {}) {
+      if (!this.inflightStore || typeof this.inflightStore.listPending !== 'function') {
+        return { ok: false, skipped: true };
+      }
+      const ready = await this.offscreenManager.ensureReady({
+        helloPayload: {
+          clientVersion: 'bg-offscreen-recover',
+          wantActiveRequests: true
+        }
+      }).catch(() => false);
+      if (!ready) {
+        return { ok: false, error: { code: 'OFFSCREEN_UNAVAILABLE', message: 'offscreen not ready' } };
+      }
+      const pendingRows = await this.inflightStore.listPending({
+        limit: Math.max(20, Number(limit) || 120)
+      }).catch(() => []);
+      const activeRequests = this.offscreenManager.getActiveRequests();
+      const activeSet = new Set(activeRequests.map((item) => item.requestId).filter(Boolean));
+      const byId = new Map((pendingRows || []).map((row) => [row && row.requestId ? row.requestId : null, row]).filter((pair) => Boolean(pair[0])));
+      const conn = this.offscreenManager.getConnectionState();
+
+      let attached = 0;
+      for (let i = 0; i < activeRequests.length; i += 1) {
+        const active = activeRequests[i];
+        if (!active || !active.requestId) {
+          continue;
+        }
+        const row = byId.get(active.requestId) || null;
+        await this.inflightStore.upsert(active.requestId, {
+          requestId: active.requestId,
+          status: 'pending',
+          updatedAt: Date.now(),
+          startedAt: Number.isFinite(Number(active.startedTs))
+            ? Number(active.startedTs)
+            : (row && Number.isFinite(Number(row.startedAt)) ? Number(row.startedAt) : Date.now()),
+          leaseUntilTs: this.inflightStore && typeof this.inflightStore.nextLease === 'function'
+            ? this.inflightStore.nextLease(Date.now())
+            : null,
+          mode: active.mode === 'nonstream' ? 'nonstream' : 'stream',
+          lastEventTs: Number.isFinite(Number(active.lastEventTs)) ? Number(active.lastEventTs) : null,
+          offscreenInstanceId: conn && conn.offscreenInstanceId ? conn.offscreenInstanceId : null
+        }).catch(() => null);
+        const didAttach = await this.offscreenManager.attach(active.requestId).catch(() => false);
+        if (didAttach) {
+          attached += 1;
+        }
+      }
+
+      const missingIds = [];
+      for (let i = 0; i < pendingRows.length; i += 1) {
+        const row = pendingRows[i];
+        if (!row || !row.requestId) {
+          continue;
+        }
+        if (!activeSet.has(row.requestId)) {
+          missingIds.push(row.requestId);
+        }
+      }
+
+      let adoptedDone = 0;
+      let markedLost = 0;
+      if (missingIds.length) {
+        const statuses = await this.offscreenManager.queryStatus(missingIds).catch(() => ({}));
+        for (let i = 0; i < missingIds.length; i += 1) {
+          const requestId = missingIds[i];
+          const status = statuses && statuses[requestId] ? statuses[requestId] : null;
+          if (status && status.result && this.inflightStore && typeof this.inflightStore.markDone === 'function') {
+            await this.inflightStore.markDone(requestId, {
+              rawJson: status.result && status.result.json ? status.result.json : null,
+              rawResult: status.result
+            }).catch(() => null);
+            adoptedDone += 1;
+            continue;
+          }
+          if (status && status.status === 'pending') {
+            const didAttach = await this.offscreenManager.attach(requestId).catch(() => false);
+            if (didAttach) {
+              attached += 1;
+              continue;
+            }
+          }
+          if (this.inflightStore && typeof this.inflightStore.markFailed === 'function') {
+            await this.inflightStore.markFailed(requestId, {
+              error: {
+                code: 'OFFSCREEN_REQUEST_LOST',
+                message: 'Request missing in offscreen after SW restart'
+              }
+            }).catch(() => null);
+            markedLost += 1;
+          }
+        }
+      }
+
+      return {
+        ok: true,
+        activeInOffscreen: activeRequests.length,
+        attached,
+        adoptedDone,
+        markedLost
+      };
+    }
+
+    getOffscreenState() {
+      return this.offscreenManager && typeof this.offscreenManager.getConnectionState === 'function'
+        ? this.offscreenManager.getConnectionState()
+        : {
+          connected: false,
+          offscreenInstanceId: null,
+          activeRequestsCount: 0
+        };
+    }
+
+    getOffscreenCaps() {
+      return this.offscreenManager && typeof this.offscreenManager.getCapabilities === 'function'
+        ? this.offscreenManager.getCapabilities()
+        : null;
     }
   }
 

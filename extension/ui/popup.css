@@ -42,6 +42,13 @@ body {
   min-width: 0;
 }
 
+.popup__header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
 .popup__title {
   margin: 0;
   font-size: 17px;
@@ -176,6 +183,13 @@ body {
   font-size: 11px;
 }
 
+.popup__label--warning {
+  color: #9a1a1a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .popup__progress {
   width: 100%;
   height: 10px;
@@ -196,6 +210,13 @@ body {
   background: var(--fg);
 }
 
+.popup__multi-jobs {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
 .popup__action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -204,6 +225,25 @@ body {
 
 .popup__action-button--wide {
   grid-column: 1 / -1;
+}
+
+.popup__action-mode {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 6px 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.popup__action-mode-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.popup__select--mode {
+  padding: 6px 8px;
 }
 
 .popup__tabs {
@@ -349,6 +389,12 @@ body {
   gap: 8px;
 }
 
+.popup__field--stack {
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 .popup__field-group {
   display: flex;
   flex-direction: column;
@@ -389,6 +435,11 @@ body {
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.popup__debug--secondary {
+  font-size: 11px;
+  padding: 5px 8px;
 }
 
 .popup__button {
@@ -572,6 +623,18 @@ body {
 .popup__tool-row label {
   font-size: 12px;
   line-height: 1.3;
+}
+
+.popup__buttons-row {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.popup__buttons-row .popup__button {
+  padding: 6px 8px;
+  font-size: 11px;
 }
 
 .popup__impact {

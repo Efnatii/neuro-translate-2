@@ -12,12 +12,15 @@
     HELLO_ACK: 'OFFSCREEN_HELLO_ACK',
     EXECUTE_REQUEST: 'OFFSCREEN_EXECUTE_REQUEST',
     CANCEL_REQUEST: 'OFFSCREEN_CANCEL_REQUEST',
+    STREAM_EVENT: 'OFFSCREEN_STREAM_EVENT',
+    STREAM_DONE: 'OFFSCREEN_STREAM_DONE',
     RESULT: 'OFFSCREEN_RESULT',
     ERROR: 'OFFSCREEN_ERROR',
     PING: 'OFFSCREEN_PING',
     PING_ACK: 'OFFSCREEN_PING_ACK',
     QUERY_STATUS: 'OFFSCREEN_QUERY_STATUS',
     QUERY_STATUS_ACK: 'OFFSCREEN_QUERY_STATUS_ACK',
+    ATTACH: 'OFFSCREEN_ATTACH',
 
     // legacy compatibility
     EXECUTE_LEGACY: 'OFFSCREEN_EXECUTE',
@@ -31,12 +34,14 @@
       this.inflight = new Map();
       this.ports = new Set();
       this.sessionConfig = {};
+      this.offscreenInstanceId = `off-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       this.db = null;
       this.DB_NAME = 'nt_offscreen';
       this.DB_VERSION = 2;
       this.STORE = 'results';
       this.TTL_MS = 24 * 60 * 60 * 1000;
       this.CLEANUP_INTERVAL_MS = 20 * 60 * 1000;
+      this.netProbe = NT.NetProbe ? new NT.NetProbe({ timeoutMs: 10000 }) : null;
     }
 
     async init() {
@@ -62,6 +67,7 @@
         try {
           port.onDisconnect.addListener(() => {
             this.ports.delete(port);
+            this._detachPortFromInflight(port);
           });
         } catch (_) {
           // best-effort
@@ -80,28 +86,30 @@
       if (!global.chrome || !global.chrome.runtime || !global.chrome.runtime.onMessage) {
         return;
       }
-      global.chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-        this._handleIncoming({ message, transport: 'runtime' })
-          .then((out) => {
-            try {
-              sendResponse(out || { ok: true });
-            } catch (_) {
-              // best-effort
-            }
-          })
-          .catch((error) => {
-            try {
-              sendResponse({
-                ok: false,
-                error: {
-                  code: 'OFFSCREEN_HOST_ERROR',
-                  message: error && error.message ? error.message : 'offscreen host failed'
-                }
-              });
-            } catch (_) {
-              // best-effort
+      const respondOk = (sendResponse, out) => {
+        try {
+          sendResponse(out || { ok: true });
+        } catch (_) {
+          // best-effort
+        }
+      };
+      const respondError = (sendResponse, error) => {
+        try {
+          sendResponse({
+            ok: false,
+            error: {
+              code: 'OFFSCREEN_HOST_ERROR',
+              message: error && error.message ? error.message : 'offscreen host failed'
             }
           });
+        } catch (_) {
+          // best-effort
+        }
+      };
+      global.chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        this._handleIncoming({ message, transport: 'runtime' })
+          .then((out) => respondOk(sendResponse, out))
+          .catch((error) => respondError(sendResponse, error));
         return true;
       });
     }
@@ -145,6 +153,82 @@
       }
     }
 
+    _detachPortFromInflight(port) {
+      if (!port) {
+        return;
+      }
+      this.inflight.forEach((entry) => {
+        if (!entry || !entry.listeners || !(entry.listeners instanceof Set)) {
+          return;
+        }
+        entry.listeners.delete(port);
+      });
+    }
+
+    _attachPortToRequest(port, requestId) {
+      if (!port || !requestId) {
+        return false;
+      }
+      const entry = this.inflight.get(requestId);
+      if (!entry) {
+        return false;
+      }
+      if (!(entry.listeners instanceof Set)) {
+        entry.listeners = new Set();
+      }
+      entry.listeners.add(port);
+      entry.hasListener = entry.listeners.size > 0;
+      return true;
+    }
+
+    _activeRequestsSnapshot() {
+      const out = [];
+      this.inflight.forEach((entry, requestId) => {
+        if (!entry) {
+          return;
+        }
+        out.push({
+          requestId,
+          startedTs: Number.isFinite(Number(entry.startedAt)) ? Number(entry.startedAt) : Date.now(),
+          lastEventTs: Number.isFinite(Number(entry.lastEventTs))
+            ? Number(entry.lastEventTs)
+            : (Number.isFinite(Number(entry.startedAt)) ? Number(entry.startedAt) : Date.now()),
+          mode: entry.mode === 'nonstream' ? 'nonstream' : 'stream'
+        });
+      });
+      return out;
+    }
+
+    _emitStreamEvent(requestId, eventPayload) {
+      if (!requestId) {
+        return;
+      }
+      const entry = this.inflight.get(requestId);
+      if (!entry) {
+        return;
+      }
+      entry.lastEventTs = Date.now();
+      if (eventPayload && eventPayload.delta && typeof eventPayload.delta === 'string') {
+        entry.lastPartialText = String(eventPayload.delta).slice(-800);
+      } else if (eventPayload && eventPayload.type === 'response.output_text.delta' && typeof eventPayload.delta === 'string') {
+        entry.lastPartialText = String(eventPayload.delta).slice(-800);
+      }
+      const listeners = entry.listeners instanceof Set ? Array.from(entry.listeners.values()) : [];
+      listeners.forEach((port) => {
+        this._post(port, TYPES.STREAM_EVENT, {
+          requestId,
+          event: eventPayload && typeof eventPayload === 'object'
+            ? eventPayload
+            : null,
+          ts: Date.now()
+        }, {
+          source: 'offscreen',
+          stage: TYPES.STREAM_EVENT,
+          requestId: null
+        });
+      });
+    }
+
     async _handleIncoming({ message, transport, port } = {}) {
       const parsed = this._unwrap(message);
       const type = parsed && typeof parsed.type === 'string' ? parsed.type : null;
@@ -156,15 +240,29 @@
 
       if (type === TYPES.HELLO) {
         this.sessionConfig = this._sanitizeSessionConfig(payload);
+        const offscreenCaps = this._buildOffscreenCaps();
+        const activeRequests = this._activeRequestsSnapshot();
         if (transport === 'port') {
-          this._post(port, TYPES.HELLO_ACK, { ok: true, ts: Date.now() }, {
+          this._post(port, TYPES.HELLO_ACK, {
+            ok: true,
+            ts: Date.now(),
+            offscreenCaps,
+            offscreenInstanceId: this.offscreenInstanceId,
+            activeRequests
+          }, {
             source: 'offscreen',
             stage: TYPES.HELLO_ACK,
             requestId: meta.requestId || null
           });
           return { ok: true, accepted: true };
         }
-        return { ok: true, ts: Date.now() };
+        return {
+          ok: true,
+          ts: Date.now(),
+          offscreenCaps,
+          offscreenInstanceId: this.offscreenInstanceId,
+          activeRequests
+        };
       }
 
       if (type === TYPES.PING) {
@@ -190,6 +288,36 @@
           return { ok: true, accepted: true };
         }
         return { ok: true, statuses: out, ts: Date.now() };
+      }
+
+      if (type === TYPES.ATTACH) {
+        const requestId = payload.requestId || null;
+        const attached = this._attachPortToRequest(port, requestId);
+        if (!attached && requestId) {
+          const cached = await this._getCached(requestId).catch(() => null);
+          if (cached && cached.result && transport === 'port') {
+            this._post(port, TYPES.RESULT, cached.result, {
+              source: 'offscreen',
+              stage: TYPES.RESULT,
+              requestId: null
+            });
+          }
+        }
+        if (transport === 'port') {
+          return {
+            ok: true,
+            accepted: true,
+            requestId,
+            attached,
+            pending: this.inflight.has(requestId)
+          };
+        }
+        return {
+          ok: true,
+          requestId,
+          attached,
+          pending: this.inflight.has(requestId)
+        };
       }
 
       if (type === TYPES.GET_RESULT_LEGACY) {
@@ -247,9 +375,19 @@
         }
 
         if (transport === 'port') {
-          this._execute(normalized)
+          this._execute(normalized, {
+            listenerPort: port
+          })
             .then((result) => {
-              const outType = result && result.ok === false ? TYPES.ERROR : TYPES.RESULT;
+              const isStream = Boolean(
+                normalized
+                && normalized.body
+                && typeof normalized.body === 'object'
+                && normalized.body.stream === true
+              );
+              const outType = result && result.ok === false
+                ? TYPES.ERROR
+                : (isStream ? TYPES.STREAM_DONE : TYPES.RESULT);
               this._post(port, outType, result, {
                 source: 'offscreen',
                 stage: outType,
@@ -291,9 +429,20 @@
       const source = payload && typeof payload === 'object' ? payload : {};
       return {
         clientVersion: typeof source.clientVersion === 'string' ? source.clientVersion : null,
+        instanceId: typeof source.instanceId === 'string' ? source.instanceId : null,
+        wantActiveRequests: source.wantActiveRequests !== false,
         headersPreset: source.headersPreset && typeof source.headersPreset === 'object'
           ? { ...source.headersPreset }
           : {}
+      };
+    }
+
+    _buildOffscreenCaps() {
+      return {
+        supportsStream: true,
+        supportsAbort: true,
+        sseParserVersion: 'v1',
+        maxConcurrentFetch: 6
       };
     }
 
@@ -367,7 +516,7 @@
       return out;
     }
 
-    async _execute(request) {
+    async _execute(request, { listenerPort = null } = {}) {
       const requestId = request && request.requestId ? request.requestId : null;
       if (!requestId) {
         return {
@@ -386,6 +535,9 @@
 
       if (this.inflight.has(requestId)) {
         const current = this.inflight.get(requestId);
+        if (listenerPort) {
+          this._attachPortToRequest(listenerPort, requestId);
+        }
         return current && current.promise ? current.promise : null;
       }
 
@@ -395,10 +547,19 @@
           this.inflight.delete(requestId);
         });
 
+      const listeners = new Set();
+      if (listenerPort) {
+        listeners.add(listenerPort);
+      }
       this.inflight.set(requestId, {
         controller,
         startedAt: Date.now(),
+        lastEventTs: Date.now(),
         requestKey: request.requestKey || null,
+        mode: request && request.body && request.body.stream === true ? 'stream' : 'nonstream',
+        listeners,
+        hasListener: listeners.size > 0,
+        lastPartialText: null,
         meta: request.meta && typeof request.meta === 'object' ? request.meta : {},
         promise
       });
@@ -407,6 +568,7 @@
 
     async _performFetch(request, controller) {
       const startedAt = Date.now();
+      let transportTried = ['fetch'];
       const timeoutId = global.setTimeout(() => {
         try {
           controller.abort('timeout');
@@ -416,46 +578,59 @@
       }, request.timeoutMs || 120000);
 
       try {
-        const response = await global.fetch(request.endpoint, {
-          method: 'POST',
-          headers: request.headers || {},
-          body: JSON.stringify(request.body || {}),
-          signal: controller.signal
-        });
-        const text = await response.text();
-        let json = null;
+        let responsePayload = null;
+        let networkError = null;
+        transportTried = ['fetch'];
         try {
-          json = text ? JSON.parse(text) : null;
-        } catch (_) {
-          json = null;
+          responsePayload = await this._executeViaFetch(request, controller);
+        } catch (error) {
+          networkError = error;
         }
-        const result = {
-          requestId: request.requestId,
-          requestKey: request.requestKey || null,
-          ok: response.ok,
-          json,
-          text: json ? null : text,
-          headers: this._extractResponseHeaders(response),
-          status: response.status,
-          http: { status: response.status },
-          ts: Date.now(),
-          meta: {
-            startedAt,
-            elapsedMs: Date.now() - startedAt,
-            taskType: request.taskType || 'unknown',
-            attempt: Number.isFinite(Number(request.attempt)) ? Number(request.attempt) : 1,
-            jobId: request.meta && request.meta.jobId ? request.meta.jobId : null,
-            blockId: request.meta && request.meta.blockId ? request.meta.blockId : null
+
+        const abortedNow = Boolean(controller && controller.signal && controller.signal.aborted);
+        if (!responsePayload && !abortedNow && this._isFetchTransportFailure(networkError)) {
+          transportTried.push('xhr');
+          try {
+            responsePayload = await this._executeViaXhr(request, controller);
+            networkError = null;
+          } catch (xhrError) {
+            networkError = xhrError || networkError;
           }
-        };
-        await this._putCached(request.requestId, result);
-        return result;
+        }
+
+        if (responsePayload) {
+          const result = {
+            requestId: request.requestId,
+            requestKey: request.requestKey || null,
+            ok: Boolean(responsePayload.ok),
+            json: responsePayload.json,
+            text: responsePayload.json ? null : responsePayload.text,
+            headers: responsePayload.headers && typeof responsePayload.headers === 'object' ? responsePayload.headers : {},
+            status: Number.isFinite(Number(responsePayload.status)) ? Number(responsePayload.status) : 0,
+            http: { status: Number.isFinite(Number(responsePayload.status)) ? Number(responsePayload.status) : 0 },
+            ts: Date.now(),
+            meta: {
+              startedAt,
+              elapsedMs: Date.now() - startedAt,
+              taskType: request.taskType || 'unknown',
+              attempt: Number.isFinite(Number(request.attempt)) ? Number(request.attempt) : 1,
+              jobId: request.meta && request.meta.jobId ? request.meta.jobId : null,
+              blockId: request.meta && request.meta.blockId ? request.meta.blockId : null,
+              transport: responsePayload.transport === 'xhr' ? 'xhr' : 'fetch'
+            }
+          };
+          await this._putCached(request.requestId, result);
+          return result;
+        }
+
+        throw networkError || new Error('Failed to fetch');
       } catch (error) {
         const aborted = Boolean(controller && controller.signal && controller.signal.aborted);
         const reason = aborted ? controller.signal.reason : null;
         const code = aborted
           ? (reason === 'timeout' ? 'TIMEOUT' : 'ABORTED')
           : 'FETCH_FAILED';
+        const baseUrl = this._resolveBaseUrlFromEndpoint(request && request.endpoint ? request.endpoint : null);
         const result = {
           requestId: request.requestId,
           requestKey: request.requestKey || null,
@@ -476,14 +651,431 @@
             taskType: request.taskType || 'unknown',
             attempt: Number.isFinite(Number(request.attempt)) ? Number(request.attempt) : 1,
             jobId: request.meta && request.meta.jobId ? request.meta.jobId : null,
-            blockId: request.meta && request.meta.blockId ? request.meta.blockId : null
+            blockId: request.meta && request.meta.blockId ? request.meta.blockId : null,
+            transport: transportTried[transportTried.length - 1] || 'fetch'
           }
         };
+        if (code === 'FETCH_FAILED') {
+          let endpointHost = null;
+          try {
+            endpointHost = baseUrl ? (new URL(baseUrl)).host : null;
+          } catch (_) {
+            endpointHost = null;
+          }
+          let probe = null;
+          try {
+            probe = await this._runOpenAiProbe({
+              authHeader: request
+                && request.headers
+                && typeof request.headers === 'object'
+                && typeof request.headers.Authorization === 'string'
+                ? request.headers.Authorization
+                : '',
+              baseUrl
+            });
+          } catch (probeError) {
+            probe = {
+              ok: false,
+              steps: [],
+              online: global.navigator && typeof global.navigator.onLine === 'boolean'
+                ? global.navigator.onLine
+                : null,
+              ua: global.navigator && typeof global.navigator.userAgent === 'string'
+                ? global.navigator.userAgent
+                : null,
+              errorMessage: probeError && probeError.message ? String(probeError.message).slice(0, 220) : 'probe failed',
+              name: probeError && probeError.name ? String(probeError.name).slice(0, 80) : 'ProbeError'
+            };
+          }
+          result.error.debug = {
+            transportTried,
+            probe,
+            baseUrl,
+            endpointHost,
+            online: global.navigator && typeof global.navigator.onLine === 'boolean'
+              ? global.navigator.onLine
+              : null
+          };
+        }
         await this._putCached(request.requestId, result);
         return result;
       } finally {
         global.clearTimeout(timeoutId);
       }
+    }
+
+    async _executeViaFetch(request, controller) {
+      const response = await global.fetch(request.endpoint, {
+        method: 'POST',
+        headers: request.headers || {},
+        body: JSON.stringify(request.body || {}),
+        signal: controller && controller.signal ? controller.signal : undefined
+      });
+      const isStream = Boolean(
+        request
+        && request.body
+        && typeof request.body === 'object'
+        && request.body.stream === true
+      );
+      let json = null;
+      let text = null;
+      if (isStream) {
+        const streamed = await this._readSseResponse(response, { requestId: request.requestId });
+        json = streamed && streamed.finalResponse
+          ? streamed.finalResponse
+          : null;
+      } else {
+        text = await response.text();
+        json = this._parseJsonSafe(text);
+      }
+      return {
+        ok: response.ok,
+        status: Number.isFinite(Number(response.status)) ? Number(response.status) : 0,
+        headers: this._extractResponseHeaders(response),
+        json,
+        text: json ? null : (text || null),
+        transport: 'fetch'
+      };
+    }
+
+    _executeViaXhr(request, controller) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const bodyText = JSON.stringify(request.body || {});
+        const timeoutMs = Number.isFinite(Number(request.timeoutMs))
+          ? Math.max(1000, Math.min(Math.round(Number(request.timeoutMs)), 15000))
+          : 15000;
+        let settled = false;
+        let abortListener = null;
+
+        const cleanup = () => {
+          if (controller && controller.signal && abortListener) {
+            try {
+              controller.signal.removeEventListener('abort', abortListener);
+            } catch (_) {
+              // no-op
+            }
+          }
+        };
+        const settleResolve = (value) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          resolve(value);
+        };
+        const settleReject = (error) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          reject(error);
+        };
+
+        try {
+          xhr.open('POST', request.endpoint, true);
+          xhr.timeout = timeoutMs;
+          const headers = request.headers && typeof request.headers === 'object' ? request.headers : {};
+          Object.keys(headers).forEach((key) => {
+            const value = headers[key];
+            if (typeof value === 'string') {
+              try {
+                xhr.setRequestHeader(key, value);
+              } catch (_) {
+                // best-effort
+              }
+            }
+          });
+        } catch (error) {
+          settleReject(error);
+          return;
+        }
+
+        const createNetworkError = (name, message) => {
+          const err = new Error(message || 'Failed to fetch');
+          err.name = name || 'NetworkError';
+          return err;
+        };
+
+        xhr.onload = () => {
+          const isStream = Boolean(
+            request
+            && request.body
+            && typeof request.body === 'object'
+            && request.body.stream === true
+          );
+          const responseText = typeof xhr.responseText === 'string' ? xhr.responseText : '';
+          const headers = this._extractResponseHeadersFromXhr(xhr);
+          let json = null;
+          let text = null;
+          if (isStream) {
+            json = this._extractFinalResponseFromSseText(responseText);
+          } else {
+            json = this._parseJsonSafe(responseText);
+          }
+          if (!json && responseText) {
+            text = responseText;
+          }
+          settleResolve({
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: Number.isFinite(Number(xhr.status)) ? Number(xhr.status) : 0,
+            headers,
+            json,
+            text,
+            transport: 'xhr'
+          });
+        };
+        xhr.onerror = () => settleReject(createNetworkError('NetworkError', 'Failed to fetch'));
+        xhr.ontimeout = () => settleReject(createNetworkError('TimeoutError', 'request timeout'));
+        xhr.onabort = () => settleReject(createNetworkError('AbortError', 'request aborted'));
+
+        if (controller && controller.signal) {
+          if (controller.signal.aborted) {
+            settleReject(createNetworkError('AbortError', 'request aborted'));
+            return;
+          }
+          abortListener = () => {
+            try {
+              xhr.abort();
+            } catch (_) {
+              // best-effort
+            }
+          };
+          controller.signal.addEventListener('abort', abortListener, { once: true });
+        }
+
+        try {
+          xhr.send(bodyText);
+        } catch (error) {
+          settleReject(error);
+        }
+      });
+    }
+
+    _extractResponseHeadersFromXhr(xhr) {
+      if (!xhr || typeof xhr.getAllResponseHeaders !== 'function') {
+        return {};
+      }
+      const raw = xhr.getAllResponseHeaders();
+      const map = {};
+      String(raw || '')
+        .split(/\r?\n/)
+        .forEach((line) => {
+          const idx = line.indexOf(':');
+          if (idx <= 0) {
+            return;
+          }
+          const key = line.slice(0, idx).trim().toLowerCase();
+          const value = line.slice(idx + 1).trim();
+          if (key && value) {
+            map[key] = value;
+          }
+        });
+      const out = {};
+      [
+        'x-request-id',
+        'x-ratelimit-limit-requests',
+        'x-ratelimit-limit-tokens',
+        'x-ratelimit-remaining-requests',
+        'x-ratelimit-remaining-tokens',
+        'x-ratelimit-reset-requests',
+        'x-ratelimit-reset-tokens',
+        'retry-after',
+        'retry-after-ms'
+      ].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+          out[key] = map[key];
+        }
+      });
+      return out;
+    }
+
+    _parseJsonSafe(text) {
+      if (typeof text !== 'string' || !text.trim()) {
+        return null;
+      }
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    _extractFinalResponseFromSseText(sseText) {
+      const source = String(sseText || '').replace(/\r\n/g, '\n');
+      if (!source) {
+        return null;
+      }
+      let finalResponse = null;
+      source.split('\n\n').forEach((chunk) => {
+        const lines = String(chunk || '').split('\n');
+        const dataLines = [];
+        lines.forEach((line) => {
+          const trimmed = String(line || '').trim();
+          if (!trimmed || !trimmed.startsWith('data:')) {
+            return;
+          }
+          dataLines.push(trimmed.slice(5).trim());
+        });
+        if (!dataLines.length) {
+          return;
+        }
+        const payload = dataLines.join('\n');
+        if (!payload || payload === '[DONE]') {
+          return;
+        }
+        let eventPayload = null;
+        try {
+          eventPayload = JSON.parse(payload);
+        } catch (_) {
+          eventPayload = null;
+        }
+        if (!eventPayload) {
+          return;
+        }
+        const maybeFinal = this._extractFinalResponseFromEvent(eventPayload);
+        if (maybeFinal) {
+          finalResponse = maybeFinal;
+        }
+      });
+      return finalResponse;
+    }
+
+    _isFetchTransportFailure(error) {
+      if (!error) {
+        return false;
+      }
+      const name = error && error.name ? String(error.name).toLowerCase() : '';
+      const message = error && error.message ? String(error.message).toLowerCase() : '';
+      if (name === 'typeerror') {
+        return true;
+      }
+      if (message.indexOf('failed to fetch') >= 0) {
+        return true;
+      }
+      if (message.indexOf('networkerror') >= 0) {
+        return true;
+      }
+      return false;
+    }
+
+    _resolveBaseUrlFromEndpoint(endpoint) {
+      const raw = typeof endpoint === 'string' ? endpoint.trim() : '';
+      if (!raw) {
+        return 'https://api.openai.com';
+      }
+      try {
+        const parsed = new URL(raw);
+        return parsed.origin || 'https://api.openai.com';
+      } catch (_) {
+        return 'https://api.openai.com';
+      }
+    }
+
+    async _runOpenAiProbe({ authHeader, baseUrl } = {}) {
+      if (!this.netProbe || typeof this.netProbe.runOpenAi !== 'function') {
+        return {
+          ok: false,
+          steps: [],
+          online: global.navigator && typeof global.navigator.onLine === 'boolean'
+            ? global.navigator.onLine
+            : null,
+          ua: global.navigator && typeof global.navigator.userAgent === 'string'
+            ? global.navigator.userAgent
+            : null
+        };
+      }
+      return this.netProbe.runOpenAi({
+        authHeader: typeof authHeader === 'string' ? authHeader : '',
+        baseUrl
+      });
+    }
+
+    async _readSseResponse(response, { requestId = null } = {}) {
+      if (!response || !response.body || typeof response.body.getReader !== 'function') {
+        return { finalResponse: null };
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let finalResponse = null;
+
+      const emit = (eventPayload) => {
+        if (!requestId) {
+          return;
+        }
+        this._emitStreamEvent(requestId, eventPayload);
+      };
+
+      const processChunk = (chunkText) => {
+        const source = typeof chunkText === 'string' ? chunkText : '';
+        if (!source) {
+          return;
+        }
+        const lines = source.split('\n');
+        const dataLines = [];
+        lines.forEach((line) => {
+          const trimmed = String(line || '').trim();
+          if (!trimmed || !trimmed.startsWith('data:')) {
+            return;
+          }
+          dataLines.push(trimmed.slice(5).trim());
+        });
+        if (!dataLines.length) {
+          return;
+        }
+        const payload = dataLines.join('\n');
+        if (!payload || payload === '[DONE]') {
+          return;
+        }
+        let eventPayload = null;
+        try {
+          eventPayload = JSON.parse(payload);
+        } catch (_) {
+          return;
+        }
+        emit(eventPayload);
+        const finalFromEvent = this._extractFinalResponseFromEvent(eventPayload);
+        if (finalFromEvent) {
+          finalResponse = finalFromEvent;
+        }
+      };
+
+      while (true) {
+        const read = await reader.read();
+        if (!read || read.done) {
+          break;
+        }
+        buffer += decoder.decode(read.value, { stream: true });
+        buffer = buffer.replace(/\r\n/g, '\n');
+        while (buffer.indexOf('\n\n') >= 0) {
+          const idx = buffer.indexOf('\n\n');
+          const chunkText = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          processChunk(chunkText);
+        }
+      }
+      buffer += decoder.decode();
+      buffer = buffer.replace(/\r\n/g, '\n');
+      if (buffer.trim()) {
+        processChunk(buffer);
+      }
+      return { finalResponse };
+    }
+
+    _extractFinalResponseFromEvent(eventPayload) {
+      if (!eventPayload || typeof eventPayload !== 'object') {
+        return null;
+      }
+      if (eventPayload.type !== 'response.completed') {
+        return null;
+      }
+      if (eventPayload.response && typeof eventPayload.response === 'object') {
+        return eventPayload.response;
+      }
+      return eventPayload;
     }
 
     _cancelInflight(requestId, reason) {
@@ -508,7 +1100,14 @@
       for (let i = 0; i < ids.length; i += 1) {
         const requestId = ids[i];
         if (this.inflight.has(requestId)) {
-          statuses[requestId] = { status: 'pending', result: null };
+          const row = this.inflight.get(requestId);
+          statuses[requestId] = {
+            status: 'pending',
+            result: null,
+            startedTs: row && Number.isFinite(Number(row.startedAt)) ? Number(row.startedAt) : null,
+            lastEventTs: row && Number.isFinite(Number(row.lastEventTs)) ? Number(row.lastEventTs) : null,
+            mode: row && row.mode === 'nonstream' ? 'nonstream' : 'stream'
+          };
           continue;
         }
         const cached = await this._getCached(requestId);
