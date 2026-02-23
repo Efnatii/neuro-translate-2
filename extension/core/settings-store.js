@@ -66,7 +66,7 @@
         translationAgentTuning: data.translationAgentTuning && typeof data.translationAgentTuning === 'object'
           ? data.translationAgentTuning
           : {},
-        translationCategoryMode: data.translationCategoryMode || 'all',
+        translationCategoryMode: data.translationCategoryMode || 'auto',
         translationCategoryList: Array.isArray(data.translationCategoryList) ? data.translationCategoryList : [],
         translationPageCacheEnabled: data.translationPageCacheEnabled !== false,
         translationApiCacheEnabled: data.translationApiCacheEnabled !== false,

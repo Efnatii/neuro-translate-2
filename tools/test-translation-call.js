@@ -26,7 +26,17 @@ async function run() {
         output_text: JSON.stringify({
           items: [{ blockId: 'b1', text: 'T:World' }],
           report: { summary: 'ok', quality: 'ok' }
-        })
+        }),
+        __nt: {
+          chosenModelSpec: 'gpt-test',
+          policy: 'speed',
+          reason: 'unit',
+          attempt: 1,
+          taskType: 'translation_batch',
+          requestId: 'req-1',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rate: { remainingRequests: 99, remainingTokens: 12345, limitRequests: 100, limitTokens: 20000 }
+        }
       };
     }
   });
@@ -68,6 +78,11 @@ async function run() {
   assert(translated.report && translated.report.summary === 'ok', 'Report should be preserved');
   assert.strictEqual(translated.report.quality, 'ok', 'Report quality should be normalized');
   assert(Array.isArray(translated.report.notes), 'Report notes should be normalized to array');
+  assert(translated.report.meta && typeof translated.report.meta === 'object', 'Report meta should be populated');
+  assert.strictEqual(translated.report.meta.chosenModelSpec, 'gpt-test', 'Report meta should expose chosen model');
+  assert.strictEqual(translated.report.meta.usage.totalTokens, 15, 'Report meta should expose usage');
+  assert.strictEqual(translated.report.meta.rate.remainingTokens, 12345, 'Report meta should expose rate snapshot');
+  assert.notStrictEqual(translated.report.meta.cached, true, 'Fresh response must not be flagged as cached');
 
   const translatedCached = await call.translateBatch([
     { blockId: 'b0', originalText: 'Hello', category: 'paragraph', pathHint: 'p' },
@@ -90,6 +105,7 @@ async function run() {
   });
   assert.strictEqual(captured.length, 1, 'Second identical call should be served from translation-call cache');
   assert.strictEqual(translatedCached.items[1].text, 'T:World', 'Cached result should preserve translated text');
+  assert(translatedCached.report && translatedCached.report.meta && translatedCached.report.meta.cached === true, 'Cached response should be flagged in report meta');
 
   await call.translateBatch([
     { blockId: 'b0', originalText: 'Hello', category: 'paragraph', pathHint: 'p' },

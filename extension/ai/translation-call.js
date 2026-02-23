@@ -94,7 +94,8 @@
       const report = this._normalizeReport(parsedPayload.report, {
         items,
         blocks,
-        reportFormat: agentContext && agentContext.reportFormat ? agentContext.reportFormat : null
+        reportFormat: agentContext && agentContext.reportFormat ? agentContext.reportFormat : null,
+        ntMeta: rawJson && rawJson.__nt && typeof rawJson.__nt === 'object' ? rawJson.__nt : null
       });
       const responsePayload = {
         items,
@@ -251,7 +252,7 @@
         .filter(Boolean);
     }
 
-    _normalizeReport(rawReport, { items, blocks, reportFormat } = {}) {
+    _normalizeReport(rawReport, { items, blocks, reportFormat, ntMeta } = {}) {
       const parsed = rawReport && typeof rawReport === 'object' ? rawReport : {};
       const translatedCount = Array.isArray(items) ? items.length : 0;
       const sourceCount = Array.isArray(blocks) ? blocks.length : translatedCount;
@@ -276,12 +277,91 @@
       const normalized = {
         summary,
         quality,
-        notes
+        notes,
+        meta: this._normalizeReportMeta(ntMeta)
       };
       if (reportFormat && typeof reportFormat === 'object') {
         normalized.format = reportFormat;
       }
       return normalized;
+    }
+
+    _normalizeReportMeta(ntMeta) {
+      const raw = ntMeta && typeof ntMeta === 'object' ? ntMeta : {};
+      const meta = { cached: false };
+      if (typeof raw.chosenModelSpec === 'string' && raw.chosenModelSpec) {
+        meta.chosenModelSpec = raw.chosenModelSpec;
+      }
+      if (typeof raw.policy === 'string' && raw.policy) {
+        meta.policy = raw.policy;
+      }
+      if (typeof raw.reason === 'string' && raw.reason) {
+        meta.reason = raw.reason;
+      }
+      if (typeof raw.requestId === 'string' && raw.requestId) {
+        meta.requestId = raw.requestId;
+      }
+      if (typeof raw.taskType === 'string' && raw.taskType) {
+        meta.taskType = raw.taskType;
+      }
+      if (Number.isFinite(Number(raw.attempt))) {
+        meta.attempt = Number(raw.attempt);
+      }
+      const usage = this._normalizeUsageMeta(raw.usage);
+      if (usage) {
+        meta.usage = usage;
+      }
+      const rate = this._normalizeRateMeta(raw.rate);
+      if (rate) {
+        meta.rate = rate;
+      }
+      return meta;
+    }
+
+    _normalizeUsageMeta(rawUsage) {
+      if (!rawUsage || typeof rawUsage !== 'object') {
+        return null;
+      }
+      const pickNumber = (...keys) => {
+        for (let i = 0; i < keys.length; i += 1) {
+          const value = rawUsage[keys[i]];
+          if (Number.isFinite(Number(value))) {
+            return Number(value);
+          }
+        }
+        return null;
+      };
+      const inputTokens = pickNumber('inputTokens', 'input_tokens', 'prompt_tokens');
+      const outputTokens = pickNumber('outputTokens', 'output_tokens', 'completion_tokens');
+      let totalTokens = pickNumber('totalTokens', 'total_tokens');
+      if (totalTokens === null && (inputTokens !== null || outputTokens !== null)) {
+        totalTokens = Number(inputTokens || 0) + Number(outputTokens || 0);
+      }
+      if (inputTokens === null && outputTokens === null && totalTokens === null) {
+        return null;
+      }
+      return {
+        inputTokens,
+        outputTokens,
+        totalTokens
+      };
+    }
+
+    _normalizeRateMeta(rawRate) {
+      if (!rawRate || typeof rawRate !== 'object') {
+        return null;
+      }
+      return {
+        remainingRequests: rawRate.remainingRequests === undefined ? null : rawRate.remainingRequests,
+        remainingTokens: rawRate.remainingTokens === undefined ? null : rawRate.remainingTokens,
+        limitRequests: rawRate.limitRequests === undefined ? null : rawRate.limitRequests,
+        limitTokens: rawRate.limitTokens === undefined ? null : rawRate.limitTokens,
+        resetRequestsAt: rawRate.resetRequestsAt || null,
+        resetTokensAt: rawRate.resetTokensAt || null,
+        reservedRequests: rawRate.reservedRequests === undefined ? null : rawRate.reservedRequests,
+        reservedTokens: rawRate.reservedTokens === undefined ? null : rawRate.reservedTokens,
+        cooldownUntilTs: rawRate.cooldownUntilTs || null
+      };
     }
 
     _normalizeQuality(rawQuality, { missing } = {}) {
@@ -342,7 +422,20 @@
         return null;
       }
       entry.lastAccessAt = now;
-      return this._cloneCacheValue(entry.value);
+      const cached = this._cloneCacheValue(entry.value);
+      if (cached && cached.report && typeof cached.report === 'object') {
+        const reportMeta = cached.report.meta && typeof cached.report.meta === 'object'
+          ? cached.report.meta
+          : {};
+        cached.report = {
+          ...cached.report,
+          meta: {
+            ...reportMeta,
+            cached: true
+          }
+        };
+      }
+      return cached;
     }
 
     _setCached(key, value) {
@@ -401,7 +494,18 @@
         report: value.report && typeof value.report === 'object'
           ? {
             ...value.report,
-            notes: Array.isArray(value.report.notes) ? value.report.notes.slice() : []
+            notes: Array.isArray(value.report.notes) ? value.report.notes.slice() : [],
+            meta: value.report.meta && typeof value.report.meta === 'object'
+              ? {
+                ...value.report.meta,
+                usage: value.report.meta.usage && typeof value.report.meta.usage === 'object'
+                  ? { ...value.report.meta.usage }
+                  : value.report.meta.usage,
+                rate: value.report.meta.rate && typeof value.report.meta.rate === 'object'
+                  ? { ...value.report.meta.rate }
+                  : value.report.meta.rate
+              }
+              : value.report.meta
           }
           : null
       };

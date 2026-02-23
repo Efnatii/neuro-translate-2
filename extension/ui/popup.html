@@ -213,23 +213,11 @@
             </summary>
 
             <details class="popup__details popup__details--nested" data-section="agent-runtime-settings" open>
-              <summary title="Базовые переключатели запуска пайплайна и преднастройка категорий">Режим запуска и категории</summary>
+              <summary title="Базовые переключатели запуска пайплайна">Режим запуска</summary>
               <label class="popup__label popup__checkbox-row" title="Глобальный переключатель пайплайна перевода. При выключении запуск блокируется">
                 <input type="checkbox" data-field="pipeline-enabled">
                 <span>Пайплайн перевода включён</span>
               </label>
-              <div class="popup__tool-row">
-                <label for="agent-category-mode" title="Базовая стратегия категорий для первого планирования агента">Стратегия категорий</label>
-                <select id="agent-category-mode" data-field="agent-category-mode" title="Определяет, какие категории агент выбирает по умолчанию">
-                  <option value="all">Все категории</option>
-                  <option value="content">Только контент</option>
-                  <option value="interface">Только интерфейс</option>
-                  <option value="meta">Только мета</option>
-                  <option value="custom">Кастомный список</option>
-                </select>
-              </div>
-              <div class="popup__label popup__label--muted" data-field="agent-category-mode-hint">—</div>
-              <div class="popup__categories popup__categories--settings" data-section="agent-category-defaults"></div>
             </details>
 
             <details class="popup__details popup__details--nested" data-section="agent-thinking" open>

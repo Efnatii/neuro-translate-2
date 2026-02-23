@@ -21,6 +21,8 @@ const TranslationProtocol = global.NT.TranslationProtocol;
 assert(UiProtocol, 'UiProtocol must be defined');
 assert(TranslationProtocol, 'TranslationProtocol must be defined');
 assert(UiProtocol.Commands, 'UiProtocol.Commands must be defined');
+assert.strictEqual(typeof TranslationProtocol.wrap, 'function', 'TranslationProtocol.wrap must be a function');
+assert.strictEqual(typeof TranslationProtocol.unwrap, 'function', 'TranslationProtocol.unwrap must be a function');
 
 [
   'START_TRANSLATION',

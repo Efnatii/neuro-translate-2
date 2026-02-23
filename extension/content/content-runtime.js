@@ -9,8 +9,12 @@
 
   const NT = global.NT || (global.NT = {});
   const protocol = NT.TranslationProtocol || {};
+  const MessageEnvelope = NT.MessageEnvelope || null;
   const indexer = new NT.DomIndexer({ doc: global.document });
   const applier = new NT.DomApplier();
+  const contentSessionId = (MessageEnvelope && typeof MessageEnvelope.newId === 'function')
+    ? MessageEnvelope.newId()
+    : `cs-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   let activeJobId = null;
 
@@ -34,15 +38,47 @@
     }
   }
 
+  function wrapOutgoing(type, payload, meta) {
+    if (typeof protocol.wrap === 'function') {
+      try {
+        return protocol.wrap(type, payload, meta);
+      } catch (_) {
+        // best-effort fallback below
+      }
+    }
+    const safePayload = payload && typeof payload === 'object' ? payload : {};
+    return { type, ...safePayload };
+  }
+
+  function unwrapIncoming(message) {
+    if (typeof protocol.unwrap === 'function') {
+      try {
+        return protocol.unwrap(message);
+      } catch (_) {
+        // best-effort fallback below
+      }
+    }
+    return {
+      type: message && message.type ? message.type : null,
+      payload: message && typeof message === 'object' ? message : {},
+      meta: {},
+      envelopeId: null
+    };
+  }
+
   function onStartJob(message, sendResponse) {
     activeJobId = message.jobId || null;
     const snapshot = indexer.scan();
     applier.setBlocks(activeJobId, snapshot.blocks, snapshot.blockNodes);
-    sendToBackground({
-      type: protocol.CS_SCAN_RESULT,
+    sendToBackground(wrapOutgoing(protocol.CS_SCAN_RESULT, {
       jobId: activeJobId,
-      blocks: snapshot.blocks
-    }, () => {});
+      blocks: snapshot.blocks,
+      contentSessionId
+    }, {
+      source: 'content',
+      stage: 'scan_result',
+      requestId: activeJobId || null
+    }), () => {});
     sendResponse({ ok: true, blocks: snapshot.blocks.length });
   }
 
@@ -52,13 +88,17 @@
       return;
     }
     const result = applier.applyBatch({ jobId: message.jobId, items: message.items || [] });
-    sendToBackground({
-      type: protocol.CS_APPLY_ACK,
+    sendToBackground(wrapOutgoing(protocol.CS_APPLY_ACK, {
       jobId: message.jobId,
       batchId: message.batchId || null,
       appliedCount: result.appliedCount,
-      ok: true
-    }, () => {});
+      ok: true,
+      contentSessionId
+    }, {
+      source: 'content',
+      stage: 'apply_ack',
+      requestId: message.batchId || null
+    }), () => {});
     sendResponse({ ok: true, appliedCount: result.appliedCount });
   }
 
@@ -84,33 +124,45 @@
 
   if (global.chrome && global.chrome.runtime && global.chrome.runtime.onMessage) {
     global.chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (!message || !message.type) {
+      const parsed = unwrapIncoming(message);
+      const type = parsed && typeof parsed.type === 'string' ? parsed.type : null;
+      const msg = parsed && parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
+      if (!type) {
         return false;
       }
-      if (message.type === protocol.BG_START_JOB) {
-        onStartJob(message, sendResponse);
+      if (msg && msg.contentSessionId && msg.contentSessionId !== contentSessionId) {
+        sendResponse({ ok: true, ignored: true });
         return true;
       }
-      if (message.type === protocol.BG_APPLY_BATCH) {
-        onApplyBatch(message, sendResponse);
+      if (type === protocol.BG_START_JOB) {
+        onStartJob(msg, sendResponse);
         return true;
       }
-      if (message.type === protocol.BG_CANCEL_JOB) {
-        onCancelJob(message, sendResponse);
+      if (type === protocol.BG_APPLY_BATCH) {
+        onApplyBatch(msg, sendResponse);
         return true;
       }
-      if (message.type === protocol.BG_SET_VISIBILITY) {
-        onSetVisibility(message, sendResponse);
+      if (type === protocol.BG_CANCEL_JOB) {
+        onCancelJob(msg, sendResponse);
         return true;
       }
-      if (message.type === protocol.BG_RESTORE_ORIGINALS) {
-        onRestoreOriginals(message, sendResponse);
+      if (type === protocol.BG_SET_VISIBILITY) {
+        onSetVisibility(msg, sendResponse);
+        return true;
+      }
+      if (type === protocol.BG_RESTORE_ORIGINALS) {
+        onRestoreOriginals(msg, sendResponse);
         return true;
       }
       return false;
     });
   }
 
-  sendToBackground({ type: protocol.CS_READY }, () => {});
+  sendToBackground(wrapOutgoing(protocol.CS_READY, {
+    contentSessionId,
+    url: global.location && global.location.href ? global.location.href : ''
+  }, {
+    source: 'content',
+    stage: 'cs_ready'
+  }), () => {});
 })(globalThis);
-

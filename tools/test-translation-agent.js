@@ -179,6 +179,22 @@ async function run() {
   assert.strictEqual(preview.effectiveProfile.maxBatchSize, 104, 'Preview helper should apply large max batch override without upper clamp');
   assert.strictEqual(preview.runtimeTuning.compressionThreshold, 33, 'Preview helper should apply compression-threshold override');
   assert.strictEqual(preview.runtimeTuning.mandatoryAuditIntervalMs, 8000, 'Preview helper should keep mandatory audit interval uncapped');
+  assert(preview.resolved && typeof preview.resolved === 'object', 'Preview helper should expose resolved object');
+  assert(preview.resolved.toolConfigRequested && typeof preview.resolved.toolConfigRequested === 'object', 'Preview helper should expose requested tool config');
+  assert(preview.resolved.toolConfigEffective && typeof preview.resolved.toolConfigEffective === 'object', 'Preview helper should expose effective tool config');
+  assert(preview.resolved.modelPolicy && typeof preview.resolved.modelPolicy === 'object', 'Preview helper should expose model policy');
+  assert(typeof preview.resolved.modelPolicy.mode === 'string', 'Preview model policy should contain mode');
+  assert.strictEqual(typeof preview.resolved.pageCacheEnabled, 'boolean', 'Preview should expose page-cache toggle');
+  assert.strictEqual(preview.pageStats, null, 'Preview without blocks should keep pageStats null');
+
+  const previewWithBlocks = Agent.previewResolvedSettings({
+    settings: {
+      translationAgentProfile: 'balanced'
+    },
+    blocks
+  });
+  assert(previewWithBlocks.pageStats && previewWithBlocks.pageStats.blockCount === blocks.length, 'Preview with blocks should derive page stats');
+  assert(previewWithBlocks.categoryStats && previewWithBlocks.categoryStats.heading, 'Preview with blocks should derive category stats');
 
   const categoryOffPrepared = await agent.prepareJob({
     job: { id: 'job-2', tabId: 12, targetLang: 'ru' },

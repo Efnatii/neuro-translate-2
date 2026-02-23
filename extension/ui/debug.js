@@ -12,6 +12,51 @@
  * (`modelLimitsBySpec`) to explain cooldown/reservation waits in real time.
  */
 (function initDebugPage(global) {
+  class DetailsStateManager {
+    constructor({ doc, storageKeyPrefix }) {
+      this.doc = doc;
+      this.storageKeyPrefix = typeof storageKeyPrefix === 'string' && storageKeyPrefix
+        ? storageKeyPrefix
+        : 'nt.ui.details';
+    }
+
+    init() {
+      if (!this.doc || typeof this.doc.querySelectorAll !== 'function') {
+        return;
+      }
+      const detailsList = Array.from(this.doc.querySelectorAll('details[data-section]'));
+      detailsList.forEach((details) => {
+        if (!details) {
+          return;
+        }
+        const sectionId = details.getAttribute('data-section');
+        if (!sectionId) {
+          return;
+        }
+        const key = `${this.storageKeyPrefix}.${sectionId}`;
+        try {
+          const saved = global.localStorage ? global.localStorage.getItem(key) : null;
+          if (saved === '0') {
+            details.open = false;
+          } else if (saved === '1') {
+            details.open = true;
+          }
+        } catch (_) {
+          // best-effort only
+        }
+        details.addEventListener('toggle', () => {
+          try {
+            if (global.localStorage) {
+              global.localStorage.setItem(key, details.open ? '1' : '0');
+            }
+          } catch (_) {
+            // best-effort only
+          }
+        });
+      });
+    }
+  }
+
   class DebugPage {
     constructor({ doc, ui }) {
       this.doc = doc;
@@ -43,6 +88,7 @@
     init() {
       this.cacheElements();
       this.bindEventControls();
+      new DetailsStateManager({ doc: this.doc, storageKeyPrefix: 'nt.ui.debug.details' }).init();
       this.state = { ...this.state, ...this.readQuery() };
       this.render();
     }
@@ -447,7 +493,13 @@
         const type = item && item.type ? item.type : 'заметка';
         const title = item && item.title ? item.title : 'отчёт';
         const body = item && item.body ? item.body : '';
-        return `${ts} | ${type} | ${title}${body ? ` | ${body}` : ''}`;
+        const meta = item && item.meta && typeof item.meta === 'object' ? item.meta : null;
+        const usage = meta && meta.usage && typeof meta.usage === 'object' ? meta.usage : null;
+        const rate = meta && meta.rate && typeof meta.rate === 'object' ? meta.rate : null;
+        const compactMeta = meta
+          ? ` | model=${meta.chosenModelSpec || '—'} | tok=${usage && usage.totalTokens !== undefined && usage.totalTokens !== null ? usage.totalTokens : '—'} | rpm=${rate && rate.remainingRequests !== undefined && rate.remainingRequests !== null ? rate.remainingRequests : '—'} | tpm=${rate && rate.remainingTokens !== undefined && rate.remainingTokens !== null ? rate.remainingTokens : '—'}${meta.cached ? ' | cached' : ''}`
+          : '';
+        return `${ts} | ${type} | ${title}${body ? ` | ${body}` : ''}${compactMeta}`;
       });
     }
 

@@ -38,6 +38,7 @@ importScripts(
   './translation-page-cache-store.js',
   './inflight-request-store.js',
   './translation-orchestrator.js',
+  './offscreen-llm-executor.js',
   './offscreen-executor.js',
   '../ai/capability-rank.js',
   '../ai/ai-common.js',

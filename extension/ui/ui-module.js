@@ -50,7 +50,7 @@
           translationAgentProfile: 'auto',
           translationAgentTools: {},
           translationAgentTuning: {},
-          translationCategoryMode: 'all',
+          translationCategoryMode: 'auto',
           translationCategoryList: [],
           translationPageCacheEnabled: true,
           translationApiCacheEnabled: true,

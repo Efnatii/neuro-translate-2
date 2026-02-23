@@ -36,6 +36,8 @@
     ANTI_REPEAT_GUARD: 'antiRepeatGuard',
     CONTEXT_COMPRESSOR: 'contextCompressor',
     REPORT_WRITER: 'reportWriter',
+    PAGE_RUNTIME: 'pageRuntime',
+    CACHE_MANAGER: 'cacheManager',
     WORKFLOW_CONTROLLER: 'workflowController'
   });
 
@@ -49,6 +51,8 @@
     [TOOL_KEYS.ANTI_REPEAT_GUARD]: 'on',
     [TOOL_KEYS.CONTEXT_COMPRESSOR]: 'auto',
     [TOOL_KEYS.REPORT_WRITER]: 'on',
+    [TOOL_KEYS.PAGE_RUNTIME]: 'on',
+    [TOOL_KEYS.CACHE_MANAGER]: 'auto',
     [TOOL_KEYS.WORKFLOW_CONTROLLER]: 'on'
   });
 
@@ -122,6 +126,202 @@
       this.MANDATORY_AUDIT_INTERVAL_MS = 1000;
       this.COMPRESS_COOLDOWN_MS = 1200;
       this.CONTEXT_FOOTPRINT_LIMIT = 9000;
+    }
+
+    static previewResolvedSettings({ settings, pageStats, blocks } = {}) {
+      const runtimeFallback = {
+        auditIntervalMs: DEFAULT_AGENT_TUNING.auditIntervalMs,
+        mandatoryAuditIntervalMs: DEFAULT_AGENT_TUNING.mandatoryAuditIntervalMs,
+        compressionThreshold: DEFAULT_AGENT_TUNING.compressionThreshold,
+        contextFootprintLimit: DEFAULT_AGENT_TUNING.contextFootprintLimit,
+        compressionCooldownMs: DEFAULT_AGENT_TUNING.compressionCooldownMs
+      };
+      const modelPolicyFallback = {
+        mode: 'auto',
+        speed: true,
+        preference: null,
+        allowRouteOverride: true
+      };
+      const toolStatsFallback = {
+        blockCount: 0,
+        totalChars: 0,
+        avgChars: 0,
+        codeRatio: 0,
+        headingRatio: 0
+      };
+
+      const normalizeFiniteNumber = (value, fallback, min = null) => {
+        if (!Number.isFinite(Number(value))) {
+          return fallback;
+        }
+        const numeric = Number(value);
+        if (Number.isFinite(Number(min))) {
+          return Math.max(Number(min), numeric);
+        }
+        return numeric;
+      };
+      const normalizePageStats = (stats) => {
+        if (!stats || typeof stats !== 'object') {
+          return null;
+        }
+        const blockCount = normalizeFiniteNumber(stats.blockCount, 0, 0);
+        const totalChars = normalizeFiniteNumber(stats.totalChars, 0, 0);
+        const safeBlockCount = Math.max(1, blockCount);
+        return {
+          blockCount,
+          totalChars,
+          avgChars: normalizeFiniteNumber(stats.avgChars, totalChars / safeBlockCount, 0),
+          codeRatio: normalizeFiniteNumber(stats.codeRatio, 0, 0),
+          headingRatio: normalizeFiniteNumber(stats.headingRatio, 0, 0)
+        };
+      };
+      const cloneCategoryStats = (stats) => {
+        if (!stats || typeof stats !== 'object') {
+          return null;
+        }
+        const out = {};
+        Object.keys(stats).forEach((key) => {
+          const entry = stats[key] && typeof stats[key] === 'object' ? stats[key] : {};
+          out[key] = {
+            count: normalizeFiniteNumber(entry.count, 0, 0),
+            chars: normalizeFiniteNumber(entry.chars, 0, 0)
+          };
+        });
+        return out;
+      };
+      const cloneReuseStats = (stats) => {
+        if (!stats || typeof stats !== 'object') {
+          return null;
+        }
+        return {
+          duplicatedBlocks: normalizeFiniteNumber(stats.duplicatedBlocks, 0, 0),
+          duplicateRatio: normalizeFiniteNumber(stats.duplicateRatio, 0, 0)
+        };
+      };
+      const buildFallbackToolResolution = () => {
+        const toolConfigEffective = {};
+        const toolAutoDecisions = [];
+        Object.keys(DEFAULT_TOOL_CONFIG).forEach((tool) => {
+          const requestedMode = DEFAULT_TOOL_CONFIG[tool];
+          const effectiveMode = requestedMode === 'on' || requestedMode === 'off' ? requestedMode : 'on';
+          toolConfigEffective[tool] = effectiveMode;
+          toolAutoDecisions.push({
+            tool,
+            source: requestedMode === 'auto' ? 'auto' : 'explicit',
+            requestedMode,
+            effectiveMode,
+            reason: requestedMode === 'auto'
+              ? 'Автополитика (резервный режим)'
+              : (requestedMode === 'on' ? 'Настроено пользователем/профилем: ВКЛ' : 'Настроено пользователем/профилем: ВЫКЛ')
+          });
+        });
+        return {
+          toolConfigEffective,
+          toolAutoDecisions
+        };
+      };
+      const fallbackToolResolution = buildFallbackToolResolution();
+      const fallbackResult = {
+        profile: 'auto',
+        baseProfile: { ...PROFILE_PRESETS.auto },
+        effectiveProfile: { ...PROFILE_PRESETS.auto },
+        tuning: { ...DEFAULT_AGENT_TUNING },
+        runtimeTuning: { ...runtimeFallback },
+        resolved: {
+          profile: 'auto',
+          tuning: { ...DEFAULT_AGENT_TUNING },
+          modelPolicy: { ...modelPolicyFallback },
+          toolConfigRequested: { ...DEFAULT_TOOL_CONFIG },
+          toolConfigEffective: { ...fallbackToolResolution.toolConfigEffective },
+          toolAutoDecisions: fallbackToolResolution.toolAutoDecisions.slice(),
+          categoryMode: 'auto',
+          categoryList: [],
+          pageCacheEnabled: true
+        },
+        pageStats: null,
+        categoryStats: null,
+        reuseStats: null
+      };
+
+      try {
+        const probe = new TranslationAgent({ runLlmRequest: null });
+        const safeSettings = settings && typeof settings === 'object' ? settings : {};
+        const inputBlocks = Array.isArray(blocks)
+          ? blocks.filter((item) => item && typeof item === 'object')
+          : null;
+
+        let computedCategoryStats = null;
+        let computedPageStats = null;
+        let computedReuseStats = null;
+        if (inputBlocks) {
+          computedCategoryStats = probe._collectCategoryStats(inputBlocks);
+          computedPageStats = probe._collectPageStats(inputBlocks, computedCategoryStats);
+          computedReuseStats = probe._collectReuseStats(inputBlocks);
+        } else {
+          computedPageStats = normalizePageStats(pageStats);
+        }
+
+        const resolved = probe.resolveSettings(safeSettings, computedPageStats || null);
+        const baseProfileRaw = probe._resolveProfilePreset(resolved.profile, computedPageStats || null);
+        const baseProfile = baseProfileRaw && typeof baseProfileRaw === 'object'
+          ? { ...baseProfileRaw }
+          : { ...PROFILE_PRESETS.auto };
+        const effectiveProfile = resolved.resolvedProfile && typeof resolved.resolvedProfile === 'object'
+          ? { ...resolved.resolvedProfile }
+          : { ...baseProfile };
+        const tuning = resolved.tuning && typeof resolved.tuning === 'object'
+          ? { ...resolved.tuning }
+          : { ...DEFAULT_AGENT_TUNING };
+        const runtimeTuning = probe._resolveRuntimeTuning(tuning);
+
+        const effectiveToolResolution = probe._resolveEffectiveToolConfig({
+          requestedToolConfig: resolved.toolConfig,
+          resolvedProfile: resolved.resolvedProfile,
+          pageStats: computedPageStats || toolStatsFallback,
+          categoryStats: computedCategoryStats || {},
+          reuseStats: computedReuseStats || {},
+          blockCount: inputBlocks ? inputBlocks.length : 0
+        });
+        const toolConfigEffective = effectiveToolResolution && effectiveToolResolution.toolConfig && typeof effectiveToolResolution.toolConfig === 'object'
+          ? { ...effectiveToolResolution.toolConfig }
+          : {};
+        const toolAutoDecisions = Array.isArray(effectiveToolResolution && effectiveToolResolution.decisions)
+          ? effectiveToolResolution.decisions.slice()
+          : [];
+        const modelPolicy = resolved.modelPolicy && typeof resolved.modelPolicy === 'object'
+          ? { ...resolved.modelPolicy }
+          : { ...modelPolicyFallback };
+        const toolConfigRequested = resolved.toolConfig && typeof resolved.toolConfig === 'object'
+          ? { ...resolved.toolConfig }
+          : { ...DEFAULT_TOOL_CONFIG };
+        const normalizedRuntime = runtimeTuning && typeof runtimeTuning === 'object'
+          ? { ...runtimeTuning }
+          : { ...runtimeFallback };
+
+        return {
+          profile: resolved.profile || 'auto',
+          baseProfile,
+          effectiveProfile,
+          tuning,
+          runtimeTuning: normalizedRuntime,
+          resolved: {
+            profile: resolved.profile || 'auto',
+            tuning: { ...tuning },
+            modelPolicy,
+            toolConfigRequested,
+            toolConfigEffective,
+            toolAutoDecisions,
+            categoryMode: resolved.categoryMode || 'auto',
+            categoryList: Array.isArray(resolved.categoryList) ? resolved.categoryList.slice() : [],
+            pageCacheEnabled: resolved.pageCacheEnabled !== false
+          },
+          pageStats: computedPageStats ? { ...computedPageStats } : null,
+          categoryStats: cloneCategoryStats(computedCategoryStats),
+          reuseStats: cloneReuseStats(computedReuseStats)
+        };
+      } catch (_) {
+        return fallbackResult;
+      }
     }
 
     resolveSettings(settings, pageStats) {
@@ -200,13 +400,13 @@
         agentState: planningToolState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         message: 'update_checklist_analyze_page',
-        action: () => this._updateChecklist(checklist, 'analyze_page', 'done', `blocks=${inputBlocks.length}`)
+        action: () => this._updateChecklist(checklist, 'analyze_page', 'done', `блоков=${inputBlocks.length}`)
       });
 
       this._executeToolSync({
         agentState: planningToolState,
         tool: TOOL_KEYS.PAGE_ANALYZER,
-        onDisabledMessage: 'Page analyzer disabled; using baseline profile heuristics only',
+        onDisabledMessage: 'Анализатор страницы отключён; использую только базовые эвристики профиля',
         message: 'page_stats_collected',
         action: () => {
           this._pushToolLog(
@@ -214,7 +414,7 @@
             TOOL_KEYS.PAGE_ANALYZER,
             effectiveToolConfig[TOOL_KEYS.PAGE_ANALYZER],
             'ok',
-            `Page stats: blocks=${pageStats.blockCount}, chars=${pageStats.totalChars}, codeRatio=${(pageStats.codeRatio || 0).toFixed(2)}`
+            `Статистика страницы: блоки=${pageStats.blockCount}, символы=${pageStats.totalChars}, codeRatio=${(pageStats.codeRatio || 0).toFixed(2)}`
           );
         }
       });
@@ -227,14 +427,14 @@
           decision.tool,
           decision.requestedMode,
           decision.effectiveMode === 'on' ? 'ok' : 'skip',
-          `Auto config -> ${decision.effectiveMode}. ${decision.reason}`
+          `Автоконфиг -> ${decision.effectiveMode}. ${decision.reason}`
         );
       });
 
       const selectedCategories = this._executeToolSync({
         agentState: planningToolState,
         tool: TOOL_KEYS.CATEGORY_SELECTOR,
-        onDisabledMessage: `Category selector disabled; using all categories: ${(KNOWN_CATEGORIES || []).join(', ')}`,
+        onDisabledMessage: `Селектор категорий отключён; использую все категории: ${(KNOWN_CATEGORIES || []).join(', ')}`,
         disabledValue: this._selectCategories({
           mode: 'all',
           custom: [],
@@ -256,40 +456,40 @@
         effectiveToolConfig[TOOL_KEYS.CATEGORY_SELECTOR],
         categorySelectorEnabled ? 'ok' : 'skip',
         categorySelectorEnabled
-          ? `Selected categories: ${selectedCategories.join(', ')}`
-          : `Category selector disabled; using all categories: ${selectedCategories.join(', ')}`
+          ? `Выбраны категории: ${selectedCategories.join(', ')}`
+          : `Селектор категорий отключён; использую все категории: ${selectedCategories.join(', ')}`
       );
       this._executeToolSync({
         agentState: planningToolState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         message: 'update_checklist_select_categories',
-        action: () => this._updateChecklist(checklist, 'select_categories', 'done', `selected=${selectedCategories.join(',')}`)
+        action: () => this._updateChecklist(checklist, 'select_categories', 'done', `выбрано=${selectedCategories.join(',')}`)
       });
 
       const filteredBlocks = inputBlocks.filter((item) => selectedCategories.includes(this._normalizeCategory(item.category) || 'other'));
       const effectiveBlocks = filteredBlocks.length ? filteredBlocks : inputBlocks.slice();
       if (!filteredBlocks.length) {
-        this._pushToolLog(toolHistory, TOOL_KEYS.CATEGORY_SELECTOR, effectiveToolConfig[TOOL_KEYS.CATEGORY_SELECTOR], 'warn', 'Selected categories produced empty set; fallback to all blocks');
+        this._pushToolLog(toolHistory, TOOL_KEYS.CATEGORY_SELECTOR, effectiveToolConfig[TOOL_KEYS.CATEGORY_SELECTOR], 'warn', 'Выбранные категории дали пустой набор; откат на все блоки');
       }
 
       const glossary = this._executeToolSync({
         agentState: planningToolState,
         tool: TOOL_KEYS.GLOSSARY_BUILDER,
-        onDisabledMessage: 'Glossary tool disabled',
+        onDisabledMessage: 'Инструмент глоссария отключён',
         disabledValue: [],
         message: 'build_glossary',
         action: () => this._buildGlossary(effectiveBlocks)
       });
       if (this._isToolEnabled(effectiveToolConfig[TOOL_KEYS.GLOSSARY_BUILDER])) {
-        this._pushToolLog(toolHistory, TOOL_KEYS.GLOSSARY_BUILDER, effectiveToolConfig[TOOL_KEYS.GLOSSARY_BUILDER], 'ok', `Glossary terms: ${glossary.length}`);
+        this._pushToolLog(toolHistory, TOOL_KEYS.GLOSSARY_BUILDER, effectiveToolConfig[TOOL_KEYS.GLOSSARY_BUILDER], 'ok', `Терминов глоссария: ${glossary.length}`);
       } else {
-        this._pushToolLog(toolHistory, TOOL_KEYS.GLOSSARY_BUILDER, effectiveToolConfig[TOOL_KEYS.GLOSSARY_BUILDER], 'skip', 'Glossary tool disabled');
+        this._pushToolLog(toolHistory, TOOL_KEYS.GLOSSARY_BUILDER, effectiveToolConfig[TOOL_KEYS.GLOSSARY_BUILDER], 'skip', 'Инструмент глоссария отключён');
       }
       this._executeToolSync({
         agentState: planningToolState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         message: 'update_checklist_build_glossary',
-        action: () => this._updateChecklist(checklist, 'build_glossary', 'done', `terms=${glossary.length}`)
+        action: () => this._updateChecklist(checklist, 'build_glossary', 'done', `терминов=${glossary.length}`)
       });
 
       let plan = this._buildFallbackPlan({
@@ -319,18 +519,18 @@
         });
         if (planned) {
           plan = this._mergePlan(plan, planned);
-          this._pushToolLog(toolHistory, TOOL_KEYS.BATCH_PLANNER, effectiveToolConfig[TOOL_KEYS.BATCH_PLANNER], 'ok', 'Planning model response accepted');
+          this._pushToolLog(toolHistory, TOOL_KEYS.BATCH_PLANNER, effectiveToolConfig[TOOL_KEYS.BATCH_PLANNER], 'ok', 'Планирование: ответ модели принят');
         } else {
-          this._pushToolLog(toolHistory, TOOL_KEYS.BATCH_PLANNER, effectiveToolConfig[TOOL_KEYS.BATCH_PLANNER], 'warn', 'Planning model unavailable; fallback plan used');
+          this._pushToolLog(toolHistory, TOOL_KEYS.BATCH_PLANNER, effectiveToolConfig[TOOL_KEYS.BATCH_PLANNER], 'warn', 'Планирование: модель недоступна; использован базовый план');
         }
       } else {
-        this._pushToolLog(toolHistory, TOOL_KEYS.BATCH_PLANNER, effectiveToolConfig[TOOL_KEYS.BATCH_PLANNER], 'skip', 'Planner disabled');
+        this._pushToolLog(toolHistory, TOOL_KEYS.BATCH_PLANNER, effectiveToolConfig[TOOL_KEYS.BATCH_PLANNER], 'skip', 'Планировщик отключён');
       }
       this._executeToolSync({
         agentState: planningToolState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         message: 'update_checklist_plan_pipeline',
-        action: () => this._updateChecklist(checklist, 'plan_pipeline', 'done', `batchSize=${plan.batchSize}`)
+        action: () => this._updateChecklist(checklist, 'plan_pipeline', 'done', `размер_батча=${plan.batchSize}`)
       });
 
       this._executeToolSync({
@@ -343,7 +543,7 @@
           TOOL_KEYS.MODEL_ROUTER,
           effectiveToolConfig[TOOL_KEYS.MODEL_ROUTER],
           'ok',
-          `Model policy: mode=${resolved.modelPolicy.mode}, speed=${resolved.modelPolicy.speed ? 'on' : 'off'}, preference=${resolved.modelPolicy.preference || 'none'}, routeOverride=${resolved.modelPolicy.allowRouteOverride ? 'on' : 'off'}`
+          `Политика модели: mode=${resolved.modelPolicy.mode}, speed=${resolved.modelPolicy.speed ? 'on' : 'off'}, preference=${resolved.modelPolicy.preference || 'none'}, routeOverride=${resolved.modelPolicy.allowRouteOverride ? 'on' : 'off'}`
         )
       });
 
@@ -393,8 +593,8 @@
 
       this._appendReportViaTool(agentState, {
         type: 'plan',
-        title: 'Translation plan created',
-        body: plan.summary || 'Plan prepared',
+        title: 'План перевода сформирован',
+        body: plan.summary || 'План подготовлен',
         meta: {
           batchSize: plan.batchSize,
           selectedCategories,
@@ -407,7 +607,7 @@
         agentState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         message: 'update_checklist_agent_ready',
-        action: () => this._updateChecklist(checklist, 'agent_ready', 'done', `profile=${resolved.profile}`)
+        action: () => this._updateChecklist(checklist, 'agent_ready', 'done', `профиль=${resolved.profile}`)
       });
       return {
         blocks: effectiveBlocks,
@@ -513,7 +713,7 @@
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         force: true,
         message: 'update_checklist_execute_batches',
-        action: () => this._updateChecklist(agentState.checklist, 'execute_batches', 'running', `batch#${agentState.batchCounter}`)
+        action: () => this._updateChecklist(agentState.checklist, 'execute_batches', 'running', `батч#${agentState.batchCounter}`)
       });
 
       const blocks = selected.blockIds
@@ -572,8 +772,8 @@
         modelRouterMode,
         modelRouterEnabled ? 'ok' : 'skip',
         modelRouterEnabled
-          ? `Batch route selected: ${routeHint || 'fast'}`
-          : (routeOverrideAllowed ? 'Model router disabled' : 'Route override disabled by model policy')
+          ? `Выбран маршрут батча: ${routeHint || 'fast'}`
+          : (routeOverrideAllowed ? 'Маршрутизатор моделей отключён' : 'Переопределение маршрута запрещено политикой модели')
       );
 
       return {
@@ -621,6 +821,59 @@
       });
     }
 
+    recordRuntimeAction(job, {
+      tool,
+      status = 'ok',
+      message = '',
+      meta = null,
+      force = false
+    } = {}) {
+      try {
+        if (!job || !job.agentState || typeof job.agentState !== 'object') {
+          return null;
+        }
+        const agentState = job.agentState;
+        const runtimeTool = typeof tool === 'string' && tool ? tool : TOOL_KEYS.PAGE_RUNTIME;
+        const resolvedMode = this._resolveToolMode(agentState, runtimeTool, null);
+        const enabled = Boolean(force) || this._isToolEnabled(resolvedMode);
+        const safeStatus = status === 'warn' || status === 'error' || status === 'skip'
+          ? status
+          : 'ok';
+        const safeMessage = typeof message === 'string' ? message : '';
+        const safeMeta = meta && typeof meta === 'object' ? { ...meta } : null;
+
+        if (!enabled) {
+          if (safeMessage) {
+            this._pushToolLog(agentState.toolHistory, runtimeTool, resolvedMode, 'skip', safeMessage);
+          }
+        this._recordToolExecution(agentState, {
+          tool: runtimeTool,
+          mode: resolvedMode,
+          status: 'skip',
+          forced: Boolean(force),
+          message: safeMessage || 'инструмент отключён',
+          meta: safeMeta
+        });
+          agentState.updatedAt = Date.now();
+          return { tool: runtimeTool, status: 'skip', mode: resolvedMode };
+        }
+
+        this._pushToolLog(agentState.toolHistory, runtimeTool, resolvedMode, safeStatus, safeMessage);
+        this._recordToolExecution(agentState, {
+          tool: runtimeTool,
+          mode: resolvedMode,
+          status: safeStatus,
+          forced: Boolean(force),
+          message: safeMessage,
+          meta: safeMeta
+        });
+        agentState.updatedAt = Date.now();
+        return { tool: runtimeTool, status: safeStatus, mode: resolvedMode };
+      } catch (_) {
+        return null;
+      }
+    }
+
     recordBatchSuccess({ job, batch, translatedItems, report } = {}) {
       if (!job || !job.agentState || !batch) {
         return;
@@ -657,29 +910,45 @@
             agentState.recentDiffItems = merged.slice(-this.MAX_DIFF_ITEMS);
           }
 
-          const summary = reportObj.summary || `Batch ${batch.index + 1} translated: ${batch.blockIds.length} blocks`;
+          const summary = reportObj.summary || `Батч ${batch.index + 1} переведён: ${batch.blockIds.length} блоков`;
           const reportMode = agentState.toolConfig ? agentState.toolConfig[TOOL_KEYS.REPORT_WRITER] : 'on';
           if (this._isToolEnabled(reportMode)) {
             const notesText = Array.isArray(reportObj.notes) && reportObj.notes.length
-              ? ` | notes: ${reportObj.notes.join('; ')}`
+              ? ` | примечания: ${reportObj.notes.join('; ')}`
               : '';
+            const reportMeta = reportObj && reportObj.meta && typeof reportObj.meta === 'object'
+              ? reportObj.meta
+              : {};
+            const usageMeta = reportMeta.usage && typeof reportMeta.usage === 'object'
+              ? reportMeta.usage
+              : null;
+            const rateMeta = reportMeta.rate && typeof reportMeta.rate === 'object'
+              ? reportMeta.rate
+              : null;
             this._appendReportViaTool(agentState, {
               type: 'batch',
-              title: `Batch ${batch.index + 1}`,
+              title: `Батч ${batch.index + 1}`,
               body: `${summary}${notesText}`.slice(0, 600),
               meta: {
                 batchId: batch.batchId,
                 blockCount: batch.blockIds.length,
                 quality: reportObj.quality || 'ok',
                 notes: Array.isArray(reportObj.notes) ? reportObj.notes.slice(0, 8) : [],
-                categoryCounts: this._countBatchCategories(batch.blocks || [])
+                categoryCounts: this._countBatchCategories(batch.blocks || []),
+                ...(reportObj.meta || {})
               }
             }, {
               message: 'batch_report_written'
             });
-            this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'ok', `Batch report stored (${batch.blockIds.length} blocks)`);
+            const toolMsg = [
+              `Отчёт батча сохранён (${batch.blockIds.length} блоков)`,
+              `модель=${reportMeta.chosenModelSpec || 'н/д'}`,
+              `токены=${usageMeta && usageMeta.totalTokens !== undefined && usageMeta.totalTokens !== null ? usageMeta.totalTokens : 'н/д'}`,
+              `остатокRPM=${rateMeta && rateMeta.remainingRequests !== undefined && rateMeta.remainingRequests !== null ? rateMeta.remainingRequests : 'н/д'} остатокTPM=${rateMeta && rateMeta.remainingTokens !== undefined && rateMeta.remainingTokens !== null ? rateMeta.remainingTokens : 'н/д'}${reportMeta.cached ? ' | кэш' : ''}`
+            ].join(' | ').slice(0, 320);
+            this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'ok', toolMsg);
           } else {
-            this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'skip', 'Report writer disabled');
+            this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'skip', 'Запись отчётов отключена');
           }
           this.runProgressAuditTool({ job, reason: 'batch_success' });
           this.runContextCompressionTool({ job, force: false, reason: 'batch_success' });
@@ -701,8 +970,8 @@
           const safeError = error && typeof error === 'object' ? error : {};
           this._appendReportViaTool(agentState, {
             type: 'batch_error',
-            title: `Batch failed${batch && Number.isFinite(Number(batch.index)) ? ` #${Number(batch.index) + 1}` : ''}`,
-            body: safeError.message || 'Unknown batch failure',
+            title: `Ошибка батча${batch && Number.isFinite(Number(batch.index)) ? ` #${Number(batch.index) + 1}` : ''}`,
+            body: safeError.message || 'Неизвестная ошибка батча',
             meta: {
               code: safeError.code || 'BATCH_FAILED',
               batchId: batch && batch.batchId ? batch.batchId : null
@@ -710,7 +979,7 @@
           }, {
             message: 'batch_error_report_written'
           });
-          this._pushToolLog(agentState.toolHistory, TOOL_KEYS.PROGRESS_AUDITOR, agentState.toolConfig[TOOL_KEYS.PROGRESS_AUDITOR], 'warn', safeError.message || 'Batch failure');
+          this._pushToolLog(agentState.toolHistory, TOOL_KEYS.PROGRESS_AUDITOR, agentState.toolConfig[TOOL_KEYS.PROGRESS_AUDITOR], 'warn', safeError.message || 'Ошибка батча');
           this.runProgressAuditTool({ job, reason: 'batch_failure', force: true });
           this.runContextCompressionTool({ job, force: false, reason: 'batch_failure' });
         }
@@ -757,6 +1026,11 @@
         : failed > 0
           ? 'attention'
           : 'running';
+      const statusLabel = status === 'complete'
+        ? 'готово'
+        : status === 'attention'
+          ? 'требует внимания'
+          : 'в процессе';
 
       const auditEntry = {
         ts: now,
@@ -783,14 +1057,14 @@
         TOOL_KEYS.PROGRESS_AUDITOR,
         logMode,
         mandatory && !modeEnabled ? 'warn' : 'ok',
-        `Audit ${status}: ${coverage}%${mandatory ? ' (mandatory)' : ''}`
+        `Аудит: статус=${statusLabel}, покрытие=${coverage}%${mandatory ? ' (обязательный)' : ''}`
       );
       this._executeToolSync({
         agentState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         force: true,
         message: 'update_checklist_run_audits',
-        action: () => this._updateChecklist(agentState.checklist, 'run_audits', pending === 0 ? 'done' : 'running', `coverage=${coverage}%`)
+        action: () => this._updateChecklist(agentState.checklist, 'run_audits', pending === 0 ? 'done' : 'running', `покрытие=${coverage}%`)
       });
 
       return auditEntry;
@@ -830,12 +1104,12 @@
         .map((item) => `${item.id}:${item.status}`)
         .join(', ');
       const summary = [
-        `profile=${agentState.profile}`,
-        `categories=${(agentState.selectedCategories || []).join(',') || 'none'}`,
-        `audits=${recentAudits || 'n/a'}`,
-        `checklist=${checklistDigest || 'all_done'}`,
-        `footprint=${footprint}`,
-        `recent=${recentReports || 'n/a'}`
+        `профиль=${agentState.profile}`,
+        `категории=${(agentState.selectedCategories || []).join(',') || 'нет'}`,
+        `аудиты=${recentAudits || 'н/д'}`,
+        `чеклист=${checklistDigest || 'всё_готово'}`,
+        `объём_контекста=${footprint}`,
+        `недавнее=${recentReports || 'н/д'}`
       ].join(' ; ');
 
       agentState.contextSummary = summary.slice(0, 1600);
@@ -851,7 +1125,7 @@
         TOOL_KEYS.CONTEXT_COMPRESSOR,
         logMode,
         mandatory && !modeEnabled ? 'warn' : 'ok',
-        `Context compressed (${reason}; footprint=${footprint})`
+        `Контекст сжат (${reason}; объём=${footprint})`
       );
       const pendingCount = Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0;
       const checklistStatus = pendingCount === 0 ? 'done' : 'running';
@@ -860,7 +1134,7 @@
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         force: true,
         message: 'update_checklist_compress_context',
-        action: () => this._updateChecklist(agentState.checklist, 'compress_context', checklistStatus, `count=${agentState.compressedContextCount}`)
+        action: () => this._updateChecklist(agentState.checklist, 'compress_context', checklistStatus, `сжатий=${agentState.compressedContextCount}`)
       });
       return agentState.contextSummary;
     }
@@ -878,12 +1152,12 @@
         action: () => {
           this.runProgressAuditTool({ job, reason: 'finalize', force: true, mandatory: true });
           this.runContextCompressionTool({ job, force: true, mandatory: true, reason: 'finalize' });
-          this._updateChecklist(agentState.checklist, 'execute_batches', 'done', 'all batches processed');
-          this._updateChecklist(agentState.checklist, 'proofread', 'done', 'final pass completed');
-          this._updateChecklist(agentState.checklist, 'final_report', 'done', 'report ready');
+          this._updateChecklist(agentState.checklist, 'execute_batches', 'done', 'все батчи обработаны');
+          this._updateChecklist(agentState.checklist, 'proofread', 'done', 'финальная вычитка завершена');
+          this._updateChecklist(agentState.checklist, 'final_report', 'done', 'отчёт готов');
           this._appendReportViaTool(agentState, {
             type: 'final',
-            title: 'Translation finished',
+            title: 'Перевод завершён',
             body: this._buildFinalSummary(job),
             meta: {
               totalBlocks: job.totalBlocks || 0,
@@ -914,15 +1188,15 @@
           const safeError = error && typeof error === 'object' ? error : {};
           this._appendReportViaTool(agentState, {
             type: 'error',
-            title: 'Translation failed',
-            body: safeError.message || 'Unknown error',
+            title: 'Перевод завершился ошибкой',
+            body: safeError.message || 'Неизвестная ошибка',
             meta: {
               code: safeError.code || 'TRANSLATION_FAILED'
             }
           }, {
             message: 'failure_report_written'
           });
-          this._updateChecklist(agentState.checklist, 'final_report', 'running', 'job failed; report updated');
+          this._updateChecklist(agentState.checklist, 'final_report', 'running', 'задача завершилась ошибкой; отчёт обновлён');
           agentState.phase = 'failed';
           agentState.status = 'failed';
           agentState.updatedAt = Date.now();
@@ -1109,7 +1383,7 @@
     }
 
     _normalizeCategoryMode(value) {
-      if (value === 'all' || value === 'content' || value === 'interface' || value === 'meta' || value === 'custom') {
+      if (value === 'all' || value === 'auto' || value === 'content' || value === 'interface' || value === 'meta' || value === 'custom') {
         return value;
       }
       return 'all';
@@ -1246,13 +1520,13 @@
           : DEFAULT_TOOL_CONFIG[toolKey];
         if (requestedMode === 'on' || requestedMode === 'off') {
           toolConfig[toolKey] = requestedMode;
-          decisions.push({
-            tool: toolKey,
-            source: 'explicit',
-            requestedMode,
-            effectiveMode: requestedMode,
-            reason: requestedMode === 'on' ? 'Configured by user/profile as ON' : 'Configured by user/profile as OFF'
-          });
+        decisions.push({
+          tool: toolKey,
+          source: 'explicit',
+          requestedMode,
+          effectiveMode: requestedMode,
+          reason: requestedMode === 'on' ? 'Настроено пользователем/профилем: ВКЛ' : 'Настроено пользователем/профилем: ВЫКЛ'
+        });
           return;
         }
 
@@ -1284,48 +1558,54 @@
       const style = typeof safe.style === 'string' ? safe.style : 'balanced';
 
       if (toolKey === TOOL_KEYS.PAGE_ANALYZER) {
-        return { mode: 'on', reason: 'Required for page-aware planning and diagnostics' };
+        return { mode: 'on', reason: 'Нужен для планирования и диагностики с учётом структуры страницы' };
       }
       if (toolKey === TOOL_KEYS.CATEGORY_SELECTOR) {
         if (categoryCount > 1 || blockCount > 6) {
-          return { mode: 'on', reason: 'Multiple categories detected; selective routing is useful' };
+          return { mode: 'on', reason: 'Обнаружено несколько категорий; селективный выбор полезен' };
         }
-        return { mode: 'off', reason: 'Single-category/small page; category selection overhead is unnecessary' };
+        return { mode: 'off', reason: 'Одна категория или маленькая страница; лишняя селекция не нужна' };
       }
       if (toolKey === TOOL_KEYS.GLOSSARY_BUILDER) {
         if (totalChars > 900 || duplicateRatio > 0.16 || codeRatio > 0.08 || style === 'technical') {
-          return { mode: 'on', reason: 'Terminology consistency risk is high on this page' };
+          return { mode: 'on', reason: 'Высокий риск рассинхрона терминологии на этой странице' };
         }
-        return { mode: 'off', reason: 'Low terminology reuse; glossary pass skipped for speed' };
+        return { mode: 'off', reason: 'Низкий повтор терминов; шаг глоссария пропущен ради скорости' };
       }
       if (toolKey === TOOL_KEYS.BATCH_PLANNER) {
         if (blockCount > 14 || categoryCount > 3 || style === 'technical' || style === 'readable') {
-          return { mode: 'on', reason: 'Complex page benefits from explicit batch planning' };
+          return { mode: 'on', reason: 'Сложной странице полезно явное планирование батчей' };
         }
-        return { mode: 'off', reason: 'Small/simple page can use deterministic fallback plan' };
+        return { mode: 'off', reason: 'Для простой страницы достаточно детерминированного базового плана' };
       }
       if (toolKey === TOOL_KEYS.MODEL_ROUTER) {
         if (style === 'technical' || style === 'literal' || codeRatio > 0.02 || headingRatio > 0.12 || blockCount > 4) {
-          return { mode: 'on', reason: 'Mixed-content complexity warrants per-batch model routing' };
+          return { mode: 'on', reason: 'Смешанный сложный контент требует маршрутизации модели по батчам' };
         }
-        return { mode: 'off', reason: 'Uniform/simple content does not need dynamic routing' };
+        return { mode: 'off', reason: 'Однородному простому контенту не нужна динамическая маршрутизация' };
       }
       if (toolKey === TOOL_KEYS.PROGRESS_AUDITOR) {
-        return { mode: 'on', reason: 'Periodic audit is mandatory for plan tracking and progress verification' };
+        return { mode: 'on', reason: 'Периодический аудит обязателен для контроля плана и прогресса' };
       }
       if (toolKey === TOOL_KEYS.ANTI_REPEAT_GUARD) {
-        return { mode: 'on', reason: 'Duplicate action prevention is mandatory for stable execution' };
+        return { mode: 'on', reason: 'Предотвращение дубликатов обязательно для стабильного выполнения' };
       }
       if (toolKey === TOOL_KEYS.CONTEXT_COMPRESSOR) {
         if (blockCount > 45 || totalChars > 6000 || avgChars > 180) {
-          return { mode: 'on', reason: 'Large context footprint; compression needed to avoid overflow' };
+          return { mode: 'on', reason: 'Большой объём контекста; нужно сжатие, чтобы избежать переполнения' };
         }
-        return { mode: 'off', reason: 'Context footprint is small; compression deferred' };
+        return { mode: 'off', reason: 'Контекст небольшой; сжатие отложено' };
       }
       if (toolKey === TOOL_KEYS.REPORT_WRITER) {
-        return { mode: 'on', reason: 'Reports are needed for debug traceability' };
+        return { mode: 'on', reason: 'Отчёты нужны для прозрачной отладки и трассировки' };
       }
-      return { mode: 'on', reason: 'Default auto policy' };
+      if (toolKey === TOOL_KEYS.PAGE_RUNTIME) {
+        return { mode: 'on', reason: 'Отслеживает runtime-действия контент-скрипта (apply/restore/rescan) для полной трассы' };
+      }
+      if (toolKey === TOOL_KEYS.CACHE_MANAGER) {
+        return { mode: 'on', reason: 'Отслеживает решения по восстановлению/сохранению кэша для воспроизводимости' };
+      }
+      return { mode: 'on', reason: 'Политика авто по умолчанию' };
     }
 
     _resolveBatchRouteHint({ agentState, batch } = {}) {
@@ -1364,22 +1644,102 @@
     }
 
     _selectCategories({ mode, custom, blocks, categoryStats } = {}) {
-      const available = new Set(
-        (blocks || [])
-          .map((item) => this._normalizeCategory(item.category || item.pathHint) || 'other')
+      const inputBlocks = Array.isArray(blocks) ? blocks : [];
+      const safeCategoryStats = categoryStats && typeof categoryStats === 'object'
+        ? categoryStats
+        : {};
+      const availableSet = new Set(
+        inputBlocks
+          .map((item) => this._normalizeCategory(
+            item && typeof item === 'object'
+              ? (item.category || item.pathHint)
+              : ''
+          ) || 'other')
       );
+      if (!availableSet.size) {
+        Object.keys(safeCategoryStats).forEach((category) => {
+          const normalized = this._normalizeCategory(category);
+          const count = Number(safeCategoryStats[category] && safeCategoryStats[category].count || 0);
+          if (normalized && count > 0) {
+            availableSet.add(normalized);
+          }
+        });
+      }
+      const available = Array.from(availableSet);
+      const hasAvailable = (category) => availableSet.has(category);
+      const countFor = (category) => {
+        if (!hasAvailable(category)) {
+          return 0;
+        }
+        const bucket = safeCategoryStats[category] && typeof safeCategoryStats[category] === 'object'
+          ? safeCategoryStats[category]
+          : {};
+        const count = Number(bucket.count || 0);
+        return Number.isFinite(count) && count > 0 ? count : 0;
+      };
+      const sumGroup = (groupName) => (CATEGORY_GROUPS[groupName] || [])
+        .reduce((sum, category) => sum + countFor(category), 0);
+      const normalizeOutput = (list) => {
+        const seen = new Set();
+        const out = [];
+        (Array.isArray(list) ? list : []).forEach((value) => {
+          const category = this._normalizeCategory(value);
+          if (!category || seen.has(category)) {
+            return;
+          }
+          seen.add(category);
+          out.push(category);
+        });
+        return out;
+      };
+      const allAvailableOrdered = normalizeOutput(KNOWN_CATEGORIES.filter((category) => hasAvailable(category)));
+      const ensureHeadingIfPresent = (list) => {
+        const output = normalizeOutput(list);
+        if (hasAvailable('heading') && !output.includes('heading')) {
+          output.unshift('heading');
+        }
+        return normalizeOutput(output);
+      };
 
       let selected = [];
       if (mode === 'custom') {
-        selected = (Array.isArray(custom) ? custom : []).filter((item) => available.has(item));
+        selected = normalizeOutput((Array.isArray(custom) ? custom : []).filter((item) => hasAvailable(item)));
       } else if (mode === 'content' || mode === 'interface' || mode === 'meta') {
-        selected = (CATEGORY_GROUPS[mode] || []).filter((item) => available.has(item));
+        selected = normalizeOutput((CATEGORY_GROUPS[mode] || []).filter((item) => hasAvailable(item)));
+        if (mode === 'content') {
+          selected = ensureHeadingIfPresent(selected);
+        }
+      } else if (mode === 'auto') {
+        const contentWeight = sumGroup('content');
+        const interfaceWeight = sumGroup('interface');
+        const metaWeight = countFor('meta');
+
+        const contentDominates = (contentWeight >= interfaceWeight * 2 && contentWeight > 0) || contentWeight >= 8;
+        const interfaceDominates = interfaceWeight > contentWeight * 1.5 && contentWeight <= 3 && interfaceWeight > 0;
+        const metaDominates = metaWeight > 0 && contentWeight <= 1 && interfaceWeight <= 2;
+
+        if (metaDominates) {
+          const metaOnly = normalizeOutput((CATEGORY_GROUPS.meta || []).filter((item) => hasAvailable(item)));
+          const metaWithInterface = normalizeOutput([
+            ...metaOnly,
+            ...((CATEGORY_GROUPS.interface || []).filter((item) => hasAvailable(item)))
+          ]);
+          selected = metaWithInterface.length ? metaWithInterface : metaOnly;
+        } else if (contentDominates) {
+          selected = ensureHeadingIfPresent((CATEGORY_GROUPS.content || []).filter((item) => hasAvailable(item)));
+        } else if (interfaceDominates) {
+          selected = normalizeOutput((CATEGORY_GROUPS.interface || []).filter((item) => hasAvailable(item)));
+        } else {
+          selected = allAvailableOrdered.slice();
+        }
       } else {
-        selected = Array.from(available);
+        selected = allAvailableOrdered.slice();
       }
 
       if (!selected.length) {
-        selected = Object.keys(categoryStats || {}).filter((category) => (categoryStats[category] || {}).count > 0);
+        selected = normalizeOutput(
+          Object.keys(safeCategoryStats).filter((category) => Number((safeCategoryStats[category] || {}).count || 0) > 0)
+        );
       }
       if (!selected.length) {
         selected = ['other'];
@@ -1421,7 +1781,7 @@
         : 'balanced';
       const passes = this._resolveProofreadingPasses(resolvedProfile, blockCount);
       const categoryOrder = this._buildCategoryOrder(blocks, selectedCategories);
-      const summary = `Profile ${profile} -> style=${style}, batchSize=${batchSize}, categories=${selectedCategories.join(', ')}`;
+      const summary = `Профиль ${profile} -> стиль=${style}, размер_батча=${batchSize}, категории=${selectedCategories.join(', ')}`;
       return {
         style,
         batchSize,
@@ -1564,16 +1924,16 @@
     _buildInitialChecklist() {
       const now = Date.now();
       return [
-        { id: 'analyze_page', title: 'Analyze page text map', status: 'pending', details: '', updatedAt: now },
-        { id: 'select_categories', title: 'Select translation categories', status: 'pending', details: '', updatedAt: now },
-        { id: 'build_glossary', title: 'Build glossary/context', status: 'pending', details: '', updatedAt: now },
-        { id: 'plan_pipeline', title: 'Plan execution pipeline', status: 'pending', details: '', updatedAt: now },
-        { id: 'agent_ready', title: 'Agent ready to translate', status: 'pending', details: '', updatedAt: now },
-        { id: 'execute_batches', title: 'Execute translation batches', status: 'pending', details: '', updatedAt: now },
-        { id: 'run_audits', title: 'Run periodic audits', status: 'pending', details: '', updatedAt: now },
-        { id: 'compress_context', title: 'Compress context history', status: 'pending', details: '', updatedAt: now },
-        { id: 'proofread', title: 'Proofread / polish pass', status: 'pending', details: '', updatedAt: now },
-        { id: 'final_report', title: 'Publish final report', status: 'pending', details: '', updatedAt: now }
+        { id: 'analyze_page', title: 'Анализ текста страницы', status: 'pending', details: '', updatedAt: now },
+        { id: 'select_categories', title: 'Выбор категорий перевода', status: 'pending', details: '', updatedAt: now },
+        { id: 'build_glossary', title: 'Глоссарий / контекст', status: 'pending', details: '', updatedAt: now },
+        { id: 'plan_pipeline', title: 'План выполнения', status: 'pending', details: '', updatedAt: now },
+        { id: 'agent_ready', title: 'Агент готов', status: 'pending', details: '', updatedAt: now },
+        { id: 'execute_batches', title: 'Выполнение батчей', status: 'pending', details: '', updatedAt: now },
+        { id: 'run_audits', title: 'Периодические аудиты', status: 'pending', details: '', updatedAt: now },
+        { id: 'compress_context', title: 'Автосжатие контекста', status: 'pending', details: '', updatedAt: now },
+        { id: 'proofread', title: 'Вычитка / полировка', status: 'pending', details: '', updatedAt: now },
+        { id: 'final_report', title: 'Финальный отчёт', status: 'pending', details: '', updatedAt: now }
       ];
     }
 
@@ -1696,9 +2056,9 @@
       const completed = Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0;
       const failed = Array.isArray(job.failedBlockIds) ? job.failedBlockIds.length : 0;
       if (failed > 0) {
-        return `Completed with issues: translated ${completed}/${total}, failed ${failed}.`;
+        return `Завершено с проблемами: переведено ${completed}/${total}, ошибок ${failed}.`;
       }
-      return `Completed successfully: translated ${completed}/${total}.`;
+      return `Успешно завершено: переведено ${completed}/${total}.`;
     }
 
     _resolveBatchSize(resolvedProfile, blockCount) {
@@ -1814,7 +2174,7 @@
           mode: resolvedMode,
           status: 'skip',
           forced: force,
-          message: onDisabledMessage || message || 'tool disabled'
+          message: onDisabledMessage || message || 'инструмент отключён'
         });
         return disabledValue;
       }
@@ -1826,17 +2186,17 @@
           mode: resolvedMode,
           status: 'ok',
           forced: force,
-          message: message || 'tool action executed'
+          message: message || 'действие инструмента выполнено'
         });
         return out;
       } catch (error) {
-        const errMessage = error && error.message ? error.message : 'tool action failed';
+        const errMessage = error && error.message ? error.message : 'ошибка действия инструмента';
         this._recordToolExecution(agentState, {
           tool,
           mode: resolvedMode,
           status: 'error',
           forced: force,
-          message: `${message || 'tool action'} | ${errMessage}`
+          message: `${message || 'действие инструмента'} | ${errMessage}`
         });
         this._pushToolLog(agentState && agentState.toolHistory, tool, resolvedMode, 'error', errMessage);
         return disabledValue;
@@ -1864,7 +2224,7 @@
           mode: resolvedMode,
           status: 'skip',
           forced: force,
-          message: onDisabledMessage || message || 'tool disabled'
+          message: onDisabledMessage || message || 'инструмент отключён'
         });
         return fallbackValue;
       }
@@ -1877,17 +2237,17 @@
           mode: resolvedMode,
           status: 'ok',
           forced: force,
-          message: message || 'tool action executed'
+          message: message || 'действие инструмента выполнено'
         });
         return out;
       } catch (error) {
-        const errMessage = error && error.message ? error.message : 'tool action failed';
+        const errMessage = error && error.message ? error.message : 'ошибка действия инструмента';
         this._recordToolExecution(agentState, {
           tool,
           mode: resolvedMode,
           status: 'error',
           forced: force,
-          message: `${message || 'tool action'} | ${errMessage}`
+          message: `${message || 'действие инструмента'} | ${errMessage}`
         });
         this._pushToolLog(agentState && agentState.toolHistory, tool, resolvedMode, 'error', errMessage);
         return fallbackValue;
@@ -1900,7 +2260,7 @@
         tool: TOOL_KEYS.REPORT_WRITER,
         force,
         message,
-        onDisabledMessage: 'Report writer disabled',
+        onDisabledMessage: 'Запись отчётов отключена',
         disabledValue: null,
         action: () => this._appendReport(agentState, report)
       });
@@ -1937,7 +2297,7 @@
       const next = {
         ts: Date.now(),
         type: this._sanitizeReportToken(report && report.type ? report.type : 'note', 'note'),
-        title: this._sanitizeReportText(report && report.title ? report.title : 'Report', 140),
+        title: this._sanitizeReportText(report && report.title ? report.title : 'Отчёт', 140),
         body: this._sanitizeReportText(report && report.body ? report.body : '', 1200),
         meta: this._sanitizeReportMeta(report && report.meta ? report.meta : {}),
         formatVersion: 'nt.agent.report.v1'
@@ -1955,7 +2315,7 @@
       const summaryRaw = typeof raw.summary === 'string' ? raw.summary.trim() : '';
       const summary = summaryRaw
         ? summaryRaw.slice(0, 320)
-        : `Batch ${Number.isFinite(Number(batch && batch.index)) ? Number(batch.index) + 1 : '?'} translated: ${translatedCount}/${batchSize} blocks`;
+        : `Батч ${Number.isFinite(Number(batch && batch.index)) ? Number(batch.index) + 1 : '?'} переведён: ${translatedCount}/${batchSize} блоков`;
       const qualityRaw = typeof raw.quality === 'string' ? raw.quality.trim().toLowerCase() : '';
       const quality = qualityRaw === 'needs_review'
         || qualityRaw === 'review'
@@ -1970,10 +2330,12 @@
         .map((item) => this._sanitizeReportText(String(item || ''), 180))
         .filter(Boolean)
         .slice(0, 8);
+      const meta = this._sanitizeReportMeta(raw && raw.meta && typeof raw.meta === 'object' ? raw.meta : {});
       return {
         summary,
         quality,
-        notes
+        notes,
+        meta
       };
     }
 
@@ -2098,20 +2460,6 @@
       return Math.max(1, Math.round(numeric));
     }
   }
-
-  TranslationAgent.previewResolvedSettings = function previewResolvedSettings({ settings, pageStats } = {}) {
-    const probe = new TranslationAgent({});
-    const resolved = probe.resolveSettings(settings || {}, pageStats || null);
-    const baseProfile = probe._resolveProfilePreset(resolved.profile, pageStats || null);
-    const runtimeTuning = probe._resolveRuntimeTuning(resolved.tuning);
-    return {
-      profile: resolved.profile,
-      baseProfile,
-      effectiveProfile: resolved.resolvedProfile,
-      tuning: resolved.tuning,
-      runtimeTuning
-    };
-  };
 
   NT.TranslationAgent = TranslationAgent;
   NT.TranslationAgentDefaults = {

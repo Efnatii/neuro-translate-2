@@ -89,6 +89,16 @@
       hint: 'Ведёт структурированные отчёты по шагам перевода'
     },
     {
+      key: 'pageRuntime',
+      label: 'Runtime страницы',
+      hint: 'Логирует действия с контент-скриптом: apply/ack/restore/rescan'
+    },
+    {
+      key: 'cacheManager',
+      label: 'Менеджер кэша',
+      hint: 'Логирует восстановление/сохранение кэша страниц и решения reuse'
+    },
+    {
       key: 'workflowController',
       label: 'Контроллер действий',
       hint: 'Системный инструмент: через него проходят все state-действия агента'
@@ -105,15 +115,9 @@
     antiRepeatGuard: 'on',
     contextCompressor: 'auto',
     reportWriter: 'on',
+    pageRuntime: 'on',
+    cacheManager: 'auto',
     workflowController: 'on'
-  };
-
-  const LOCAL_PROFILE_PRESETS = {
-    auto: { style: 'auto', maxBatchSize: 'auto', proofreadingPasses: 'auto', parallelism: 'auto' },
-    balanced: { style: 'balanced', maxBatchSize: 8, proofreadingPasses: 1, parallelism: 'mixed' },
-    literal: { style: 'literal', maxBatchSize: 6, proofreadingPasses: 1, parallelism: 'low' },
-    readable: { style: 'readable', maxBatchSize: 10, proofreadingPasses: 2, parallelism: 'high' },
-    technical: { style: 'technical', maxBatchSize: 5, proofreadingPasses: 2, parallelism: 'low' }
   };
 
   const LOCAL_AGENT_TUNING_DEFAULTS = {
@@ -137,6 +141,51 @@
     allowRouteOverride: true
   };
 
+  class DetailsStateManager {
+    constructor({ doc, storageKeyPrefix }) {
+      this.doc = doc;
+      this.storageKeyPrefix = typeof storageKeyPrefix === 'string' && storageKeyPrefix
+        ? storageKeyPrefix
+        : 'nt.ui.details';
+    }
+
+    init() {
+      if (!this.doc || typeof this.doc.querySelectorAll !== 'function') {
+        return;
+      }
+      const detailsList = Array.from(this.doc.querySelectorAll('details[data-section]'));
+      detailsList.forEach((details) => {
+        if (!details) {
+          return;
+        }
+        const sectionId = details.getAttribute('data-section');
+        if (!sectionId) {
+          return;
+        }
+        const key = `${this.storageKeyPrefix}.${sectionId}`;
+        try {
+          const saved = global.localStorage ? global.localStorage.getItem(key) : null;
+          if (saved === '0') {
+            details.open = false;
+          } else if (saved === '1') {
+            details.open = true;
+          }
+        } catch (_) {
+          // best-effort only
+        }
+        details.addEventListener('toggle', () => {
+          try {
+            if (global.localStorage) {
+              global.localStorage.setItem(key, details.open ? '1' : '0');
+            }
+          } catch (_) {
+            // best-effort only
+          }
+        });
+      });
+    }
+  }
+
   class PopupController {
     constructor({ doc, ui }) {
       this.doc = doc;
@@ -149,7 +198,7 @@
         translationAgentProfile: 'auto',
         translationAgentTools: { ...DEFAULT_AGENT_TOOLS },
         translationAgentTuning: { ...LOCAL_AGENT_TUNING_DEFAULTS },
-        translationCategoryMode: 'all',
+        translationCategoryMode: 'auto',
         translationCategoryList: [],
         translationPageCacheEnabled: true,
         translationApiCacheEnabled: true,
@@ -157,6 +206,7 @@
         translationVisible: true,
         translationPipelineEnabled: false,
         translationStatusByTab: {},
+        modelLimitsBySpec: {},
         translationJob: null,
         translationProgress: 0,
         failedBlocksCount: 0,
@@ -174,6 +224,7 @@
     async init() {
       this.cacheElements();
       this.bindEvents();
+      new DetailsStateManager({ doc: this.doc, storageKeyPrefix: 'nt.ui.popup.details' }).init();
 
       const activeTab = await this.ui.getActiveTab();
       this.activeTabId = activeTab ? activeTab.id : null;
@@ -448,7 +499,7 @@
 
       if (this.agentCategoryModeSelect) {
         this.agentCategoryModeSelect.addEventListener('change', (event) => {
-          const mode = this.normalizeCategoryMode(event.target ? event.target.value : 'all');
+          const mode = this.normalizeCategoryMode(event.target ? event.target.value : 'auto');
           this.state.translationCategoryMode = mode;
           let nextCategoryList = this.state.translationCategoryList;
           if (mode === 'custom' && !this.normalizeCategoryList(nextCategoryList).length) {
@@ -645,6 +696,11 @@
       if (payload.translationStatusByTab && typeof payload.translationStatusByTab === 'object') {
         this.state.translationStatusByTab = payload.translationStatusByTab;
       }
+      if (Object.prototype.hasOwnProperty.call(payload, 'modelLimitsBySpec')) {
+        this.state.modelLimitsBySpec = payload.modelLimitsBySpec && typeof payload.modelLimitsBySpec === 'object'
+          ? payload.modelLimitsBySpec
+          : {};
+      }
       if (Object.prototype.hasOwnProperty.call(payload, 'translationJob')) {
         this.state.translationJob = payload.translationJob || null;
       }
@@ -743,6 +799,11 @@
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationStatusByTab') && patch.translationStatusByTab && typeof patch.translationStatusByTab === 'object') {
         this.state.translationStatusByTab = patch.translationStatusByTab;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'modelLimitsBySpec')) {
+        this.state.modelLimitsBySpec = patch.modelLimitsBySpec && typeof patch.modelLimitsBySpec === 'object'
+          ? patch.modelLimitsBySpec
+          : {};
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'translationJob')) {
         this.state.translationJob = patch.translationJob || null;
@@ -993,7 +1054,7 @@
     }
 
     normalizeCategoryMode(value) {
-      if (value === 'content' || value === 'interface' || value === 'meta' || value === 'custom') {
+      if (value === 'auto' || value === 'content' || value === 'interface' || value === 'meta' || value === 'custom') {
         return value;
       }
       return 'all';
@@ -1241,6 +1302,9 @@
     }
 
     _categoryModeLabel(mode) {
+      if (mode === 'auto') {
+        return 'авто';
+      }
       if (mode === 'content') {
         return 'контент';
       }
@@ -1257,6 +1321,9 @@
     }
 
     _categoryModeHint(mode) {
+      if (mode === 'auto') {
+        return 'Агент автоматически рекомендует категории после анализа страницы.';
+      }
       if (mode === 'content') {
         return 'Будут выбраны контентные категории: заголовки, абзацы, списки, таблицы, цитаты и код.';
       }
@@ -1394,6 +1461,41 @@
         { label: 'Лимит контекста', value: `${preview.runtime.contextFootprintLimit}` },
         { label: 'Пауза между сжатиями', value: `${preview.runtime.compressionCooldownMs}мс` }
       ];
+      const resolved = preview && preview.resolved && typeof preview.resolved === 'object'
+        ? preview.resolved
+        : null;
+      if (resolved) {
+        const categoryMode = this.normalizeCategoryMode(resolved.categoryMode);
+        const categoryList = this.normalizeCategoryList(resolved.categoryList);
+        lines.push({
+          label: 'Категории (первичный режим)',
+          value: `${this._categoryModeLabel(categoryMode)}${categoryMode === 'custom' ? ` (${categoryList.length})` : ''}`
+        });
+        lines.push({
+          label: 'Кэш страниц',
+          value: resolved.pageCacheEnabled !== false ? 'вкл' : 'выкл'
+        });
+        const modelPolicy = resolved.modelPolicy && typeof resolved.modelPolicy === 'object'
+          ? resolved.modelPolicy
+          : {};
+        const modelMode = modelPolicy.mode === 'fixed' ? 'fixed' : 'auto';
+        const modelSpeed = modelPolicy.speed !== false ? 'on' : 'off';
+        const modelPreference = modelPolicy.preference === 'smartest' || modelPolicy.preference === 'cheapest'
+          ? modelPolicy.preference
+          : 'none';
+        const routeOverride = modelPolicy.allowRouteOverride !== false ? 'on' : 'off';
+        lines.push({
+          label: 'Политика модели',
+          value: `${modelMode}, speed=${modelSpeed}, pref=${modelPreference}, routeOverride=${routeOverride}`
+        });
+        const effectiveTools = this._formatEffectiveToolsPreview(resolved);
+        if (effectiveTools) {
+          lines.push({
+            label: 'Инструменты (эффективно)',
+            value: effectiveTools
+          });
+        }
+      }
 
       this.agentProfileImpactRoot.innerHTML = '';
       lines.forEach((item) => {
@@ -1416,48 +1518,93 @@
       const profile = this.normalizeAgentProfile(this.state.translationAgentProfile);
       const tuning = this.normalizeAgentTuning(this.state.translationAgentTuning);
       const TranslationAgent = global.NT && global.NT.TranslationAgent ? global.NT.TranslationAgent : null;
+      const defaults = global.NT && global.NT.TranslationAgentDefaults && global.NT.TranslationAgentDefaults.PROFILE_PRESETS
+        ? global.NT.TranslationAgentDefaults.PROFILE_PRESETS
+        : null;
+      const fallbackProfile = defaults && Object.prototype.hasOwnProperty.call(defaults, profile)
+        ? defaults[profile]
+        : (defaults && defaults.auto ? defaults.auto : { style: 'auto', maxBatchSize: 'auto', proofreadingPasses: 'auto', parallelism: 'auto' });
+      const runtimeFallback = {
+        auditIntervalMs: tuning.auditIntervalMs,
+        mandatoryAuditIntervalMs: tuning.mandatoryAuditIntervalMs,
+        compressionThreshold: tuning.compressionThreshold,
+        contextFootprintLimit: tuning.contextFootprintLimit,
+        compressionCooldownMs: tuning.compressionCooldownMs
+      };
+      const safeModelPolicy = this.normalizeAgentModelPolicy(this.state.translationAgentModelPolicy, this.state.modelSelection);
+
       if (TranslationAgent && typeof TranslationAgent.previewResolvedSettings === 'function') {
-        const resolved = TranslationAgent.previewResolvedSettings({
-          settings: {
-            translationAgentProfile: profile,
-            translationAgentTuning: tuning
-          },
-          pageStats: null
-        });
+        let resolved = null;
+        try {
+          resolved = TranslationAgent.previewResolvedSettings({
+            settings: {
+              translationAgentProfile: profile,
+              translationAgentTuning: tuning,
+              translationAgentTools: this.normalizeAgentTools(this.state.translationAgentTools),
+              translationAgentModelPolicy: safeModelPolicy,
+              modelSelection: this.state.modelSelection,
+              translationCategoryMode: this.normalizeCategoryMode(this.state.translationCategoryMode),
+              translationCategoryList: this.normalizeCategoryList(this.state.translationCategoryList),
+              translationPageCacheEnabled: this.state.translationPageCacheEnabled !== false
+            },
+            pageStats: null,
+            blocks: null
+          });
+        } catch (_) {
+          resolved = null;
+        }
         return {
-          base: resolved && resolved.baseProfile ? resolved.baseProfile : (LOCAL_PROFILE_PRESETS[profile] || LOCAL_PROFILE_PRESETS.auto),
-          effective: resolved && resolved.effectiveProfile ? resolved.effectiveProfile : (LOCAL_PROFILE_PRESETS[profile] || LOCAL_PROFILE_PRESETS.auto),
-          tuning,
-          runtime: resolved && resolved.runtimeTuning ? resolved.runtimeTuning : {
-            auditIntervalMs: tuning.auditIntervalMs,
-            mandatoryAuditIntervalMs: tuning.mandatoryAuditIntervalMs,
-            compressionThreshold: tuning.compressionThreshold,
-            contextFootprintLimit: tuning.contextFootprintLimit,
-            compressionCooldownMs: tuning.compressionCooldownMs
-          }
+          base: resolved && resolved.baseProfile ? resolved.baseProfile : fallbackProfile,
+          effective: resolved && resolved.effectiveProfile ? resolved.effectiveProfile : fallbackProfile,
+          tuning: resolved && resolved.tuning ? resolved.tuning : tuning,
+          runtime: resolved && resolved.runtimeTuning ? resolved.runtimeTuning : runtimeFallback,
+          resolved: resolved && resolved.resolved ? resolved.resolved : null
         };
       }
 
-      const base = LOCAL_PROFILE_PRESETS[profile] || LOCAL_PROFILE_PRESETS.auto;
-      const effective = {
-        ...base,
-        style: tuning.styleOverride === 'auto' ? base.style : tuning.styleOverride,
-        maxBatchSize: Number.isFinite(Number(tuning.maxBatchSizeOverride)) ? tuning.maxBatchSizeOverride : base.maxBatchSize,
-        proofreadingPasses: Number.isFinite(Number(tuning.proofreadingPassesOverride)) ? tuning.proofreadingPassesOverride : base.proofreadingPasses,
-        parallelism: tuning.parallelismOverride === 'auto' ? base.parallelism : tuning.parallelismOverride
-      };
       return {
-        base,
-        effective,
+        base: fallbackProfile,
+        effective: fallbackProfile,
         tuning,
-        runtime: {
-          auditIntervalMs: tuning.auditIntervalMs,
-          mandatoryAuditIntervalMs: tuning.mandatoryAuditIntervalMs,
-          compressionThreshold: tuning.compressionThreshold,
-          contextFootprintLimit: tuning.contextFootprintLimit,
-          compressionCooldownMs: tuning.compressionCooldownMs
-        }
+        runtime: runtimeFallback,
+        resolved: null
       };
+    }
+
+    _formatEffectiveToolsPreview(resolved) {
+      if (!resolved || typeof resolved !== 'object') {
+        return '';
+      }
+      const requested = resolved.toolConfigRequested && typeof resolved.toolConfigRequested === 'object'
+        ? resolved.toolConfigRequested
+        : {};
+      const effective = resolved.toolConfigEffective && typeof resolved.toolConfigEffective === 'object'
+        ? resolved.toolConfigEffective
+        : {};
+      const keys = AGENT_TOOLS
+        .map((item) => item.key)
+        .filter((key) => (
+          Object.prototype.hasOwnProperty.call(requested, key)
+          || Object.prototype.hasOwnProperty.call(effective, key)
+        ));
+      if (!keys.length) {
+        return '';
+      }
+      return keys.map((key) => {
+        const req = requested[key];
+        const reqNorm = req === 'on' || req === 'off' || req === 'auto' ? req : null;
+        const eff = effective[key];
+        const effNorm = eff === 'on' || eff === 'off' || eff === 'auto'
+          ? eff
+          : reqNorm;
+        if (reqNorm === 'auto' && effNorm && effNorm !== 'auto') {
+          return `${key}:auto->${effNorm}`;
+        }
+        if (effNorm) {
+          return `${key}:${effNorm}`;
+        }
+        return `${key}:n/a`;
+      }).join(', ');
     }
 
     _previewValue(preview, key) {
@@ -1863,12 +2010,38 @@
       })();
 
       const modelPolicy = this.normalizeAgentModelPolicy(this.state.translationAgentModelPolicy, this.state.modelSelection);
-      const preferenceText = modelPolicy.preference === 'smartest'
+      const runtimePolicy = agentState && agentState.modelPolicy
+        ? this.normalizeAgentModelPolicy(agentState.modelPolicy, modelPolicy)
+        : modelPolicy;
+      const preferenceText = runtimePolicy.preference === 'smartest'
         ? 'умные'
-        : modelPolicy.preference === 'cheapest'
+        : runtimePolicy.preference === 'cheapest'
           ? 'дешёвые'
           : 'без приоритета';
-      const modelText = `Модели: ${modelPolicy.mode === 'fixed' ? 'фикс.' : 'авто'} / ${preferenceText} / ${modelPolicy.speed ? 'скорость' : 'качество'}`;
+      const runtimePolicyText = `${runtimePolicy.mode === 'fixed' ? 'фикс.' : 'авто'} / ${preferenceText} / ${runtimePolicy.speed ? 'скорость' : 'качество'}`;
+      const modelDecision = entry && entry.modelDecision && typeof entry.modelDecision === 'object'
+        ? entry.modelDecision
+        : null;
+      const chosenModelSpec = modelDecision && typeof modelDecision.chosenModelSpec === 'string'
+        ? modelDecision.chosenModelSpec
+        : '';
+      const modelLimitsMap = this.state.modelLimitsBySpec && typeof this.state.modelLimitsBySpec === 'object'
+        ? this.state.modelLimitsBySpec
+        : {};
+      const limits = chosenModelSpec && modelLimitsMap[chosenModelSpec] && typeof modelLimitsMap[chosenModelSpec] === 'object'
+        ? modelLimitsMap[chosenModelSpec]
+        : null;
+      const modelText = chosenModelSpec
+        ? `Модели: ${chosenModelSpec} · ${runtimePolicyText}`
+        : `Модели: ${runtimePolicyText}`;
+      let modelTitle = 'Эффективная политика выбора модели для переводчика-агента';
+      if (chosenModelSpec) {
+        modelTitle = `Фактическая модель: ${chosenModelSpec}. Политика: ${runtimePolicyText}.`;
+        if (limits) {
+          const show = (value) => (value === null || value === undefined ? '—' : String(value));
+          modelTitle = `${modelTitle} RPM=${show(limits.remainingRequests)}/${show(limits.limitRequests)} до ${this._formatTimestamp(limits.resetRequestsAt)}; TPM=${show(limits.remainingTokens)}/${show(limits.limitTokens)} до ${this._formatTimestamp(limits.resetTokensAt)}; cooldown=${this._formatTimestamp(limits.cooldownUntilTs)}`;
+        }
+      }
       const cacheText = `Кэш: стр=${this.state.translationPageCacheEnabled ? 'вкл' : 'выкл'} · api=${this.state.translationApiCacheEnabled ? 'вкл' : 'выкл'}`;
 
       if (this.statusChipPipeline) {
@@ -1877,21 +2050,11 @@
       }
       if (this.statusChipModel) {
         this.statusChipModel.textContent = modelText;
-        this.statusChipModel.setAttribute('title', 'Эффективная политика выбора модели для переводчика-агента');
+        this.statusChipModel.setAttribute('title', modelTitle);
       }
       if (this.statusChipCache) {
         this.statusChipCache.textContent = cacheText;
         this.statusChipCache.setAttribute('title', 'Состояние кэширования перевода страницы и ответов API');
-      }
-
-      if (agentState && agentState.modelPolicy && this.statusChipModel) {
-        const runtimePolicy = this.normalizeAgentModelPolicy(agentState.modelPolicy, modelPolicy);
-        const runtimePreferenceText = runtimePolicy.preference === 'smartest'
-          ? 'умные'
-          : runtimePolicy.preference === 'cheapest'
-            ? 'дешёвые'
-            : 'без приоритета';
-        this.statusChipModel.textContent = `Модели: факт ${runtimePolicy.mode === 'fixed' ? 'фикс.' : 'авто'} / ${runtimePreferenceText} / ${runtimePolicy.speed ? 'скорость' : 'качество'}`;
       }
     }
 

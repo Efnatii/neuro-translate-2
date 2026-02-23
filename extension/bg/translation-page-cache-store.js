@@ -61,7 +61,9 @@
       categoryMode = 'all',
       categories = [],
       toolMode = {},
-      contextSummary = ''
+      contextSummary = '',
+      memoryMap = null,
+      coverage = null
     } = {}) {
       const cacheKey = this.buildKey({ url, targetLang });
       if (!signature || !Array.isArray(items) || !items.length) {
@@ -79,9 +81,13 @@
         return null;
       }
 
+      const normalizedMemoryMap = this._sanitizeMemoryMap(memoryMap);
+      const normalizedCoverage = this._normalizeCoverage(coverage, categories);
+
       const now = Date.now();
       const snapshot = await this.getSnapshot();
-      snapshot.translationPageCache[cacheKey] = {
+      const nextEntry = {
+        v: 2,
         key: cacheKey,
         url: this.normalizeUrl(url),
         targetLang: typeof targetLang === 'string' && targetLang ? targetLang : 'ru',
@@ -97,6 +103,13 @@
         createdAt: now,
         updatedAt: now
       };
+      if (normalizedMemoryMap) {
+        nextEntry.memoryMap = normalizedMemoryMap;
+      }
+      if (normalizedCoverage) {
+        nextEntry.coverage = normalizedCoverage;
+      }
+      snapshot.translationPageCache[cacheKey] = nextEntry;
 
       this._pruneEntries(snapshot.translationPageCache, now);
       await this.storageSet({ translationPageCache: snapshot.translationPageCache });
@@ -154,8 +167,49 @@
           delete map[item.key];
         });
     }
+
+    _sanitizeMemoryMap(memoryMap) {
+      if (!memoryMap || typeof memoryMap !== 'object' || Array.isArray(memoryMap)) {
+        return null;
+      }
+      const out = {};
+      const keys = Object.keys(memoryMap).slice(0, 3000);
+      keys.forEach((key) => {
+        if (!key) {
+          return;
+        }
+        const value = memoryMap[key];
+        if (typeof value !== 'string' || !value) {
+          return;
+        }
+        out[key] = value.slice(0, 2000);
+      });
+      return Object.keys(out).length ? out : null;
+    }
+
+    _normalizeCoverage(coverage, categories) {
+      const source = coverage && typeof coverage === 'object' ? coverage : null;
+      const categorySource = source && Array.isArray(source.categories)
+        ? source.categories
+        : (Array.isArray(categories) ? categories : []);
+      const normalizedCategories = [];
+      categorySource.forEach((item) => {
+        const category = typeof item === 'string' ? item.trim().toLowerCase() : '';
+        if (!category || normalizedCategories.includes(category)) {
+          return;
+        }
+        normalizedCategories.push(category);
+      });
+      const hasCoverage = source !== null || normalizedCategories.length > 0;
+      if (!hasCoverage) {
+        return null;
+      }
+      return {
+        categories: normalizedCategories.slice(0, 24),
+        isFull: Boolean(source && source.isFull === true)
+      };
+    }
   }
 
   NT.TranslationPageCacheStore = TranslationPageCacheStore;
 })(globalThis);
-

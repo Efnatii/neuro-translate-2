@@ -12,7 +12,7 @@
         <p class="debug__subtitle" data-field="site">Сайт: —</p>
       </header>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="progress" open>
         <summary title="Текущий агрегированный прогресс по активному переводу">Прогресс и общий статус</summary>
         <div class="debug__status">
           <div class="debug__label">Прогресс</div>
@@ -24,7 +24,7 @@
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="modelDecision" open>
         <summary title="Последнее решение маршрутизатора моделей">Решение по модели</summary>
         <div class="debug__status">
           <div class="debug__row"><span>Политика</span><span data-field="decision-policy">—</span></div>
@@ -33,7 +33,7 @@
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="job" open>
         <summary title="Состояние текущей или последней задачи перевода">Задача перевода</summary>
         <div class="debug__status">
           <div class="debug__row"><span>ID задачи</span><span data-field="translation-job-id">—</span></div>
@@ -44,7 +44,7 @@
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="agent" open>
         <summary title="Подробное состояние переводчика-агента">Состояние агента</summary>
         <div class="debug__status">
           <div class="debug__row"><span>Фаза</span><span data-field="agent-phase">—</span></div>
@@ -60,14 +60,14 @@
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="diff" open>
         <summary title="Недавние изменения текста на странице">Изменения текста</summary>
         <div class="debug__status">
           <div class="debug__row"><span>Последние изменения</span><div data-field="diff-list" class="debug__list"></div></div>
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="benchmarks" open>
         <summary title="Результаты внутренних бенчмарков моделей">Бенчмарки моделей</summary>
         <div class="debug__status">
           <div class="debug__row"><span>Состояние</span><span data-field="bench-status">—</span></div>
@@ -86,7 +86,7 @@
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="limits" open>
         <summary title="Текущие лимиты и охлаждения по моделям">Лимиты запросов/токенов</summary>
         <div class="debug__status">
           <div class="debug__row"><span>Текущая модель</span><span data-field="rate-current-model">—</span></div>
@@ -97,7 +97,7 @@
         </div>
       </details>
 
-      <details class="debug__section" open>
+      <details class="debug__section" data-section="events" open>
         <summary title="Журнал событий по UI/BG/AI">События</summary>
         <div class="debug__status">
           <div class="debug__controls">

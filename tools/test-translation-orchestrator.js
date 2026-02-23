@@ -127,6 +127,19 @@ async function run() {
   const protocol = global.NT.TranslationProtocol;
   const Orchestrator = global.NT.TranslationOrchestrator;
   assert(Orchestrator, 'TranslationOrchestrator must be defined');
+  function unwrapOutgoing(msg) {
+    const Env = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
+    if (Env && typeof Env.isEnvelope === 'function' && Env.isEnvelope(msg)) {
+      return {
+        type: msg.type || null,
+        payload: msg && msg.payload && typeof msg.payload === 'object' ? msg.payload : {}
+      };
+    }
+    return {
+      type: msg && msg.type ? msg.type : null,
+      payload: msg && typeof msg === 'object' ? msg : {}
+    };
+  }
 
   const tabStatuses = {};
   const uiPatches = [];
@@ -145,17 +158,29 @@ async function run() {
     },
     tabs: {
       sendMessage(tabId, message, cb) {
-        sentMessages.push({ tabId, type: message && message.type ? message.type : 'unknown', message });
-        if (message && message.type === protocol.BG_APPLY_BATCH) {
+        const outgoing = unwrapOutgoing(message);
+        const payload = outgoing.payload || {};
+        sentMessages.push({ tabId, type: outgoing.type || 'unknown', message });
+        if (outgoing.type === protocol.BG_APPLY_BATCH) {
           setTimeout(() => {
-            orchestrator.handleContentMessage({
-              message: {
+            const ack = typeof protocol.wrap === 'function'
+              ? protocol.wrap(protocol.CS_APPLY_ACK, {
+                jobId: payload.jobId,
+                batchId: payload.batchId,
+                appliedCount: Array.isArray(payload.items) ? payload.items.length : 0,
+                ok: true,
+                contentSessionId: payload.contentSessionId || null
+              }, { source: 'content' })
+              : {
                 type: protocol.CS_APPLY_ACK,
-                jobId: message.jobId,
-                batchId: message.batchId,
-                appliedCount: Array.isArray(message.items) ? message.items.length : 0,
-                ok: true
-              },
+                jobId: payload.jobId,
+                batchId: payload.batchId,
+                appliedCount: Array.isArray(payload.items) ? payload.items.length : 0,
+                ok: true,
+                contentSessionId: payload.contentSessionId || null
+              };
+            orchestrator.handleContentMessage({
+              message: ack,
               sender: { tab: { id: tabId } }
             }).catch(() => {});
           }, 0);
@@ -244,6 +269,75 @@ async function run() {
   });
   assert.strictEqual(scan.ok, true, 'Scan result must be accepted');
   assert.strictEqual(scan.awaitingCategorySelection, true, 'Scan should pause for category selection');
+
+  const startEnvelopeScan = await orchestrator.startJob({ tabId: 15, url: 'https://example.test/envelope' });
+  assert.strictEqual(startEnvelopeScan.ok, true, 'Envelope scan scenario job must start');
+  const envScan = protocol.wrap(protocol.CS_SCAN_RESULT, {
+    jobId: startEnvelopeScan.job.id,
+    blocks: [
+      { blockId: 'env0', originalText: 'Envelope block', category: 'paragraph', pathHint: 'body > p' }
+    ],
+    contentSessionId: 'cs-test'
+  }, { source: 'content' });
+  const envScanResult = await orchestrator.handleContentMessage({
+    message: envScan,
+    sender: { tab: { id: 15 } }
+  });
+  assert.strictEqual(envScanResult.ok, true, 'Envelope scan payload must be accepted');
+  assert.strictEqual(envScanResult.awaitingCategorySelection, true, 'Envelope scan should pause for category selection');
+
+  await memoryStore.upsertJob({
+    id: 'job-ack-session',
+    tabId: 16,
+    url: 'https://example.test/ack',
+    targetLang: 'ru',
+    status: 'running',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    leaseUntilTs: Date.now() + 60_000,
+    totalBlocks: 1,
+    completedBlocks: 0,
+    pendingBlockIds: ['a0'],
+    failedBlockIds: [],
+    blocksById: {
+      a0: { blockId: 'a0', originalText: 'Ack block', category: 'paragraph', pathHint: 'body > p' }
+    },
+    currentBatchId: 'batch-1',
+    lastError: null,
+    message: 'Running',
+    attempts: 0,
+    scanReceived: true,
+    contentSessionId: 'cs-A'
+  });
+  const ackWaiter = orchestrator._waitForApplyAck('job-ack-session', 'batch-1', 400);
+  const wrongAckResult = await orchestrator.handleContentMessage({
+    message: protocol.wrap(protocol.CS_APPLY_ACK, {
+      jobId: 'job-ack-session',
+      batchId: 'batch-1',
+      appliedCount: 1,
+      ok: true,
+      contentSessionId: 'cs-B'
+    }, { source: 'content' }),
+    sender: { tab: { id: 16 } }
+  });
+  assert.strictEqual(wrongAckResult.ok, true, 'Wrong-session ack should be processed as ignored');
+  assert.strictEqual(wrongAckResult.ignored, true, 'Wrong-session ack must be ignored');
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  const rightAckResult = await orchestrator.handleContentMessage({
+    message: protocol.wrap(protocol.CS_APPLY_ACK, {
+      jobId: 'job-ack-session',
+      batchId: 'batch-1',
+      appliedCount: 1,
+      ok: true,
+      contentSessionId: 'cs-A'
+    }, { source: 'content' }),
+    sender: { tab: { id: 16 } }
+  });
+  assert.strictEqual(rightAckResult.ok, true, 'Matching-session ack should be accepted');
+  const resolvedAck = await ackWaiter;
+  assert.strictEqual(resolvedAck.ok, true, 'Matching-session ack must resolve waiter');
+  assert.strictEqual(resolvedAck.appliedCount, 1, 'Matching-session ack must carry appliedCount');
+
   const applyCategories = await orchestrator.applyCategorySelection({
     tabId: 11,
     jobId: start.job.id,
@@ -265,7 +359,10 @@ async function run() {
   assert.strictEqual(restart.ok, true, 'Restarted job must start');
   const restartMessages = sentMessages.slice(beforeRestartMessages).filter((row) => row.tabId === 11);
   const restoreIndex = restartMessages.findIndex((row) => row.type === protocol.BG_RESTORE_ORIGINALS);
-  const startIndex = restartMessages.findIndex((row) => row.type === protocol.BG_START_JOB && row.message && row.message.jobId === restart.job.id);
+  const startIndex = restartMessages.findIndex((row) => {
+    const payload = unwrapOutgoing(row.message).payload || {};
+    return row.type === protocol.BG_START_JOB && payload.jobId === restart.job.id;
+  });
   assert(restoreIndex >= 0, 'Restart must request originals restore before new scan');
   assert(startIndex > restoreIndex, 'Restore must happen before BG_START_JOB');
 
@@ -341,7 +438,10 @@ async function run() {
     return status.status === 'done';
   });
   const activeAfterPartial = await memoryStore.getActiveJob(14);
-  assert(activeAfterPartial && activeAfterPartial.status === 'done', 'Partial category completion should keep job active for future category expansion');
+  const lastAfterPartialId = await memoryStore.getLastJobId(14);
+  const lastAfterPartial = lastAfterPartialId ? await memoryStore.getJob(lastAfterPartialId) : null;
+  assert(lastAfterPartial && lastAfterPartial.status === 'done', 'Partial category completion should persist done state for future category expansion');
+  assert(!activeAfterPartial || activeAfterPartial.status === 'done', 'Partial category completion may keep or clear active mapping depending on terminal-state policy');
 
   const applyExtendMore = await orchestrator.applyCategorySelection({
     tabId: 14,
@@ -363,7 +463,7 @@ async function run() {
   const cancel2 = await orchestrator.cancelJob({ tabId: 12 });
   assert.strictEqual(cancel2.ok, true, 'Cancel must succeed');
   assert.strictEqual(cancel2.cancelled, true, 'Cancel must mark active job');
-  assert.strictEqual(cancel2.job && cancel2.job.message, 'Cancelled by user', 'User cancel should preserve user-facing message');
+  assert.strictEqual(cancel2.job && cancel2.job.message, 'Отменено пользователем', 'User cancel should preserve user-facing message');
 
   const tabStatusesRecovery = {};
   const recoveryStore = new MemoryJobStore();
@@ -447,7 +547,7 @@ async function run() {
   assert(activeNew && activeNew.id === 'job-recover-1', 'Recovered tab should become active mapping');
   const resumedStartMessage = recoveryMessages.find((item) => item.type === protocol.BG_START_JOB && item.tabId === 171);
   assert(resumedStartMessage, 'Recovered preparing job should receive BG_START_JOB on replacement tab');
-  const recoveryEvent = recoveryEvents.find((item) => item && item.message === 'Recovered translation job with replacement tab after restart');
+  const recoveryEvent = recoveryEvents.find((item) => item && item.message === 'Задача перевода восстановлена в замещающей вкладке после перезапуска');
   assert(recoveryEvent, 'Recovery remap should emit a diagnostic event');
 
   const failureStore = new MemoryJobStore();

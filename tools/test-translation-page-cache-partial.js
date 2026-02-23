@@ -111,8 +111,7 @@ class MemoryPageCacheStore {
   }
 
   async putEntry(entry = {}) {
-    const { url, targetLang } = entry;
-    const key = this.buildKey({ url, targetLang });
+    const key = this.buildKey({ url: entry.url, targetLang: entry.targetLang });
     this.map[key] = {
       ...(entry && typeof entry === 'object' ? entry : {}),
       key,
@@ -144,6 +143,7 @@ async function run() {
   const protocol = global.NT.TranslationProtocol;
   const Orchestrator = global.NT.TranslationOrchestrator;
   assert(Orchestrator, 'TranslationOrchestrator must be defined');
+
   function unwrapOutgoing(msg) {
     const Env = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
     if (Env && typeof Env.isEnvelope === 'function' && Env.isEnvelope(msg)) {
@@ -257,79 +257,102 @@ async function run() {
     eventLogFn: () => {}
   });
 
-  const blocks = [
-    { blockId: 'c0', originalText: 'Cached hello', pathHint: 'body > p:nth-of-type(1)', category: 'paragraph' },
-    { blockId: 'c1', originalText: 'Cached world', pathHint: 'body > p:nth-of-type(2)', category: 'paragraph' }
+  const blocksScan1 = [
+    { blockId: 'p0', originalText: 'Hello', category: 'paragraph', pathHint: 'body > p:nth-of-type(1)' },
+    { blockId: 'p1', originalText: 'World', category: 'paragraph', pathHint: 'body > p:nth-of-type(2)' },
+    { blockId: 'b0', originalText: 'Buy', category: 'button', pathHint: 'body > button:nth-of-type(1)' }
   ];
 
-  const startFirst = await orchestrator.startJob({ tabId: 51, url: 'https://cache.example.test/article?x=1' });
-  assert.strictEqual(startFirst.ok, true, 'First job should start');
-  const firstScan = await orchestrator.handleContentMessage({
+  const start1 = await orchestrator.startJob({ tabId: 61, url: 'https://cache.example.test/partial?run=1' });
+  assert.strictEqual(start1.ok, true, 'First partial-cache job should start');
+  const scan1 = await orchestrator.handleContentMessage({
     message: {
       type: protocol.CS_SCAN_RESULT,
-      jobId: startFirst.job.id,
-      blocks
+      jobId: start1.job.id,
+      blocks: blocksScan1
     },
-    sender: { tab: { id: 51 } }
+    sender: { tab: { id: 61 } }
   });
-  assert.strictEqual(firstScan.ok, true, 'First scan should be accepted');
-  assert.strictEqual(firstScan.awaitingCategorySelection, true, 'First scan should wait for category selection');
-  const firstSelect = await orchestrator.applyCategorySelection({
-    tabId: 51,
-    jobId: startFirst.job.id,
-    categories: Array.isArray(firstScan.availableCategories) && firstScan.availableCategories.length
-      ? firstScan.availableCategories
-      : ['paragraph']
-  });
-  assert.strictEqual(firstSelect.ok, true, 'First category selection should start translation');
-  await waitFor(() => (statuses[51] || {}).status === 'done');
-  assert(llmCalls >= 1, 'First run should call translation model');
+  assert.strictEqual(scan1.ok, true, 'First scan should be accepted');
+  assert(Array.isArray(scan1.availableCategories) && scan1.availableCategories.includes('paragraph') && scan1.availableCategories.includes('button'), 'First scan should expose paragraph/button categories');
 
-  const firstCache = await pageCacheStore.getEntry({
-    url: 'https://cache.example.test/article?x=1',
+  const firstSelect = await orchestrator.applyCategorySelection({
+    tabId: 61,
+    jobId: start1.job.id,
+    categories: ['paragraph']
+  });
+  assert.strictEqual(firstSelect.ok, true, 'Selecting paragraph category should succeed');
+  await waitFor(() => (statuses[61] || {}).status === 'done');
+  assert(llmCalls >= 1, 'First run should call LLM for paragraph translation');
+
+  const firstEntry = await pageCacheStore.getEntry({
+    url: 'https://cache.example.test/partial?run=1',
     targetLang: 'ru'
   });
-  assert(
-    firstCache && (
-      (Array.isArray(firstCache.items) && firstCache.items.length === 2)
-      || (firstCache.memoryMap && typeof firstCache.memoryMap === 'object' && Object.keys(firstCache.memoryMap).length > 0)
-    ),
-    'First run should persist page cache entry'
-  );
+  assert(firstEntry, 'Partial run should store page cache entry');
+  assert(firstEntry.coverage && Array.isArray(firstEntry.coverage.categories) && firstEntry.coverage.categories.includes('paragraph'), 'Cache coverage should include paragraph');
+  assert(firstEntry.coverage && firstEntry.coverage.isFull === false, 'Partial cache coverage should be marked as non-full');
 
-  const llmCallsBeforeSecond = llmCalls;
-  const startSecond = await orchestrator.startJob({ tabId: 51, url: 'https://cache.example.test/article?x=2' });
-  assert.strictEqual(startSecond.ok, true, 'Second job should start');
-  const secondScan = await orchestrator.handleContentMessage({
+  const llmBeforeSecond = llmCalls;
+  const blocksScan2 = [
+    { blockId: 'pA', originalText: 'Hello', category: 'paragraph', pathHint: 'body > p:nth-of-type(1)' },
+    { blockId: 'pB', originalText: 'World', category: 'paragraph', pathHint: 'body > p:nth-of-type(2)' },
+    { blockId: 'bZ', originalText: 'Buy', category: 'button', pathHint: 'body > button:nth-of-type(1)' }
+  ];
+
+  const start2 = await orchestrator.startJob({ tabId: 61, url: 'https://cache.example.test/partial?run=2' });
+  assert.strictEqual(start2.ok, true, 'Second partial-cache job should start');
+  const scan2 = await orchestrator.handleContentMessage({
     message: {
       type: protocol.CS_SCAN_RESULT,
-      jobId: startSecond.job.id,
-      blocks
+      jobId: start2.job.id,
+      blocks: blocksScan2
     },
-    sender: { tab: { id: 51 } }
+    sender: { tab: { id: 61 } }
   });
-  assert.strictEqual(secondScan.ok, true, 'Second scan should be accepted');
-  assert.strictEqual(secondScan.awaitingCategorySelection, true, 'Second scan should wait for category selection');
+  assert.strictEqual(scan2.ok, true, 'Second scan should be accepted');
+
   const secondSelect = await orchestrator.applyCategorySelection({
-    tabId: 51,
-    jobId: startSecond.job.id,
-    categories: Array.isArray(secondScan.availableCategories) && secondScan.availableCategories.length
-      ? secondScan.availableCategories
-      : ['paragraph']
+    tabId: 61,
+    jobId: start2.job.id,
+    categories: ['paragraph']
   });
-  assert.strictEqual(secondSelect.ok, true, 'Second category selection should be accepted');
-  assert.strictEqual(secondSelect.fromCache, true, 'Second run should indicate cache usage');
-  await waitFor(() => (statuses[51] || {}).status === 'done');
-  assert.strictEqual(llmCalls, llmCallsBeforeSecond, 'Second run should not call LLM when cache signature matches');
+  assert.strictEqual(secondSelect.ok, true, 'Second paragraph selection should succeed');
+  assert.strictEqual(secondSelect.fromCache, true, 'Second paragraph selection should be restored from cache');
+  await waitFor(() => (statuses[61] || {}).status === 'done');
+  assert.strictEqual(llmCalls, llmBeforeSecond, 'Second run with changed blockId should not call LLM for paragraph cache restore');
 
   const cacheApply = sentMessages.filter((row) => {
     const outgoing = unwrapOutgoing(row.message);
     const payload = outgoing.payload || {};
     return outgoing.type === protocol.BG_APPLY_BATCH && String(payload.batchId || '').includes(':cache:');
   });
-  assert(cacheApply.length >= 1, 'Second run should apply at least one cache batch');
+  assert(cacheApply.length >= 1, 'Cache restore should send BG_APPLY_BATCH with cache prefix');
 
-  console.log('PASS: translation page cache');
+  const llmBeforeThird = llmCalls;
+  const start3 = await orchestrator.startJob({ tabId: 61, url: 'https://cache.example.test/partial?run=3' });
+  assert.strictEqual(start3.ok, true, 'Third partial-cache job should start');
+  const scan3 = await orchestrator.handleContentMessage({
+    message: {
+      type: protocol.CS_SCAN_RESULT,
+      jobId: start3.job.id,
+      blocks: blocksScan2
+    },
+    sender: { tab: { id: 61 } }
+  });
+  assert.strictEqual(scan3.ok, true, 'Third scan should be accepted');
+
+  const thirdSelect = await orchestrator.applyCategorySelection({
+    tabId: 61,
+    jobId: start3.job.id,
+    categories: ['button']
+  });
+  assert.strictEqual(thirdSelect.ok, true, 'Third selection for button should succeed');
+  assert.notStrictEqual(thirdSelect.fromCache, true, 'Button-only selection should not be fully restored from cache');
+  await waitFor(() => (statuses[61] || {}).status === 'done');
+  assert(llmCalls > llmBeforeThird, 'Button translation should call LLM because it was not cached');
+
+  console.log('PASS: translation page cache partial');
 }
 
 run().catch((error) => {

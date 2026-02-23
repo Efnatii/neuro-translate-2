@@ -46,6 +46,7 @@
 
       this.BATCH_SIZE = 8;
       this.JOB_LEASE_MS = 2 * 60 * 1000;
+      this.MAX_JOB_AGE_MS = 7 * 24 * 60 * 60 * 1000;
       this.APPLY_ACK_TIMEOUT_MS = 8000;
       this.processingJobs = new Set();
       this.pendingApplyAcks = new Map();
@@ -60,11 +61,11 @@
     async startJob({ tabId, url, targetLang = 'ru', force = false } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
-        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'tabId is required' } };
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
       }
 
       if (!(await this._isPipelineEnabled())) {
-        return { ok: false, error: { code: 'PIPELINE_DISABLED', message: 'translationPipelineEnabled=false' } };
+        return { ok: false, error: { code: 'PIPELINE_DISABLED', message: 'Пайплайн перевода отключён (translationPipelineEnabled=false)' } };
       }
 
       const activeJob = await this.jobStore.getActiveJob(numericTabId);
@@ -97,7 +98,7 @@
         status: 'preparing',
         createdAt: now,
         updatedAt: now,
-        leaseUntilTs: now + this.JOB_LEASE_MS,
+        leaseUntilTs: now + this._leaseMsForStatus('preparing'),
         totalBlocks: 0,
         completedBlocks: 0,
         pendingBlockIds: [],
@@ -105,7 +106,7 @@
         blocksById: {},
         currentBatchId: null,
         lastError: null,
-        message: 'Scanning page content',
+        message: 'Сканирую содержимое страницы',
         attempts: 0,
         scanReceived: false,
         forceTranslate: Boolean(force),
@@ -113,6 +114,8 @@
         cacheKey: null,
         availableCategories: [],
         selectedCategories: [],
+        contentSessionId: null,
+        categorySelectionConfirmed: false,
         agentState: null,
         recentDiffItems: [],
         translationMemoryBySource: {},
@@ -125,11 +128,12 @@
       };
 
       await this._saveJob(job, { setActive: true });
-      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_START : 'translation.start', 'Translation job started', {
+      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_START : 'translation.start', 'Задача перевода запущена', {
         tabId: numericTabId,
         jobId: job.id,
         status: job.status
       });
+      await this._syncVisibilityToContent(numericTabId, { contentSessionId: null }).catch(() => {});
 
       const protocol = NT.TranslationProtocol || {};
       const sent = await this._sendToTab(numericTabId, {
@@ -141,9 +145,9 @@
       if (!sent.ok) {
         await this._markFailed(job, {
           code: 'CONTENT_RUNTIME_UNREACHABLE',
-          message: sent.error && sent.error.message ? sent.error.message : 'Failed to start content runtime'
+          message: sent.error && sent.error.message ? sent.error.message : 'Не удалось запустить контент-рантайм'
         });
-        return { ok: false, error: { code: 'CONTENT_RUNTIME_UNREACHABLE', message: 'Failed to start content runtime' } };
+        return { ok: false, error: { code: 'CONTENT_RUNTIME_UNREACHABLE', message: 'Не удалось запустить контент-рантайм' } };
       }
 
       return { ok: true, job: this._toJobSummary(job) };
@@ -152,7 +156,7 @@
     async cancelJob({ tabId, reason = 'USER_CANCELLED' } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
-        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'tabId is required' } };
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
       }
       const job = await this.jobStore.getActiveJob(numericTabId);
       if (!job) {
@@ -162,24 +166,24 @@
 
       job.status = 'cancelled';
       if (reason === 'REPLACED_BY_NEW_JOB') {
-        job.message = 'Cancelled: replaced by a new job';
+        job.message = 'Отменено: заменено новой задачей';
       } else if (reason === 'TAB_CLOSED') {
-        job.message = 'Cancelled: tab closed';
+        job.message = 'Отменено: вкладка закрыта';
       } else if (reason === 'USER_CLEAR') {
-        job.message = 'Cancelled: clearing translation data';
+        job.message = 'Отменено: очистка данных перевода';
       } else {
-        job.message = 'Cancelled by user';
+        job.message = 'Отменено пользователем';
       }
       job.lastError = (reason === 'REPLACED_BY_NEW_JOB' || reason === 'TAB_CLOSED')
         ? null
-        : { code: reason, message: 'Translation cancelled' };
+        : { code: reason, message: 'Перевод отменён' };
       job.currentBatchId = null;
 
       await this._saveJob(job, { clearActive: true });
 
       const protocol = NT.TranslationProtocol || {};
       await this._sendToTab(numericTabId, { type: protocol.BG_CANCEL_JOB, jobId: job.id });
-      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_CANCEL : 'translation.cancel', 'Translation job cancelled', {
+      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_CANCEL : 'translation.cancel', 'Задача перевода отменена', {
         tabId: numericTabId,
         jobId: job.id,
         reason
@@ -191,14 +195,37 @@
     async applyCategorySelection({ tabId, categories, jobId = null } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
-        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'tabId is required' } };
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
       }
-      const job = await this.jobStore.getActiveJob(numericTabId);
+      let job = await this.jobStore.getActiveJob(numericTabId);
+      if (!job && jobId) {
+        try {
+          const byId = await this.jobStore.getJob(jobId);
+          if (byId && Number(byId.tabId) === numericTabId) {
+            job = byId;
+          }
+        } catch (_) {
+          // best-effort
+        }
+      }
+      if (!job && this.jobStore && typeof this.jobStore.getLastJobId === 'function') {
+        try {
+          const lastJobId = await this.jobStore.getLastJobId(numericTabId);
+          if (lastJobId) {
+            const lastJob = await this.jobStore.getJob(lastJobId);
+            if (lastJob && Number(lastJob.tabId) === numericTabId) {
+              job = lastJob;
+            }
+          }
+        } catch (_) {
+          // best-effort
+        }
+      }
       if (!job) {
-        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'No active job to apply categories' } };
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Нет задачи для применения категорий' } };
       }
       if (jobId && job.id !== jobId) {
-        return { ok: false, error: { code: 'JOB_MISMATCH', message: 'Job id mismatch for category selection' } };
+        return { ok: false, error: { code: 'JOB_MISMATCH', message: 'Несовпадение jobId при выборе категорий' } };
       }
       const canExtendFromDone = job.status === 'done' && this._shouldKeepJobActiveForCategoryExtensions(job);
       if (job.status !== 'awaiting_categories' && !canExtendFromDone) {
@@ -206,7 +233,7 @@
           ok: false,
           error: {
             code: 'INVALID_JOB_STATE',
-            message: `Category selection is accepted only in awaiting_categories or extendable done state (current=${job.status || 'unknown'})`
+            message: `Выбор категорий доступен только в awaiting_categories или расширяемом done (текущий=${job.status || 'unknown'})`
           }
         };
       }
@@ -221,12 +248,12 @@
         });
       }
       if (!selectedCategories.length) {
-        return { ok: false, error: { code: 'NO_CATEGORIES_SELECTED', message: 'Select at least one category to continue' } };
+        return { ok: false, error: { code: 'NO_CATEGORIES_SELECTED', message: 'Выберите хотя бы одну категорию' } };
       }
 
       const selectedBlockIds = this._filterBlockIdsByCategories(job.blocksById, selectedCategories);
       if (!selectedBlockIds.length) {
-        return { ok: false, error: { code: 'NO_BLOCKS_FOR_SELECTED_CATEGORIES', message: 'No blocks match selected categories' } };
+        return { ok: false, error: { code: 'NO_BLOCKS_FOR_SELECTED_CATEGORIES', message: 'Нет блоков для выбранных категорий' } };
       }
 
       const pendingBlockIds = [];
@@ -243,6 +270,7 @@
 
       job.availableCategories = availableCategories;
       job.selectedCategories = selectedCategories;
+      job.categorySelectionConfirmed = true;
       job.totalBlocks = selectedBlockIds.length;
       job.completedBlocks = completedBlocks;
       job.pendingBlockIds = pendingBlockIds;
@@ -265,8 +293,8 @@
       if (!pendingBlockIds.length) {
         job.status = 'done';
         job.message = keepActiveAfterDone
-          ? 'Requested categories are already translated. You can select additional categories.'
-          : 'Selected categories are already translated';
+          ? 'Запрошенные категории уже переведены. Можно выбрать дополнительные категории.'
+          : 'Выбранные категории уже переведены';
         if (this.translationAgent && job.agentState && typeof this.translationAgent.finalizeJob === 'function') {
           this.translationAgent.finalizeJob(job);
         }
@@ -275,29 +303,63 @@
       }
 
       job.status = 'running';
-      job.message = `Category selection applied: ${selectedCategories.join(', ')}`;
+      job.message = `Выбор категорий применён: ${selectedCategories.join(', ')}`;
       if (this.translationAgent && job.agentState && typeof this.translationAgent.markPhase === 'function') {
         this.translationAgent.markPhase(job, 'translating', job.message);
       }
 
       const settings = await this._readAgentSettings();
-      if (fullCategorySelection) {
-        const cachedApplied = await this._tryApplyCachedJob({ job, settings });
-        if (cachedApplied) {
-          await this._saveJob(job, { clearActive: true });
-          return { ok: true, job: this._toJobSummary(job), fromCache: true };
+      let cacheRes = { ok: false, fromCache: false };
+      if (settings.translationPageCacheEnabled !== false && !job.forceTranslate) {
+        cacheRes = await this._tryApplyCachedJob({ job, settings });
+        if (cacheRes && cacheRes.ok && cacheRes.fromCache) {
+          const refreshedSelectedBlockIds = this._filterBlockIdsByCategories(job.blocksById, job.selectedCategories);
+          const refreshedPending = [];
+          let refreshedCompleted = 0;
+          refreshedSelectedBlockIds.forEach((blockId) => {
+            const block = job.blocksById && job.blocksById[blockId] ? job.blocksById[blockId] : null;
+            const translatedText = block && typeof block.translatedText === 'string' ? block.translatedText : '';
+            if (translatedText) {
+              refreshedCompleted += 1;
+            } else {
+              refreshedPending.push(blockId);
+            }
+          });
+          job.totalBlocks = refreshedSelectedBlockIds.length;
+          job.completedBlocks = refreshedCompleted;
+          job.pendingBlockIds = refreshedPending;
+          job.failedBlockIds = Array.isArray(job.failedBlockIds)
+            ? job.failedBlockIds.filter((id) => refreshedSelectedBlockIds.includes(id))
+            : [];
+          if (!refreshedPending.length) {
+            const nowFullSelection = this._isFullCategorySelection(job.selectedCategories, job.availableCategories);
+            const nowKeepActive = !nowFullSelection;
+            job.status = 'done';
+            job.message = nowFullSelection
+              ? 'Выбранные категории восстановлены из кэша'
+              : 'Восстановлено из кэша для выбранных категорий. Можно добавить ещё категории.';
+            if (this.translationAgent && job.agentState && typeof this.translationAgent.finalizeJob === 'function') {
+              this.translationAgent.finalizeJob(job);
+            }
+            await this._saveJob(job, nowKeepActive ? { setActive: true } : { clearActive: true });
+            return { ok: true, job: this._toJobSummary(job), fromCache: true, canSelectMore: nowKeepActive };
+          }
+          job.message = 'Частично восстановлено из кэша; продолжаю перевод';
+          if (this.translationAgent && job.agentState && typeof this.translationAgent.markPhase === 'function') {
+            this.translationAgent.markPhase(job, 'cache_restore', job.message);
+          }
         }
       }
 
       await this._saveJob(job, { setActive: true });
       this._processJob(job.id).catch(() => {});
-      return { ok: true, job: this._toJobSummary(job), fromCache: false };
+      return { ok: true, job: this._toJobSummary(job), fromCache: Boolean(cacheRes && cacheRes.fromCache) };
     }
 
     async clearJobData({ tabId, includeCache = true } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
-        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'tabId is required' } };
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
       }
 
       const activeJob = await this.jobStore.getActiveJob(numericTabId);
@@ -308,6 +370,15 @@
       const lastJob = await this._getLastJobForTab(numericTabId);
       const protocol = NT.TranslationProtocol || {};
       await this._ensureContentRuntime(numericTabId);
+      this._recordRuntimeAction(lastJob, {
+        tool: 'pageRuntime',
+        status: 'warn',
+        message: 'content.restore_originals.sent',
+        meta: {
+          includeCache: Boolean(includeCache),
+          jobId: lastJob && lastJob.id ? lastJob.id : null
+        }
+      });
       await this._sendToTab(numericTabId, {
         type: protocol.BG_RESTORE_ORIGINALS,
         jobId: lastJob && lastJob.id ? lastJob.id : null
@@ -329,7 +400,7 @@
           total: 0,
           completed: 0,
           inProgress: 0,
-          message: 'Translation data cleared',
+          message: 'Данные перевода очищены',
           failedBlocksCount: 0,
           translationJobId: null,
           lastError: null,
@@ -343,7 +414,7 @@
         await this.jobStore.clearTabHistory(numericTabId);
       }
 
-      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_CANCEL : 'translation.cancel', 'Translation data cleared', {
+      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_CANCEL : 'translation.cancel', 'Данные перевода очищены', {
         tabId: numericTabId,
         cacheCleared
       });
@@ -364,14 +435,24 @@
     async setVisibility({ tabId, visible } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
-        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'tabId is required' } };
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
       }
 
       const protocol = NT.TranslationProtocol || {};
       await this._ensureContentRuntime(numericTabId);
+      let activeJob = null;
+      try {
+        activeJob = await this.jobStore.getActiveJob(numericTabId);
+      } catch (_) {
+        activeJob = null;
+      }
+      const contentSessionId = activeJob && typeof activeJob.contentSessionId === 'string' && activeJob.contentSessionId
+        ? activeJob.contentSessionId
+        : null;
       await this._sendToTab(numericTabId, {
         type: protocol.BG_SET_VISIBILITY,
-        visible: Boolean(visible)
+        visible: Boolean(visible),
+        ...(contentSessionId ? { contentSessionId } : {})
       });
       if (this.tabStateStore && typeof this.tabStateStore.upsertVisibility === 'function') {
         await this.tabStateStore.upsertVisibility(numericTabId, Boolean(visible));
@@ -379,33 +460,59 @@
       return { ok: true };
     }
 
+    async _resolveTabVisibility(tabId) {
+      try {
+        if (this.tabStateStore && typeof this.tabStateStore.getVisibility === 'function') {
+          return await this.tabStateStore.getVisibility(tabId);
+        }
+      } catch (_) {
+        // best-effort fallback below
+      }
+      return true;
+    }
+
+    async _syncVisibilityToContent(tabId, { contentSessionId = null } = {}) {
+      const protocol = NT.TranslationProtocol || {};
+      const visible = await this._resolveTabVisibility(tabId);
+      try {
+        await this._sendToTab(tabId, {
+          type: protocol.BG_SET_VISIBILITY,
+          visible,
+          ...(contentSessionId ? { contentSessionId } : {})
+        });
+      } catch (_) {
+        // best-effort
+      }
+      return visible;
+    }
+
     async retryFailed({ tabId, jobId } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
-        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'tabId is required' } };
+        return { ok: false, error: { code: 'INVALID_TAB_ID', message: 'Требуется tabId' } };
       }
 
       const sourceJob = jobId
         ? await this.jobStore.getJob(jobId)
         : await this._getLastJobForTab(numericTabId);
       if (!sourceJob) {
-        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'No job found for retry' } };
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача для повтора не найдена' } };
       }
       if (!Array.isArray(sourceJob.failedBlockIds) || !sourceJob.failedBlockIds.length) {
-        return { ok: false, error: { code: 'NO_FAILED_BLOCKS', message: 'No failed blocks to retry' } };
+        return { ok: false, error: { code: 'NO_FAILED_BLOCKS', message: 'Нет ошибочных блоков для повторной попытки' } };
       }
 
       const pendingBlockIds = sourceJob.failedBlockIds.slice();
       sourceJob.failedBlockIds = [];
       sourceJob.pendingBlockIds = pendingBlockIds;
       sourceJob.status = 'running';
-      sourceJob.message = 'Retrying failed blocks';
+      sourceJob.message = 'Повторяю ошибочные блоки';
       sourceJob.lastError = null;
       sourceJob.currentBatchId = null;
 
       await this._saveJob(sourceJob, { setActive: true });
       await this._ensureContentRuntime(numericTabId);
-      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Retrying failed translation blocks', {
+      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Повторно запускаю перевод ошибочных блоков', {
         tabId: numericTabId,
         jobId: sourceJob.id,
         blockCount: pendingBlockIds.length
@@ -422,17 +529,27 @@
           continue;
         }
         if (typeof job.leaseUntilTs === 'number' && job.leaseUntilTs < now) {
-          await this._markFailed(job, {
-            code: 'LEASE_EXPIRED',
-            message: 'Job lease expired after service-worker restart'
-          });
-          continue;
+          const hasCreatedAt = Number.isFinite(Number(job.createdAt));
+          const createdAt = hasCreatedAt ? Number(job.createdAt) : now;
+          const tooOld = hasCreatedAt && (now - createdAt > this.MAX_JOB_AGE_MS);
+          if (tooOld) {
+            await this._markFailed(job, {
+              code: 'JOB_TOO_OLD',
+              message: 'Задача слишком старая для восстановления после перезапуска'
+            });
+            continue;
+          }
+          job.status = 'preparing';
+          job.message = 'Восстановление после перезапуска; пересканирую страницу';
+          job.scanReceived = false;
+          job.currentBatchId = null;
+          await this._saveJob(job, { setActive: true });
         }
         const tabReady = await this._ensureJobTabReady(job);
         if (!tabReady.ok) {
           await this._markFailed(job, tabReady.error || {
             code: 'TAB_UNAVAILABLE_AFTER_RESTART',
-            message: 'Tab is unavailable after restart; cannot resume translation job'
+            message: 'Вкладка недоступна после перезапуска; продолжить задачу перевода нельзя'
           });
           continue;
         }
@@ -441,10 +558,13 @@
           if (!injected.ok) {
             await this._markFailed(job, {
               code: injected.error && injected.error.code ? injected.error.code : 'INJECT_FAILED',
-              message: injected.error && injected.error.message ? injected.error.message : 'Failed to re-inject content runtime after restart'
+              message: injected.error && injected.error.message ? injected.error.message : 'Не удалось повторно внедрить контент-рантайм после перезапуска'
             });
             continue;
           }
+          await this._syncVisibilityToContent(job.tabId, {
+            contentSessionId: job.contentSessionId || null
+          }).catch(() => {});
           const protocol = NT.TranslationProtocol || {};
           const sent = await this._sendToTab(job.tabId, {
             type: protocol.BG_START_JOB,
@@ -454,11 +574,11 @@
           if (!sent.ok) {
             await this._markFailed(job, {
               code: 'CONTENT_RUNTIME_UNREACHABLE',
-              message: sent.error && sent.error.message ? sent.error.message : 'Failed to resume preparing job after restart'
+              message: sent.error && sent.error.message ? sent.error.message : 'Не удалось возобновить подготовку задачи после перезапуска'
             });
             continue;
           }
-          this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Resumed translation job after restart', {
+          this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Задача перевода восстановлена после перезапуска', {
             tabId: job.tabId,
             jobId: job.id,
             status: job.status
@@ -470,11 +590,14 @@
           if (!injected.ok) {
             await this._markFailed(job, {
               code: injected.error && injected.error.code ? injected.error.code : 'INJECT_FAILED',
-              message: injected.error && injected.error.message ? injected.error.message : 'Failed to restore content runtime for running job'
+              message: injected.error && injected.error.message ? injected.error.message : 'Не удалось восстановить контент-рантайм для выполняемой задачи'
             });
             continue;
           }
-          this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Resuming running translation job after restart', {
+          await this._syncVisibilityToContent(job.tabId, {
+            contentSessionId: job.contentSessionId || null
+          }).catch(() => {});
+          this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Возобновляю выполнявшуюся задачу перевода после перезапуска', {
             tabId: job.tabId,
             jobId: job.id,
             status: job.status
@@ -489,25 +612,73 @@
       const tabId = sender && sender.tab && Number.isFinite(Number(sender.tab.id))
         ? Number(sender.tab.id)
         : null;
-      if (!message || !message.type || !protocol) {
-        return { ok: false, error: { code: 'INVALID_CONTENT_MESSAGE', message: 'Missing type' } };
+      let parsed = null;
+      if (protocol && typeof protocol.unwrap === 'function') {
+        try {
+          parsed = protocol.unwrap(message);
+        } catch (_) {
+          parsed = null;
+        }
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        parsed = {
+          type: message && message.type ? message.type : null,
+          payload: message,
+          meta: {},
+          envelopeId: null
+        };
+      }
+      const type = typeof parsed.type === 'string' ? parsed.type : null;
+      const msg = parsed && parsed.payload && typeof parsed.payload === 'object' ? parsed.payload : {};
+      if (!type || !protocol) {
+        return { ok: false, error: { code: 'INVALID_CONTENT_MESSAGE', message: 'Отсутствует тип сообщения' } };
       }
 
-      if (message.type === protocol.CS_READY) {
+      if (type === protocol.CS_READY) {
         if (tabId !== null) {
           const active = await this.jobStore.getActiveJob(tabId);
           if (active && (active.status === 'preparing' || active.status === 'running' || active.status === 'completing' || active.status === 'awaiting_categories')) {
+            if (msg && typeof msg.contentSessionId === 'string' && msg.contentSessionId) {
+              active.contentSessionId = msg.contentSessionId;
+            }
+            try {
+              const prefix = `${active.id}:`;
+              Array.from(this.pendingApplyAcks.keys()).forEach((key) => {
+                if (typeof key === 'string' && key.indexOf(prefix) === 0) {
+                  this.pendingApplyAcks.delete(key);
+                }
+              });
+            } catch (_) {
+              // best-effort cleanup
+            }
             active.status = 'preparing';
-            active.message = 'Content runtime reconnected; rescanning page';
+            active.message = 'Контент-скрипт переподключён; пересканирую страницу';
             active.scanReceived = false;
             active.currentBatchId = null;
+            active.reconnectCount = Number.isFinite(Number(active.reconnectCount))
+              ? Number(active.reconnectCount) + 1
+              : 1;
+            this._recordRuntimeAction(active, {
+              tool: 'pageRuntime',
+              status: 'warn',
+              message: 'content.rescan.requested',
+              meta: {
+                jobId: active.id,
+                reconnectCount: active.reconnectCount
+              }
+            });
             await this._saveJob(active, { setActive: true });
+            const sessionId = (msg && typeof msg.contentSessionId === 'string' && msg.contentSessionId)
+              ? msg.contentSessionId
+              : (active.contentSessionId || null);
+            await this._syncVisibilityToContent(tabId, { contentSessionId: sessionId }).catch(() => {});
             await this._sendToTab(tabId, {
               type: protocol.BG_START_JOB,
               jobId: active.id,
-              targetLang: active.targetLang || 'ru'
+              targetLang: active.targetLang || 'ru',
+              ...(sessionId ? { contentSessionId: sessionId } : {})
             });
-            this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Content runtime reconnected and job resumed', {
+            this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Контент-скрипт переподключён, задача возобновлена', {
               tabId,
               jobId: active.id
             });
@@ -515,36 +686,57 @@
         }
         return { ok: true };
       }
-      if (message.type === protocol.CS_SCAN_RESULT) {
-        return this._handleScanResult({ message, tabId });
+      if (type === protocol.CS_SCAN_RESULT) {
+        return this._handleScanResult({ message: msg, tabId });
       }
-      if (message.type === protocol.CS_APPLY_ACK) {
-        return this._handleApplyAck({ message, tabId });
+      if (type === protocol.CS_APPLY_ACK) {
+        return this._handleApplyAck({ message: msg, tabId });
       }
-      return { ok: false, error: { code: 'UNKNOWN_CONTENT_MESSAGE', message: `Unsupported type: ${message.type}` } };
+      return { ok: false, error: { code: 'UNKNOWN_CONTENT_MESSAGE', message: `Неподдерживаемый тип сообщения: ${type}` } };
     }
 
     async _handleScanResult({ message, tabId }) {
       const jobId = message && message.jobId ? message.jobId : null;
       if (!jobId) {
-        return { ok: false, error: { code: 'INVALID_SCAN_RESULT', message: 'jobId is required' } };
+        return { ok: false, error: { code: 'INVALID_SCAN_RESULT', message: 'Требуется jobId' } };
       }
       const job = await this.jobStore.getJob(jobId);
       if (!job) {
-        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: `Job not found: ${jobId}` } };
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: `Задача не найдена: ${jobId}` } };
       }
       if (tabId !== null && job.tabId !== tabId) {
-        return { ok: false, error: { code: 'TAB_MISMATCH', message: 'Scan result tab mismatch' } };
+        return { ok: false, error: { code: 'TAB_MISMATCH', message: 'Несовпадение вкладки в результате сканирования' } };
       }
-      if (job.status === 'cancelled' || job.status === 'failed' || job.status === 'done') {
+      if (message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
+        job.contentSessionId = message.contentSessionId;
+      }
+      if (this._isTerminalStatus(job.status)) {
         return { ok: true, ignored: true };
       }
 
       const normalized = this._normalizeBlocks(message.blocks);
       const settings = await this._readAgentSettings();
+      this._recordRuntimeAction(job, {
+        tool: 'pageRuntime',
+        status: 'ok',
+        message: 'content.scan.received',
+        meta: {
+          blockCount: normalized.length,
+          categories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice() : []
+        }
+      });
+      const resumeCandidate = job.categorySelectionConfirmed === true
+        && Array.isArray(job.selectedCategories)
+        && job.selectedCategories.length > 0;
+      if (resumeCandidate) {
+        const resumed = await this._resumeAfterReloadScan({ job, normalized, settings });
+        if (resumed) {
+          return resumed;
+        }
+      }
       const planningSettings = {
         ...settings,
-        translationCategoryMode: 'all',
+        translationCategoryMode: 'auto',
         translationCategoryList: []
       };
       const prepared = await this._prepareAgentJob({
@@ -552,6 +744,24 @@
         blocks: normalized,
         settings: planningSettings
       });
+      let latest = null;
+      try {
+        latest = await this.jobStore.getJob(job.id);
+      } catch (_) {
+        latest = null;
+      }
+      if (!latest) {
+        return { ok: true, ignored: true };
+      }
+      if (this._isTerminalStatus(latest.status)) {
+        return { ok: true, ignored: true };
+      }
+      if (latest.tabId !== job.tabId) {
+        return { ok: true, ignored: true };
+      }
+      if (message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
+        latest.contentSessionId = message.contentSessionId;
+      }
       const effectiveBlocks = normalized.slice();
       const blocksById = {};
       effectiveBlocks.forEach((item) => {
@@ -564,39 +774,39 @@
         availableCategories
       );
 
-      job.scanReceived = true;
-      job.blocksById = blocksById;
-      job.totalBlocks = 0;
-      job.pendingBlockIds = [];
-      job.failedBlockIds = [];
-      job.completedBlocks = 0;
-      job.status = effectiveBlocks.length ? 'awaiting_categories' : 'done';
-      job.message = effectiveBlocks.length
-        ? `Planning complete (${effectiveBlocks.length} blocks). Select categories to translate.`
-        : 'No translatable blocks found';
-      job.pageSignature = this._buildPageSignature(effectiveBlocks);
-      job.cacheKey = this.pageCacheStore
-        ? this.pageCacheStore.buildKey({ url: job.url || '', targetLang: job.targetLang || 'ru' })
+      latest.scanReceived = true;
+      latest.blocksById = blocksById;
+      latest.totalBlocks = 0;
+      latest.pendingBlockIds = [];
+      latest.failedBlockIds = [];
+      latest.completedBlocks = 0;
+      latest.status = effectiveBlocks.length ? 'awaiting_categories' : 'done';
+      latest.message = effectiveBlocks.length
+        ? `Планирование завершено (${effectiveBlocks.length} блоков). Выберите категории для перевода.`
+        : 'Переводимых блоков не найдено';
+      latest.pageSignature = this._buildPageSignature(effectiveBlocks);
+      latest.cacheKey = this.pageCacheStore
+        ? this.pageCacheStore.buildKey({ url: latest.url || '', targetLang: latest.targetLang || 'ru' })
         : null;
-      job.availableCategories = availableCategories;
-      job.selectedCategories = recommendedCategories;
-      job.agentState = prepared && prepared.agentState ? prepared.agentState : null;
-      job.apiCacheEnabled = settings.translationApiCacheEnabled !== false;
-      job.proofreadingState = {
-        totalPasses: this._resolvePlannedProofreadingPasses(job),
+      latest.availableCategories = availableCategories;
+      latest.selectedCategories = recommendedCategories;
+      latest.agentState = prepared && prepared.agentState ? prepared.agentState : null;
+      latest.apiCacheEnabled = settings.translationApiCacheEnabled !== false;
+      latest.proofreadingState = {
+        totalPasses: this._resolvePlannedProofreadingPasses(latest),
         completedPasses: 0,
         updatedAt: Date.now()
       };
-      if (this.translationAgent && job.agentState && typeof this.translationAgent.markPhase === 'function' && effectiveBlocks.length) {
-        this.translationAgent.markPhase(job, 'awaiting_categories', `Waiting for user category selection: ${recommendedCategories.join(', ') || 'none'}`);
+      if (this.translationAgent && latest.agentState && typeof this.translationAgent.markPhase === 'function' && effectiveBlocks.length) {
+        this.translationAgent.markPhase(latest, 'awaiting_categories', `Ожидаю выбор категорий пользователем: ${recommendedCategories.join(', ') || 'нет'}`);
       }
 
       if (!effectiveBlocks.length) {
-        await this._saveJob(job, { clearActive: true });
+        await this._saveJob(latest, { clearActive: true });
         return { ok: true, blockCount: 0 };
       }
 
-      await this._saveJob(job, { setActive: true });
+      await this._saveJob(latest, { setActive: true });
       return {
         ok: true,
         blockCount: effectiveBlocks.length,
@@ -606,18 +816,277 @@
       };
     }
 
+    async _resumeAfterReloadScan({ job, normalized, settings } = {}) {
+      if (!job || !Array.isArray(normalized)) {
+        return null;
+      }
+      this._recordRuntimeAction(job, {
+        tool: 'pageRuntime',
+        status: 'ok',
+        message: 'content.resume.reload_scan',
+        meta: {
+          blockCount: normalized.length,
+          categories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 24) : []
+        }
+      });
+
+      const oldBlocksById = job.blocksById && typeof job.blocksById === 'object'
+        ? job.blocksById
+        : {};
+      const memory = job.translationMemoryBySource && typeof job.translationMemoryBySource === 'object'
+        ? job.translationMemoryBySource
+        : null;
+      const hasMemory = Boolean(memory && Object.keys(memory).length > 0);
+      if (!hasMemory) {
+        try {
+          const oldBlocks = Object.keys(oldBlocksById)
+            .map((id) => oldBlocksById[id])
+            .filter(Boolean);
+          const oldItems = oldBlocks
+            .filter((block) => block && block.blockId && typeof block.translatedText === 'string' && block.translatedText)
+            .map((block) => ({ blockId: block.blockId, text: block.translatedText }));
+          if (oldItems.length) {
+            this._updateTranslationMemory(job, oldBlocks, oldItems);
+          }
+        } catch (_) {
+          // best-effort only
+        }
+      }
+
+      const blocksById = {};
+      normalized.forEach((item) => {
+        if (!item || !item.blockId) {
+          return;
+        }
+        blocksById[item.blockId] = { ...item };
+      });
+      const availableCategories = this._collectAvailableCategories(blocksById);
+      const availableSet = new Set(availableCategories);
+      const effectiveSelectedCategories = [];
+      (Array.isArray(job.selectedCategories) ? job.selectedCategories : []).forEach((item) => {
+        const category = this._normalizeCategory(String(item || ''));
+        if (!availableSet.has(category) || effectiveSelectedCategories.includes(category)) {
+          return;
+        }
+        effectiveSelectedCategories.push(category);
+      });
+      if (!effectiveSelectedCategories.length) {
+        this._recordRuntimeAction(job, {
+          tool: 'pageRuntime',
+          status: 'warn',
+          message: 'content.resume.categories_mismatch',
+          meta: {
+            availableCategories: availableCategories.slice(0, 24)
+          }
+        });
+        return null;
+      }
+
+      job.blocksById = blocksById;
+      const selectedSet = new Set(effectiveSelectedCategories);
+      const restoredByMemory = this._buildCachedItemsForBatch(job, { blocks: normalized });
+      const restoredMap = {};
+      restoredByMemory.forEach((item) => {
+        if (!item || !item.blockId || typeof item.text !== 'string') {
+          return;
+        }
+        if (!blocksById[item.blockId]) {
+          return;
+        }
+        const block = blocksById[item.blockId];
+        const category = this._normalizeCategory(block && block.category ? block.category : (block && block.pathHint ? block.pathHint : 'other'));
+        if (!selectedSet.has(category)) {
+          return;
+        }
+        restoredMap[item.blockId] = item.text;
+      });
+      const restoredItems = Object.keys(restoredMap).map((blockId) => ({ blockId, text: restoredMap[blockId] }));
+      const restoredBlockIds = [];
+      restoredItems.forEach((item) => {
+        if (job.blocksById && job.blocksById[item.blockId]) {
+          job.blocksById[item.blockId].translatedText = item.text;
+          restoredBlockIds.push(item.blockId);
+        }
+      });
+      const restoredApply = await this._applyItemsToTab({
+        job,
+        items: restoredItems,
+        batchPrefix: 'reload_restore'
+      });
+      if (!restoredApply.ok) {
+        this._emitEvent(
+          'warn',
+          NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume',
+          'Не удалось повторно применить восстановленные переведённые блоки после перезагрузки',
+          {
+            tabId: job.tabId,
+            jobId: job.id,
+            restoredCount: restoredItems.length
+          }
+        );
+        restoredBlockIds.forEach((blockId) => {
+          if (job.blocksById && job.blocksById[blockId]) {
+            job.blocksById[blockId].translatedText = '';
+          }
+        });
+      }
+
+      const selectedBlockIds = this._filterBlockIdsByCategories(job.blocksById, effectiveSelectedCategories);
+      const pendingBlockIds = [];
+      let completedBlocks = 0;
+      selectedBlockIds.forEach((blockId) => {
+        const block = job.blocksById && job.blocksById[blockId] ? job.blocksById[blockId] : null;
+        const translatedText = block && typeof block.translatedText === 'string' ? block.translatedText : '';
+        if (translatedText) {
+          completedBlocks += 1;
+        } else {
+          pendingBlockIds.push(blockId);
+        }
+      });
+
+      job.scanReceived = true;
+      job.totalBlocks = selectedBlockIds.length;
+      job.pendingBlockIds = pendingBlockIds;
+      job.failedBlockIds = Array.isArray(job.failedBlockIds)
+        ? job.failedBlockIds.filter((id) => selectedBlockIds.includes(id))
+        : [];
+      job.completedBlocks = completedBlocks;
+      job.currentBatchId = null;
+      job.lastError = null;
+      job.pageSignature = this._buildPageSignature(normalized);
+      job.cacheKey = this.pageCacheStore
+        ? this.pageCacheStore.buildKey({ url: job.url || '', targetLang: job.targetLang || 'ru' })
+        : null;
+      job.availableCategories = availableCategories;
+      job.selectedCategories = effectiveSelectedCategories;
+      job.apiCacheEnabled = settings && Object.prototype.hasOwnProperty.call(settings, 'translationApiCacheEnabled')
+        ? settings.translationApiCacheEnabled !== false
+        : (job.apiCacheEnabled !== false);
+      job.proofreadingState = {
+        totalPasses: this._resolvePlannedProofreadingPasses(job),
+        completedPasses: 0,
+        updatedAt: Date.now()
+      };
+      if (job.agentState && typeof job.agentState === 'object') {
+        job.agentState.selectedCategories = effectiveSelectedCategories.slice();
+      }
+
+      if (!job.totalBlocks) {
+        job.status = 'done';
+        job.message = 'Переводимых блоков не найдено';
+        this._recordRuntimeAction(job, {
+          tool: 'pageRuntime',
+          status: 'ok',
+          message: 'content.resume.empty',
+          meta: {
+            restoredCount: completedBlocks
+          }
+        });
+        await this._saveJob(job, { clearActive: true });
+        return {
+          ok: true,
+          blockCount: normalized.length,
+          awaitingCategorySelection: false,
+          resumed: true,
+          restoredCount: completedBlocks
+        };
+      }
+
+      if (!pendingBlockIds.length) {
+        job.status = 'done';
+        job.message = 'Перевод восстановлен после перезагрузки страницы';
+        this._recordRuntimeAction(job, {
+          tool: 'pageRuntime',
+          status: 'ok',
+          message: 'content.resume.complete',
+          meta: {
+            restoredCount: completedBlocks,
+            totalBlocks: job.totalBlocks
+          }
+        });
+        if (this.translationAgent && job.agentState && typeof this.translationAgent.finalizeJob === 'function') {
+          this.translationAgent.finalizeJob(job);
+        }
+        const keepActiveAfterDone = this._shouldKeepJobActiveForCategoryExtensions(job);
+        await this._saveJob(job, keepActiveAfterDone ? { setActive: true } : { clearActive: true });
+        return {
+          ok: true,
+          blockCount: normalized.length,
+          awaitingCategorySelection: false,
+          resumed: true,
+          restoredCount: completedBlocks,
+          canSelectMore: keepActiveAfterDone
+        };
+      }
+
+      job.status = 'running';
+      job.message = 'Восстановлено после перезагрузки страницы; продолжаю перевод';
+      this._recordRuntimeAction(job, {
+        tool: 'pageRuntime',
+        status: 'ok',
+        message: 'content.resume.running',
+        meta: {
+          restoredCount: completedBlocks,
+          pendingCount: pendingBlockIds.length,
+          totalBlocks: job.totalBlocks
+        }
+      });
+      if (this.translationAgent && job.agentState && typeof this.translationAgent.markPhase === 'function') {
+        this.translationAgent.markPhase(job, 'resumed', `Возобновлено; осталось блоков: ${pendingBlockIds.length}`);
+      }
+      await this._saveJob(job, { setActive: true });
+      this._processJob(job.id).catch(() => {});
+      return {
+        ok: true,
+        blockCount: normalized.length,
+        awaitingCategorySelection: false,
+        resumed: true,
+        restoredCount: completedBlocks
+      };
+    }
+
     async _handleApplyAck({ message, tabId }) {
       const jobId = message && message.jobId ? message.jobId : null;
       const batchId = message && message.batchId ? message.batchId : null;
       if (!jobId || !batchId) {
-        return { ok: false, error: { code: 'INVALID_APPLY_ACK', message: 'jobId and batchId are required' } };
+        return { ok: false, error: { code: 'INVALID_APPLY_ACK', message: 'Требуются jobId и batchId' } };
       }
-      const key = this._ackKey(jobId, batchId);
-      const waiter = this.pendingApplyAcks.get(key);
+      const sessionIdFromMsg = message && typeof message.contentSessionId === 'string' && message.contentSessionId
+        ? message.contentSessionId
+        : null;
+      let job = null;
+      try {
+        job = await this.jobStore.getJob(jobId);
+      } catch (_) {
+        job = null;
+      }
+      const sessionIdFromJob = job && typeof job.contentSessionId === 'string' && job.contentSessionId
+        ? job.contentSessionId
+        : null;
+      if (sessionIdFromMsg && sessionIdFromJob && sessionIdFromMsg !== sessionIdFromJob) {
+        return { ok: true, ignored: true };
+      }
+
+      const keys = [];
+      const pushKey = (key) => {
+        if (key && !keys.includes(key)) {
+          keys.push(key);
+        }
+      };
+      pushKey(this._ackKey(jobId, batchId, sessionIdFromMsg));
+      pushKey(this._ackKey(jobId, batchId, sessionIdFromJob));
+      pushKey(this._ackKey(jobId, batchId, null));
+
+      let waiter = null;
+      for (let i = 0; i < keys.length; i += 1) {
+        waiter = this.pendingApplyAcks.get(keys[i]);
+        if (waiter) {
+          break;
+        }
+      }
       if (!waiter) {
         return { ok: true, ignored: true };
       }
-      this.pendingApplyAcks.delete(key);
       waiter.resolve({
         ok: message.ok !== false,
         appliedCount: Number.isFinite(Number(message.appliedCount)) ? Number(message.appliedCount) : null,
@@ -651,7 +1120,7 @@
               continue;
             }
             job.status = job.failedBlockIds.length ? 'failed' : 'done';
-            job.message = job.failedBlockIds.length ? 'Completed with failed blocks' : 'Translation completed';
+            job.message = job.failedBlockIds.length ? 'Завершено с ошибками в блоках' : 'Перевод завершён';
             if (this.translationAgent && job.agentState) {
               if (job.status === 'done' && typeof this.translationAgent.finalizeJob === 'function') {
                 this.translationAgent.finalizeJob(job);
@@ -659,7 +1128,7 @@
               if (job.status === 'failed' && typeof this.translationAgent.markFailed === 'function') {
                 this.translationAgent.markFailed(job, {
                   code: 'FAILED_BLOCKS_PRESENT',
-                  message: 'Translation completed with failed blocks'
+                  message: 'Перевод завершён с ошибками в блоках'
                 });
               }
             }
@@ -668,11 +1137,11 @@
             }
             const keepActiveAfterDone = job.status === 'done' && this._shouldKeepJobActiveForCategoryExtensions(job);
             if (keepActiveAfterDone) {
-              job.message = 'Translation completed for selected categories. You can add more categories.';
+              job.message = 'Перевод завершён для выбранных категорий. Можно добавить ещё категории.';
             }
             await this._saveJob(job, keepActiveAfterDone ? { setActive: true } : { clearActive: true });
             if (job.failedBlockIds.length) {
-              this._emitEvent('error', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Translation completed with failures', {
+              this._emitEvent('error', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Перевод завершён с ошибками', {
                 tabId: job.tabId,
                 jobId: job.id,
                 failedBlocksCount: job.failedBlockIds.length,
@@ -684,13 +1153,13 @@
 
           const batch = nextBatch;
           job.currentBatchId = batch.batchId;
-          job.message = `Agent translating batch ${batch.index + 1}`;
+          job.message = `Агент переводит батч ${batch.index + 1}`;
           if (this.translationAgent && job.agentState && typeof this.translationAgent.markPhase === 'function') {
-            this.translationAgent.markPhase(job, 'translating', `Batch ${batch.index + 1}`);
+            this.translationAgent.markPhase(job, 'translating', `Батч ${batch.index + 1}`);
           }
           await this._saveJob(job, { setActive: true });
 
-          this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_SENT : 'translation.batch.sent', 'Translation batch requested', {
+          this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_SENT : 'translation.batch.sent', 'Запрошен батч перевода', {
             tabId: job.tabId,
             jobId: job.id,
             batchId: batch.batchId,
@@ -743,20 +1212,42 @@
             }));
 
             const protocol = NT.TranslationProtocol || {};
+            this._recordRuntimeAction(job, {
+              tool: 'pageRuntime',
+              status: 'ok',
+              message: 'content.apply_batch.sent',
+              meta: {
+                batchId: batch.batchId,
+                items: Array.isArray(translated.items) ? translated.items.length : 0,
+                blockCount: Array.isArray(batch.blockIds) ? batch.blockIds.length : 0
+              }
+            });
             const sent = await this._sendToTab(job.tabId, {
               type: protocol.BG_APPLY_BATCH,
               jobId: job.id,
               batchId: batch.batchId,
-              items: translated.items || []
+              items: translated.items || [],
+              contentSessionId: job.contentSessionId || null
             });
             if (!sent.ok) {
-              throw new Error(sent.error && sent.error.message ? sent.error.message : 'Failed to deliver batch to content runtime');
+              throw new Error(sent.error && sent.error.message ? sent.error.message : 'Не удалось отправить батч в контент-рантайм');
             }
 
             const ack = await this._waitForApplyAck(job.id, batch.batchId, this.APPLY_ACK_TIMEOUT_MS);
             if (!ack.ok) {
-              throw new Error('Content apply acknowledgement failed');
+              throw new Error('Не получено подтверждение применения от контент-скрипта');
             }
+            this._recordRuntimeAction(job, {
+              tool: 'pageRuntime',
+              status: 'ok',
+              message: 'content.apply_batch.ack',
+              meta: {
+                batchId: batch.batchId,
+                appliedCount: Number.isFinite(Number(ack.appliedCount))
+                  ? Number(ack.appliedCount)
+                  : 0
+              }
+            });
 
             const refreshed = await this.jobStore.getJob(job.id);
             if (!refreshed || refreshed.status !== 'running') {
@@ -777,7 +1268,7 @@
               (refreshed.completedBlocks || 0) + (ack.appliedCount || batch.blockIds.length)
             );
             refreshed.currentBatchId = null;
-            refreshed.message = 'Batch applied';
+            refreshed.message = 'Батч применён';
             if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.recordBatchSuccess === 'function') {
               this.translationAgent.recordBatchSuccess({
                 job: refreshed,
@@ -790,7 +1281,7 @@
                 : [];
             }
             await this._saveJob(refreshed, { setActive: true });
-            this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_APPLIED : 'translation.batch.applied', 'Translation batch applied', {
+            this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_APPLIED : 'translation.batch.applied', 'Батч перевода применён', {
               tabId: refreshed.tabId,
               jobId: refreshed.id,
               batchId: batch.batchId,
@@ -809,9 +1300,18 @@
             refreshed.currentBatchId = null;
             refreshed.lastError = {
               code: error && error.code ? error.code : 'BATCH_FAILED',
-              message: error && error.message ? error.message : 'Batch translation failed'
+              message: error && error.message ? error.message : 'Ошибка перевода батча'
             };
-            refreshed.message = `Batch failed: ${refreshed.lastError.message}`;
+            refreshed.message = `Ошибка батча: ${refreshed.lastError.message}`;
+            this._recordRuntimeAction(refreshed, {
+              tool: 'pageRuntime',
+              status: 'error',
+              message: 'content.apply_batch.failed',
+              meta: {
+                batchId: batch && batch.batchId ? batch.batchId : null,
+                error: refreshed.lastError || null
+              }
+            });
             if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.recordBatchFailure === 'function') {
               this.translationAgent.recordBatchFailure({
                 job: refreshed,
@@ -909,7 +1409,7 @@
         });
       }
 
-      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_SENT : 'translation.batch.sent', 'Proofreading pass started', {
+      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_SENT : 'translation.batch.sent', 'Запущен проход вычитки', {
         tabId: job.tabId,
         jobId: job.id,
         passIndex,
@@ -917,10 +1417,10 @@
         blockCount: blocks.length
       });
       if (this.translationAgent && job.agentState && typeof this.translationAgent.markPhase === 'function') {
-        this.translationAgent.markPhase(job, 'proofreading', `Pass ${passIndex}/${totalPasses}`);
+        this.translationAgent.markPhase(job, 'proofreading', `Проход ${passIndex}/${totalPasses}`);
       }
       job.currentBatchId = `${job.id}:proofread:${passIndex}`;
-      job.message = `Proofreading pass ${passIndex}/${totalPasses}`;
+      job.message = `Вычитка: проход ${passIndex}/${totalPasses}`;
       await this._saveJob(job, { setActive: true });
 
       for (let i = 0; i < chunks.length; i += 1) {
@@ -980,20 +1480,44 @@
                   : ''))
           }));
 
+          this._recordRuntimeAction(refreshedBefore, {
+            tool: 'pageRuntime',
+            status: 'ok',
+            message: 'content.apply_batch.sent',
+            meta: {
+              batchId: chunk.batchId,
+              items: normalizedItems.length,
+              blockCount: chunk.blockIds.length,
+              phase: 'proofreading'
+            }
+          });
           const sent = await this._sendToTab(refreshedBefore.tabId, {
             type: protocol.BG_APPLY_BATCH,
             jobId: refreshedBefore.id,
             batchId: chunk.batchId,
-            items: normalizedItems
+            items: normalizedItems,
+            contentSessionId: refreshedBefore.contentSessionId || null
           });
           if (!sent.ok) {
-            throw new Error(sent.error && sent.error.message ? sent.error.message : 'Failed to deliver proofread batch to content runtime');
+            throw new Error(sent.error && sent.error.message ? sent.error.message : 'Не удалось отправить батч вычитки в контент-рантайм');
           }
 
           const ack = await this._waitForApplyAck(refreshedBefore.id, chunk.batchId, this.APPLY_ACK_TIMEOUT_MS);
           if (!ack.ok) {
-            throw new Error('Content apply acknowledgement failed for proofread batch');
+            throw new Error('Не получено подтверждение применения для батча вычитки');
           }
+          this._recordRuntimeAction(refreshedBefore, {
+            tool: 'pageRuntime',
+            status: 'ok',
+            message: 'content.apply_batch.ack',
+            meta: {
+              batchId: chunk.batchId,
+              appliedCount: Number.isFinite(Number(ack.appliedCount))
+                ? Number(ack.appliedCount)
+                : 0,
+              phase: 'proofreading'
+            }
+          });
 
           const refreshed = await this.jobStore.getJob(job.id);
           if (!refreshed || refreshed.status !== 'running') {
@@ -1009,7 +1533,7 @@
           });
           refreshed.attempts = (refreshed.attempts || 0) + 1;
           refreshed.currentBatchId = null;
-          refreshed.message = `Proofreading pass ${passIndex}/${totalPasses}: ${i + 1}/${chunks.length}`;
+          refreshed.message = `Вычитка: проход ${passIndex}/${totalPasses}, батч ${i + 1}/${chunks.length}`;
           if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.recordBatchSuccess === 'function') {
             this.translationAgent.recordBatchSuccess({
               job: refreshed,
@@ -1033,16 +1557,26 @@
           }
           refreshed.lastError = {
             code: error && error.code ? error.code : 'PROOFREAD_BATCH_FAILED',
-            message: error && error.message ? error.message : 'Proofreading batch failed'
+            message: error && error.message ? error.message : 'Ошибка батча вычитки'
           };
-          refreshed.message = `Proofreading warning: ${refreshed.lastError.message}`;
+          refreshed.message = `Предупреждение вычитки: ${refreshed.lastError.message}`;
+          this._recordRuntimeAction(refreshed, {
+            tool: 'pageRuntime',
+            status: 'error',
+            message: 'content.apply_batch.failed',
+            meta: {
+              batchId: chunk.batchId,
+              error: refreshed.lastError || null,
+              phase: 'proofreading'
+            }
+          });
           refreshed.proofreadingState = {
             totalPasses,
             completedPasses: passIndex - 1,
             updatedAt: Date.now()
           };
           await this._saveJob(refreshed, { setActive: true });
-          this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Proofreading pass failed, continuing with current translation', {
+          this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Проход вычитки завершился ошибкой, продолжаю с текущим переводом', {
             tabId: refreshed.tabId,
             jobId: refreshed.id,
             passIndex,
@@ -1062,9 +1596,9 @@
         updatedAt: Date.now()
       };
       afterPass.currentBatchId = null;
-      afterPass.message = `Proofreading pass ${passIndex}/${totalPasses} completed`;
+      afterPass.message = `Вычитка: проход ${passIndex}/${totalPasses} завершён`;
       await this._saveJob(afterPass, { setActive: true });
-      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_APPLIED : 'translation.batch.applied', 'Proofreading pass completed', {
+      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_BATCH_APPLIED : 'translation.batch.applied', 'Проход вычитки завершён', {
         tabId: afterPass.tabId,
         jobId: afterPass.id,
         passIndex,
@@ -1108,22 +1642,45 @@
       return Math.max(1, Math.round(planned || this.BATCH_SIZE));
     }
 
-    _ackKey(jobId, batchId) {
-      return `${jobId}:${batchId}`;
+    _ackKey(jobId, batchId, sessionId) {
+      return `${jobId}:${batchId}:${sessionId || 'none'}`;
     }
 
-    _waitForApplyAck(jobId, batchId, timeoutMs) {
-      const key = this._ackKey(jobId, batchId);
+    async _waitForApplyAck(jobId, batchId, timeoutMs) {
+      let sessionId = null;
+      try {
+        const job = await this.jobStore.getJob(jobId);
+        sessionId = job && typeof job.contentSessionId === 'string' && job.contentSessionId
+          ? job.contentSessionId
+          : null;
+      } catch (_) {
+        sessionId = null;
+      }
+      const key = this._ackKey(jobId, batchId, sessionId);
+      const legacyKey = this._ackKey(jobId, batchId, null);
       return new Promise((resolve) => {
+        const keys = key === legacyKey ? [key] : [key, legacyKey];
+        let waiter = null;
+        const cleanup = () => {
+          keys.forEach((entryKey) => {
+            if (this.pendingApplyAcks.get(entryKey) === waiter) {
+              this.pendingApplyAcks.delete(entryKey);
+            }
+          });
+        };
         const timer = global.setTimeout(() => {
-          this.pendingApplyAcks.delete(key);
+          cleanup();
           resolve({ ok: false, timeout: true });
         }, timeoutMs);
-        this.pendingApplyAcks.set(key, {
+        waiter = {
           resolve: (value) => {
             global.clearTimeout(timer);
+            cleanup();
             resolve(value || { ok: true });
           }
+        };
+        keys.forEach((entryKey) => {
+          this.pendingApplyAcks.set(entryKey, waiter);
         });
       });
     }
@@ -1132,10 +1689,32 @@
       if (!job || !job.id) {
         return;
       }
+      let prev = null;
+      try {
+        prev = await this.jobStore.getJob(job.id);
+      } catch (_) {
+        prev = null;
+      }
+      if (prev && this._isTerminalStatus(prev.status) && !this._isTerminalStatus(job.status)) {
+        job.status = prev.status;
+        job.message = prev.message || job.message;
+        job.lastError = prev.lastError || job.lastError;
+        job.currentBatchId = null;
+        const prevCompleted = Number.isFinite(Number(prev.completedBlocks)) ? Number(prev.completedBlocks) : 0;
+        const nextCompleted = Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0;
+        const prevTotal = Number.isFinite(Number(prev.totalBlocks)) ? Number(prev.totalBlocks) : 0;
+        const nextTotal = Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : 0;
+        job.completedBlocks = Math.max(prevCompleted, nextCompleted);
+        job.totalBlocks = Math.max(prevTotal, nextTotal);
+      }
+      if (this._isTerminalStatus(job.status)) {
+        setActive = false;
+        clearActive = true;
+      }
       const now = Date.now();
-      const runningLike = job.status === 'preparing' || job.status === 'running' || job.status === 'completing';
+      const leaseMs = this._leaseMsForStatus(job.status);
       job.updatedAt = now;
-      job.leaseUntilTs = runningLike ? now + this.JOB_LEASE_MS : null;
+      job.leaseUntilTs = leaseMs ? now + leaseMs : null;
       await this.jobStore.upsertJob(job);
       if (setActive) {
         await this.jobStore.setActiveJob(job.tabId, job.id);
@@ -1145,6 +1724,20 @@
       }
       await this._syncTabStatus(job);
       this._emitUiPatch(job);
+    }
+
+    _isTerminalStatus(status) {
+      return status === 'cancelled' || status === 'failed' || status === 'done';
+    }
+
+    _leaseMsForStatus(status) {
+      if (status === 'preparing' || status === 'running' || status === 'completing') {
+        return 10 * 60 * 1000;
+      }
+      if (status === 'awaiting_categories') {
+        return 24 * 60 * 60 * 1000;
+      }
+      return null;
     }
 
     async _syncTabStatus(job) {
@@ -1206,6 +1799,17 @@
       });
     }
 
+    _recordRuntimeAction(job, payload) {
+      try {
+        if (!job || !job.agentState || !this.translationAgent || typeof this.translationAgent.recordRuntimeAction !== 'function') {
+          return null;
+        }
+        return this.translationAgent.recordRuntimeAction(job, payload || {});
+      } catch (_) {
+        return null;
+      }
+    }
+
     _toJobSummary(job) {
       if (!job) {
         return null;
@@ -1236,7 +1840,7 @@
       job.status = 'failed';
       job.lastError = {
         code: error && error.code ? error.code : 'TRANSLATION_FAILED',
-        message: error && error.message ? error.message : 'Translation failed'
+        message: error && error.message ? error.message : 'Перевод завершился ошибкой'
       };
       job.message = job.lastError.message;
       if (this.translationAgent && job.agentState && typeof this.translationAgent.markFailed === 'function') {
@@ -1253,7 +1857,7 @@
 
     async _ensureContentRuntime(tabId) {
       if (!this.chromeApi || !this.chromeApi.scripting || typeof this.chromeApi.scripting.executeScript !== 'function') {
-        return { ok: false, error: { code: 'SCRIPTING_UNAVAILABLE', message: 'chrome.scripting is unavailable' } };
+        return { ok: false, error: { code: 'SCRIPTING_UNAVAILABLE', message: 'chrome.scripting недоступен' } };
       }
       const RuntimePaths = NT.RuntimePaths || null;
       const resolvePath = (relativePath) => (
@@ -1266,6 +1870,7 @@
           target: { tabId },
           files: [
             resolvePath('core/nt-namespace.js'),
+            resolvePath('core/message-envelope.js'),
             resolvePath('core/translation-protocol.js'),
             resolvePath('content/dom-indexer.js'),
             resolvePath('content/dom-applier.js'),
@@ -1278,7 +1883,7 @@
           ok: false,
           error: {
             code: 'INJECT_FAILED',
-            message: error && error.message ? error.message : 'Failed to inject content runtime'
+            message: error && error.message ? error.message : 'Не удалось внедрить контент-рантайм'
           }
         };
       }
@@ -1286,11 +1891,27 @@
 
     async _sendToTab(tabId, message) {
       if (!this.chromeApi || !this.chromeApi.tabs || typeof this.chromeApi.tabs.sendMessage !== 'function') {
-        return { ok: false, error: { code: 'TABS_API_UNAVAILABLE', message: 'chrome.tabs.sendMessage unavailable' } };
+        return { ok: false, error: { code: 'TABS_API_UNAVAILABLE', message: 'chrome.tabs.sendMessage недоступен' } };
       }
       try {
+        const protocol = NT.TranslationProtocol || {};
+        let outgoingMessage = message;
+        if (message && typeof message === 'object' && typeof message.type === 'string' && typeof protocol.wrap === 'function') {
+          try {
+            const payload = { ...message };
+            delete payload.type;
+            outgoingMessage = protocol.wrap(message.type, payload, {
+              source: 'background',
+              tabId,
+              stage: message.type,
+              requestId: payload.batchId || payload.jobId || null
+            });
+          } catch (_) {
+            outgoingMessage = message;
+          }
+        }
         return await new Promise((resolve) => {
-          this.chromeApi.tabs.sendMessage(tabId, message, (response) => {
+          this.chromeApi.tabs.sendMessage(tabId, outgoingMessage, (response) => {
             const runtimeError = this.chromeApi.runtime && this.chromeApi.runtime.lastError
               ? this.chromeApi.runtime.lastError
               : null;
@@ -1299,18 +1920,18 @@
                 ok: false,
                 error: {
                   code: 'TAB_SEND_FAILED',
-                  message: runtimeError.message || 'tabs.sendMessage failed'
+                  message: runtimeError.message || 'Сбой tabs.sendMessage'
                 }
               });
               return;
             }
-            resolve(response && response.ok === false ? { ok: false, error: response.error || { code: 'UNKNOWN', message: 'Unknown tab error' } } : { ok: true, response });
+            resolve(response && response.ok === false ? { ok: false, error: response.error || { code: 'UNKNOWN', message: 'Неизвестная ошибка вкладки' } } : { ok: true, response });
           });
         });
       } catch (error) {
         return {
           ok: false,
-          error: { code: 'TAB_SEND_FAILED', message: error && error.message ? error.message : 'tabs.sendMessage failed' }
+          error: { code: 'TAB_SEND_FAILED', message: error && error.message ? error.message : 'Сбой tabs.sendMessage' }
         };
       }
     }
@@ -1510,10 +2131,10 @@
         }
         return prepared;
       } catch (error) {
-        this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Agent planning failed; fallback to default batching', {
+        this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_FAIL : 'translation.fail', 'Планирование агентом не удалось; использован базовый батчинг', {
           tabId: job && job.tabId !== undefined ? job.tabId : null,
           jobId: job && job.id ? job.id : null,
-          message: error && error.message ? error.message : 'unknown'
+          message: error && error.message ? error.message : 'неизвестно'
         });
         return {
           blocks: safeBlocks,
@@ -1530,7 +2151,7 @@
           translationAgentProfile: 'auto',
           translationAgentTools: {},
           translationAgentTuning: {},
-          translationCategoryMode: 'all',
+          translationCategoryMode: 'auto',
           translationCategoryList: [],
           translationPageCacheEnabled: true,
           translationApiCacheEnabled: true
@@ -1558,7 +2179,7 @@
         translationAgentTuning: settings.translationAgentTuning && typeof settings.translationAgentTuning === 'object'
           ? settings.translationAgentTuning
           : {},
-        translationCategoryMode: settings.translationCategoryMode || 'all',
+        translationCategoryMode: settings.translationCategoryMode || 'auto',
         translationCategoryList: Array.isArray(settings.translationCategoryList)
           ? settings.translationCategoryList
           : [],
@@ -1571,7 +2192,7 @@
     _buildPageSignature(blocks) {
       const list = Array.isArray(blocks) ? blocks : [];
       const src = list
-        .map((item) => `${item.blockId}::${item.originalText || ''}::${item.category || ''}`)
+        .map((item) => `${item.originalText || ''}::${item.category || ''}`)
         .join('|');
       let hash = 0;
       for (let i = 0; i < src.length; i += 1) {
@@ -1582,74 +2203,275 @@
     }
 
     async _tryApplyCachedJob({ job, settings } = {}) {
+      const miss = (reason) => {
+        this._recordRuntimeAction(job, {
+          tool: 'cacheManager',
+          status: 'warn',
+          message: 'cache.restore.miss',
+          meta: {
+            reason: reason || 'unknown',
+            cacheKey: job && job.cacheKey ? job.cacheKey : null
+          }
+        });
+        return { ok: false, fromCache: false };
+      };
+      const isTerminalNow = async () => {
+        try {
+          const latest = await this.jobStore.getJob(job.id);
+          return Boolean(latest && this._isTerminalStatus(latest.status));
+        } catch (_) {
+          return false;
+        }
+      };
       if (!this.pageCacheStore || !job || !job.url || !job.pageSignature) {
-        return false;
+        return miss('cache_unavailable');
       }
       const useCache = settings && settings.translationPageCacheEnabled !== false;
-      if (!useCache || job.forceTranslate) {
-        return false;
+      if (!useCache) {
+        return miss('cache_disabled');
       }
-      const cacheEntry = await this.pageCacheStore.getEntry({
-        url: job.url,
-        targetLang: job.targetLang || 'ru'
+      if (job.forceTranslate) {
+        return miss('force_translate');
+      }
+      this._recordRuntimeAction(job, {
+        tool: 'cacheManager',
+        status: 'ok',
+        message: 'cache.restore.try',
+        meta: {
+          cacheKey: job.cacheKey || null,
+          pageSignature: job.pageSignature || null,
+          categories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 24) : []
+        }
       });
-      const cacheBlockCount = cacheEntry && Number.isFinite(Number(cacheEntry.blockCount))
-        ? Number(cacheEntry.blockCount)
-        : 0;
-      if (!cacheEntry || cacheEntry.signature !== job.pageSignature || cacheBlockCount !== Number(job.totalBlocks || 0) || !Array.isArray(cacheEntry.items) || !cacheEntry.items.length) {
-        return false;
+      let cacheEntry = null;
+      try {
+        cacheEntry = await this.pageCacheStore.getEntry({
+          url: job.url,
+          targetLang: job.targetLang || 'ru'
+        });
+      } catch (_) {
+        return miss('cache_read_failed');
+      }
+      if (!cacheEntry || cacheEntry.signature !== job.pageSignature) {
+        return miss('signature_mismatch_or_missing');
       }
 
-      const cacheItems = cacheEntry.items
-        .filter((item) => item && item.blockId && typeof item.text === 'string')
-        .map((item) => ({ blockId: item.blockId, text: item.text }));
-      if (!cacheItems.length) {
-        return false;
+      const selectedBlockIds = this._filterBlockIdsByCategories(job.blocksById, job.selectedCategories);
+      if (!selectedBlockIds.length) {
+        return miss('no_selected_blocks');
       }
+      const selectedSet = new Set(selectedBlockIds);
+      const selectedBlocks = selectedBlockIds
+        .map((id) => (job.blocksById && job.blocksById[id] ? job.blocksById[id] : null))
+        .filter(Boolean);
+
+      if (cacheEntry.memoryMap && typeof cacheEntry.memoryMap === 'object') {
+        if (!job.translationMemoryBySource || typeof job.translationMemoryBySource !== 'object') {
+          job.translationMemoryBySource = {};
+        }
+        Object.keys(cacheEntry.memoryMap).slice(0, 3000).forEach((key) => {
+          if (!key || Object.prototype.hasOwnProperty.call(job.translationMemoryBySource, key)) {
+            return;
+          }
+          const value = cacheEntry.memoryMap[key];
+          if (typeof value !== 'string' || !value) {
+            return;
+          }
+          job.translationMemoryBySource[key] = value;
+        });
+      }
+
+      const cacheItemsById = {};
+      const memoryItems = this._buildCachedItemsForBatch(job, { blocks: selectedBlocks });
+      memoryItems.forEach((item) => {
+        if (!item || !item.blockId || typeof item.text !== 'string') {
+          return;
+        }
+        if (!selectedSet.has(item.blockId)) {
+          return;
+        }
+        cacheItemsById[item.blockId] = item.text;
+      });
+
+      if (Array.isArray(cacheEntry.items)) {
+        cacheEntry.items.forEach((item) => {
+          if (!item || !item.blockId || typeof item.text !== 'string') {
+            return;
+          }
+          if (!selectedSet.has(item.blockId) || Object.prototype.hasOwnProperty.call(cacheItemsById, item.blockId)) {
+            return;
+          }
+          cacheItemsById[item.blockId] = item.text;
+        });
+      }
+
+      const cacheItems = Object.keys(cacheItemsById).map((blockId) => ({
+        blockId,
+        text: cacheItemsById[blockId]
+      }));
+      if (!cacheItems.length) {
+        return miss('no_cache_items_for_selection');
+      }
+      if (await isTerminalNow()) {
+        return miss('job_terminal_before_apply');
+      }
+
+      const applied = await this._applyItemsToTab({
+        job,
+        items: cacheItems,
+        batchPrefix: 'cache'
+      });
+      if (!applied.ok) {
+        return miss('cache_apply_failed');
+      }
+      if (await isTerminalNow()) {
+        return miss('job_terminal_after_apply');
+      }
+
       cacheItems.forEach((item) => {
         if (job.blocksById && job.blocksById[item.blockId]) {
           job.blocksById[item.blockId].translatedText = item.text;
         }
       });
+      this._updateTranslationMemory(job, selectedBlocks, cacheItems);
 
+      let reusedCount = 0;
+      let pendingCount = 0;
+      selectedBlockIds.forEach((blockId) => {
+        const block = job.blocksById && job.blocksById[blockId] ? job.blocksById[blockId] : null;
+        const translatedText = block && typeof block.translatedText === 'string' ? block.translatedText : '';
+        if (translatedText) {
+          reusedCount += 1;
+        } else {
+          pendingCount += 1;
+        }
+      });
+
+      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Перевод восстановлен из кэша', {
+        tabId: job.tabId,
+        jobId: job.id,
+        blockCount: Number(applied.appliedTotal || 0)
+      });
+      this._recordRuntimeAction(job, {
+        tool: 'cacheManager',
+        status: 'ok',
+        message: 'cache.restore.applied',
+        meta: {
+          appliedCount: Number(applied.appliedTotal || 0),
+          reusedCount,
+          pendingCount,
+          categories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 24) : [],
+          cacheKey: job.cacheKey || null
+        }
+      });
+      return {
+        ok: true,
+        appliedCount: Number(applied.appliedTotal || 0),
+        reusedCount,
+        pendingCount,
+        fromCache: true
+      };
+    }
+
+    async _applyItemsToTab({ job, items, batchPrefix } = {}) {
+      const safeItems = (Array.isArray(items) ? items : [])
+        .filter((item) => item && item.blockId && typeof item.text === 'string');
+      if (!job || !job.id || !Number.isFinite(Number(job.tabId))) {
+        return { ok: false, appliedTotal: 0 };
+      }
+      if (!safeItems.length) {
+        return { ok: true, appliedTotal: 0 };
+      }
       const protocol = NT.TranslationProtocol || {};
       const chunkSize = 40;
       let appliedTotal = 0;
-      for (let offset = 0; offset < cacheItems.length; offset += chunkSize) {
-        const items = cacheItems.slice(offset, offset + chunkSize);
-        const batchId = `${job.id}:cache:${Math.floor(offset / chunkSize)}`;
-        const sent = await this._sendToTab(job.tabId, {
-          type: protocol.BG_APPLY_BATCH,
-          jobId: job.id,
-          batchId,
-          items
+      try {
+        for (let offset = 0; offset < safeItems.length; offset += chunkSize) {
+          try {
+            const latest = await this.jobStore.getJob(job.id);
+            if (latest && this._isTerminalStatus(latest.status)) {
+              return { ok: false, appliedTotal };
+            }
+          } catch (_) {
+            // best-effort only
+          }
+          const chunkIndex = Math.floor(offset / chunkSize);
+          const batchId = `${job.id}:${batchPrefix || 'restore'}:${chunkIndex}`;
+          const chunk = safeItems.slice(offset, offset + chunkSize);
+          this._recordRuntimeAction(job, {
+            tool: 'pageRuntime',
+            status: 'ok',
+            message: 'content.apply_batch.sent',
+            meta: {
+              batchId,
+              items: chunk.length,
+              blockCount: chunk.length,
+              phase: batchPrefix || 'restore'
+            }
+          });
+          const sent = await this._sendToTab(job.tabId, {
+            type: protocol.BG_APPLY_BATCH,
+            jobId: job.id,
+            batchId,
+            items: chunk,
+            contentSessionId: job.contentSessionId || null
+          });
+          if (!sent.ok) {
+            this._recordRuntimeAction(job, {
+              tool: 'pageRuntime',
+              status: 'error',
+              message: 'content.apply_batch.failed',
+              meta: {
+                batchId,
+                phase: batchPrefix || 'restore',
+                error: sent && sent.error && sent.error.message ? sent.error.message : 'send_failed'
+              }
+            });
+            return { ok: false, appliedTotal };
+          }
+          const ack = await this._waitForApplyAck(job.id, batchId, this.APPLY_ACK_TIMEOUT_MS);
+          if (!ack.ok) {
+            this._recordRuntimeAction(job, {
+              tool: 'pageRuntime',
+              status: 'error',
+              message: 'content.apply_batch.failed',
+              meta: {
+                batchId,
+                phase: batchPrefix || 'restore',
+                error: 'ack_failed'
+              }
+            });
+            return { ok: false, appliedTotal };
+          }
+          this._recordRuntimeAction(job, {
+            tool: 'pageRuntime',
+            status: 'ok',
+            message: 'content.apply_batch.ack',
+            meta: {
+              batchId,
+              appliedCount: Number.isFinite(Number(ack.appliedCount))
+                ? Number(ack.appliedCount)
+                : 0,
+              phase: batchPrefix || 'restore'
+            }
+          });
+          appliedTotal += Number.isFinite(Number(ack.appliedCount))
+            ? Number(ack.appliedCount)
+            : chunk.length;
+        }
+        return { ok: true, appliedTotal };
+      } catch (error) {
+        this._recordRuntimeAction(job, {
+          tool: 'pageRuntime',
+          status: 'error',
+          message: 'content.apply_batch.failed',
+          meta: {
+            batchPrefix: batchPrefix || 'restore',
+            error: error && error.message ? error.message : 'unknown'
+          }
         });
-        if (!sent.ok) {
-          return false;
-        }
-        const ack = await this._waitForApplyAck(job.id, batchId, this.APPLY_ACK_TIMEOUT_MS);
-        if (!ack.ok) {
-          return false;
-        }
-        appliedTotal += ack.appliedCount || items.length;
+        return { ok: false, appliedTotal };
       }
-
-      job.completedBlocks = Number(job.totalBlocks || 0);
-      job.pendingBlockIds = [];
-      job.failedBlockIds = [];
-      job.status = 'done';
-      job.message = 'Restored from translated page cache';
-      job.recentDiffItems = [];
-      if (this.translationAgent && job.agentState && typeof this.translationAgent.finalizeJob === 'function') {
-        this.translationAgent.markPhase(job, 'cache_restore', 'Cache hit; applying stored translation');
-        this.translationAgent.finalizeJob(job);
-      }
-      this._emitEvent('info', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Translation restored from cache', {
-        tabId: job.tabId,
-        jobId: job.id,
-        blockCount: appliedTotal
-      });
-      return true;
     }
 
     async _persistJobCache(job) {
@@ -1657,9 +2479,6 @@
         return null;
       }
       if (job.status !== 'done') {
-        return null;
-      }
-      if (!this._isFullCategorySelection(job.selectedCategories, job.availableCategories)) {
         return null;
       }
       const items = this._toCachedItems(job);
@@ -1670,19 +2489,65 @@
       if (settings.translationPageCacheEnabled === false) {
         return null;
       }
-      return this.pageCacheStore.putEntry({
-        url: job.url,
-        targetLang: job.targetLang || 'ru',
-        signature: job.pageSignature,
-        items,
-        blockCount: job.totalBlocks || items.length,
-        modelSpecs: Array.isArray(settings.translationModelList) ? settings.translationModelList : [],
-        profile: job.agentState && job.agentState.profile ? job.agentState.profile : 'auto',
-        categoryMode: job.agentState && job.agentState.categoryMode ? job.agentState.categoryMode : 'all',
-        categories: Array.isArray(job.selectedCategories) ? job.selectedCategories : [],
-        toolMode: job.agentState && job.agentState.toolConfig ? job.agentState.toolConfig : {},
-        contextSummary: job.agentState && typeof job.agentState.contextSummary === 'string' ? job.agentState.contextSummary : ''
-      });
+      try {
+        const stored = await this.pageCacheStore.putEntry({
+          url: job.url,
+          targetLang: job.targetLang || 'ru',
+          signature: job.pageSignature,
+          items,
+          blockCount: job.totalBlocks || items.length,
+          modelSpecs: Array.isArray(settings.translationModelList) ? settings.translationModelList : [],
+          profile: job.agentState && job.agentState.profile ? job.agentState.profile : 'auto',
+          categoryMode: job.agentState && job.agentState.categoryMode ? job.agentState.categoryMode : 'all',
+          categories: Array.isArray(job.selectedCategories) ? job.selectedCategories : [],
+          toolMode: job.agentState && job.agentState.toolConfig ? job.agentState.toolConfig : {},
+          contextSummary: job.agentState && typeof job.agentState.contextSummary === 'string' ? job.agentState.contextSummary : '',
+          memoryMap: job.translationMemoryBySource && typeof job.translationMemoryBySource === 'object'
+            ? job.translationMemoryBySource
+            : {},
+          coverage: {
+            categories: Array.isArray(job.selectedCategories) ? job.selectedCategories : [],
+            isFull: this._isFullCategorySelection(job.selectedCategories, job.availableCategories)
+          }
+        });
+        if (stored) {
+          this._recordRuntimeAction(job, {
+            tool: 'cacheManager',
+            status: 'ok',
+            message: 'cache.persist.ok',
+            meta: {
+              cacheKey: job.cacheKey || null,
+              pageSignature: job.pageSignature || null,
+              categories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 24) : [],
+              blockCount: items.length
+            }
+          });
+          return stored;
+        }
+        this._recordRuntimeAction(job, {
+          tool: 'cacheManager',
+          status: 'warn',
+          message: 'cache.persist.failed',
+          meta: {
+            cacheKey: job.cacheKey || null,
+            pageSignature: job.pageSignature || null,
+            error: 'empty_cache_entry'
+          }
+        });
+        return null;
+      } catch (error) {
+        this._recordRuntimeAction(job, {
+          tool: 'cacheManager',
+          status: 'warn',
+          message: 'cache.persist.failed',
+          meta: {
+            cacheKey: job.cacheKey || null,
+            pageSignature: job.pageSignature || null,
+            error: error && error.message ? error.message : 'ошибка сохранения кэша'
+          }
+        });
+        return null;
+      }
     }
 
     _toCachedItems(job) {
@@ -1827,7 +2692,7 @@
 
     async _ensureJobTabReady(job) {
       if (!job) {
-        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Job is missing' } };
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача отсутствует' } };
       }
       const currentTabId = Number(job.tabId);
       const currentAvailable = await this._isTabAvailable(currentTabId);
@@ -1841,13 +2706,13 @@
           ok: false,
           error: {
             code: 'TAB_UNAVAILABLE_AFTER_RESTART',
-            message: 'Original tab is unavailable and no replacement tab with matching URL was found'
+            message: 'Исходная вкладка недоступна, и не найдена замещающая вкладка с совпадающим URL'
           }
         };
       }
 
       await this._rebindJobToTab(job, recoveredTabId);
-      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Recovered translation job with replacement tab after restart', {
+      this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.TRANSLATION_RESUME : 'translation.resume', 'Задача перевода восстановлена в замещающей вкладке после перезапуска', {
         jobId: job.id,
         tabId: recoveredTabId,
         previousTabId: currentTabId
@@ -1933,7 +2798,7 @@
         await this.jobStore.clearActiveJob(prevId, job.id);
       }
       job.tabId = nextId;
-      job.message = 'Recovered after restart; reconnecting translation runtime';
+      job.message = 'Восстановлено после перезапуска; переподключаю runtime перевода';
       await this._saveJob(job, { setActive: true });
     }
 

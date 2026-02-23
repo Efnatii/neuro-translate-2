@@ -72,6 +72,28 @@
       await this.storageSet({ translationVisibilityByTab: map });
     }
 
+    async getVisibility(tabId) {
+      if (tabId === null || tabId === undefined) {
+        return true;
+      }
+      try {
+        const data = await this.storageGet({ translationVisibilityByTab: {} });
+        const map = data && data.translationVisibilityByTab && typeof data.translationVisibilityByTab === 'object'
+          ? data.translationVisibilityByTab
+          : {};
+        const key = String(tabId);
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+          return map[key] !== false;
+        }
+        if (Object.prototype.hasOwnProperty.call(map, tabId)) {
+          return map[tabId] !== false;
+        }
+      } catch (_) {
+        // best-effort fallback
+      }
+      return true;
+    }
+
     async getLastModelSpec(tabId) {
       if (tabId === null || tabId === undefined) {
         return null;

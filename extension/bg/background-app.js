@@ -62,12 +62,13 @@
       this._initServices();
       await this.eventLogStore.load();
       await this._preloadState();
+      await this._sweepInflight().catch(() => {});
       if (this.translationOrchestrator && typeof this.translationOrchestrator.restoreStateAfterRestart === 'function') {
         await this.translationOrchestrator.restoreStateAfterRestart();
       }
       this._startInflightSweeper();
       this._attachListeners();
-      this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BG_START, 'Background started', { source: 'background' }));
+      this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BG_START, 'Фоновый сервис запущен', { source: 'background' }));
     }
 
     _initServices() {
@@ -85,7 +86,7 @@
           translationAgentProfile: 'auto',
           translationAgentTools: {},
           translationAgentTuning: {},
-          translationCategoryMode: 'all',
+          translationCategoryMode: 'auto',
           translationCategoryList: [],
           translationPageCacheEnabled: true,
           translationApiCacheEnabled: true,
@@ -105,6 +106,7 @@
       this.offscreenExecutor = new NT.OffscreenExecutor({
         chromeApi: this.chromeApi,
         offscreenPath,
+        inflightStore: this.inflightStore,
         eventFactory: this.eventFactory,
         eventLogFn: (event) => this._logEvent(event)
       });
@@ -156,9 +158,9 @@
         aiModule: this.ai,
         onCommand: ({ envelope }) => {
           this._handleUiCommand(envelope).catch((error) => {
-            this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'UI command failed', {
+            this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Команда UI завершилась ошибкой', {
               source: 'ui',
-              message: error && error.message ? error.message : 'unknown'
+              message: error && error.message ? error.message : 'неизвестно'
             }));
           });
         },
@@ -221,7 +223,7 @@
         await this.settingsStore.set({ translationAgentTuning: {} });
       }
       if (!Object.prototype.hasOwnProperty.call(state, 'translationCategoryMode')) {
-        await this.settingsStore.set({ translationCategoryMode: 'all' });
+        await this.settingsStore.set({ translationCategoryMode: 'auto' });
       }
       if (!Object.prototype.hasOwnProperty.call(state, 'translationCategoryList')) {
         await this.settingsStore.set({ translationCategoryList: [] });
@@ -270,23 +272,49 @@
       try {
         await this._sweepInflight();
       } catch (error) {
-        this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Inflight sweep failed', { message: error && error.message ? error.message : 'unknown' }));
+        this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Сбой sweep inflight-запросов', { message: error && error.message ? error.message : 'неизвестно' }));
       } finally {
         this._inflightSweepTimer = global.setTimeout(this._runInflightSweepTick, this.inflightStore.SWEEP_INTERVAL_MS);
       }
     }
 
     async _sweepInflight() {
+      if (this.inflightStore && typeof this.inflightStore.sweep === 'function') {
+        await this.inflightStore.sweep({ maxAgeMs: 24 * 60 * 60 * 1000 }).catch(() => ({ ok: false, removed: 0 }));
+      }
+      if (this.offscreenExecutor && typeof this.offscreenExecutor.adoptPending === 'function') {
+        await this.offscreenExecutor.adoptPending({ limit: 80 }).catch(() => ({ ok: false, adopted: 0 }));
+      }
       const now = Date.now();
       const expiredRows = await this.inflightStore.listExpired(now);
       for (const row of expiredRows) {
+        let adopted = false;
         try {
           const cached = await this._getOffscreenCachedResult(row.requestId);
           if (cached) {
             await this._applyAdoptedResult(row, cached);
+            if (this.inflightStore && typeof this.inflightStore.markDone === 'function') {
+              await this.inflightStore.markDone(row.requestId, {
+                rawJson: cached && cached.json ? cached.json : null,
+                rawResult: cached,
+                requestKey: row && row.requestKey ? row.requestKey : null,
+                payloadHash: row && row.payloadHash ? row.payloadHash : null
+              });
+            }
+            adopted = true;
           } else {
             await this._releaseReservation(row.modelSpec, row.requestId);
-            this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Inflight expired without cached result', {
+            if (this.inflightStore && typeof this.inflightStore.markFailed === 'function') {
+              await this.inflightStore.markFailed(row.requestId, {
+                requestKey: row && row.requestKey ? row.requestKey : null,
+                payloadHash: row && row.payloadHash ? row.payloadHash : null,
+                error: {
+                  code: 'LEASE_EXPIRED',
+                  message: 'inflight lease expired without cached result'
+                }
+              });
+            }
+            this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Lease inflight истёк без кэшированного результата', {
               requestId: row.requestId,
               tabId: row.tabId,
               jobId: row.jobId || null,
@@ -294,12 +322,27 @@
             }));
           }
         } catch (error) {
-          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Inflight adoption failed', {
+          if (this.inflightStore && typeof this.inflightStore.markFailed === 'function') {
+            await this.inflightStore.markFailed(row.requestId, {
+              requestKey: row && row.requestKey ? row.requestKey : null,
+              payloadHash: row && row.payloadHash ? row.payloadHash : null,
+              error: {
+                code: 'ADOPT_FAILED',
+                message: error && error.message ? error.message : 'adoption failed'
+              }
+            });
+          }
+          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Ошибка усыновления inflight-результата', {
             requestId: row.requestId,
-            message: error && error.message ? error.message : 'unknown'
+            message: error && error.message ? error.message : 'неизвестно'
           }));
         } finally {
-          await this.inflightStore.remove(row.requestId);
+          if (!adopted && row && row.requestId && this.inflightStore && typeof this.inflightStore.upsert === 'function') {
+            await this.inflightStore.upsert(row.requestId, {
+              updatedAt: Date.now(),
+              leaseUntilTs: null
+            });
+          }
         }
       }
     }
@@ -328,7 +371,7 @@
         }
       }
 
-      this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.AI_RESPONSE, result.ok ? 'Adopted cached offscreen result' : 'Adopted cached offscreen error', {
+      this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.AI_RESPONSE, result.ok ? 'Подхвачен кэшированный offscreen-результат' : 'Подхвачена кэшированная offscreen-ошибка', {
         requestId: row.requestId,
         modelSpec: row.modelSpec || null,
         status: result.status || null,
@@ -396,21 +439,59 @@
       const settings = await this._readLlmSettings();
       const safeRequest = request && typeof request === 'object' ? request : {};
       const requestMeta = this._buildDeterministicRequestMeta({ tabId, taskType, request: safeRequest });
+      const requestKey = `${requestMeta.jobId || 'nojob'}:${requestMeta.blockId || 'noblock'}:${requestMeta.attempt || 1}:${taskType || 'unknown'}`;
+      const payloadHash = this._hashLlmPayload({
+        taskType: taskType || 'unknown',
+        request: {
+          input: safeRequest.input || null,
+          maxOutputTokens: safeRequest.maxOutputTokens,
+          temperature: safeRequest.temperature,
+          store: safeRequest.store,
+          background: safeRequest.background
+        }
+      });
+      if (this.inflightStore && typeof this.inflightStore.findByKey === 'function') {
+        const existing = await this.inflightStore.findByKey(requestKey).catch(() => null);
+        if (existing && existing.status === 'done' && existing.payloadHash === payloadHash && existing.rawJson && typeof existing.rawJson === 'object') {
+          return existing.rawJson;
+        }
+      }
       const estTokens = this._estimateRequestTokens(safeRequest.input, safeRequest.maxOutputTokens);
       const now = Date.now();
 
       await this.inflightStore.upsert(requestMeta.requestId, {
+        requestKey,
+        payloadHash,
+        status: 'pending',
         tabId,
         jobId: requestMeta.jobId,
         blockId: requestMeta.blockId,
         attempt: requestMeta.attempt,
         taskType: taskType || 'unknown',
+        meta: {
+          jobId: requestMeta.jobId || null,
+          blockId: requestMeta.blockId || null
+        },
         modelSpec: null,
         estTokens,
+        createdAt: now,
+        updatedAt: now,
         startedAt: now,
         attemptDeadlineTs: now + requestMeta.timeoutMs,
         leaseUntilTs: this.inflightStore.nextLease(now)
       });
+
+      let abortListener = null;
+      if (safeRequest.signal && typeof safeRequest.signal.addEventListener === 'function' && this.offscreenExecutor && typeof this.offscreenExecutor.cancel === 'function') {
+        abortListener = () => {
+          this.offscreenExecutor.cancel(requestMeta.requestId).catch(() => ({ ok: false }));
+        };
+        try {
+          safeRequest.signal.addEventListener('abort', abortListener, { once: true });
+        } catch (_) {
+          abortListener = null;
+        }
+      }
 
       try {
         const prevModelSpec = tabId !== null && tabId !== undefined
@@ -440,9 +521,52 @@
           requestMeta
         });
 
+        const decision = result && result.decision ? result.decision : null;
+        const json = result ? result.json : null;
+
+        if (json && typeof json === 'object' && !Array.isArray(json)) {
+          const ntMeta = {
+            requestId: requestMeta.requestId,
+            taskType: taskType || 'unknown',
+            jobId: requestMeta.jobId || null,
+            blockId: requestMeta.blockId || null,
+            attempt: requestMeta.attempt || 1,
+            chosenModelSpec: decision ? decision.chosenModelSpec || null : null,
+            chosenModelId: decision ? decision.chosenModelId || null : null,
+            serviceTier: decision ? decision.serviceTier || 'default' : 'default',
+            policy: decision ? decision.policy || null : null,
+            reason: decision ? decision.reason || null : null,
+            usage: this._extractUsageSnapshot(json && json.usage ? json.usage : null),
+            rate: null,
+            cachedInputSupported: decision ? Boolean(decision.promptCachingSupported) : false
+          };
+          if (ntMeta.chosenModelSpec && this.ai && typeof this.ai.getModelLimitsSnapshot === 'function') {
+            try {
+              const limitsBySpec = await this.ai.getModelLimitsSnapshot({
+                selectedModelSpecs: [ntMeta.chosenModelSpec],
+                limit: 1,
+                now: Date.now()
+              });
+              ntMeta.rate = this._extractRateSnapshot(
+                limitsBySpec && typeof limitsBySpec === 'object'
+                  ? limitsBySpec[ntMeta.chosenModelSpec]
+                  : null
+              );
+            } catch (_) {
+              ntMeta.rate = null;
+            }
+          }
+          try {
+            json.__nt = ntMeta;
+          } catch (_) {
+            // best-effort metadata only
+          }
+        }
+
         if (result && result.decision && result.decision.chosenModelSpec) {
           await this.inflightStore.upsert(requestMeta.requestId, {
             modelSpec: result.decision.chosenModelSpec,
+            updatedAt: Date.now(),
             leaseUntilTs: this.inflightStore.nextLease(Date.now())
           });
         }
@@ -463,12 +587,110 @@
           await this.tabStateStore.setLastModelSpec(tabId, result.decision.chosenModelSpec);
         }
 
-        await this.inflightStore.remove(requestMeta.requestId);
+        if (this.inflightStore && typeof this.inflightStore.markDone === 'function') {
+          await this.inflightStore.markDone(requestMeta.requestId, {
+            requestKey,
+            payloadHash,
+            rawJson: result ? result.json : null,
+            rawResult: result ? {
+              ok: true,
+              status: 200,
+              json: result.json,
+              headers: {}
+            } : null,
+            decision: decision || null,
+            resultSummary: {
+              ok: true,
+              modelSpec: decision && decision.chosenModelSpec ? decision.chosenModelSpec : null
+            }
+          });
+        } else {
+          await this.inflightStore.remove(requestMeta.requestId);
+        }
         return result ? result.json : null;
       } catch (error) {
-        await this.inflightStore.remove(requestMeta.requestId);
+        const errorCode = error && (error.code || error.name) ? (error.code || error.name) : 'REQUEST_FAILED';
+        const aborted = errorCode === 'ABORT_ERR' || errorCode === 'ABORTED' || errorCode === 'AbortError';
+        if (this.inflightStore) {
+          if (aborted && typeof this.inflightStore.markCancelled === 'function') {
+            await this.inflightStore.markCancelled(requestMeta.requestId);
+          } else if (typeof this.inflightStore.markFailed === 'function') {
+            await this.inflightStore.markFailed(requestMeta.requestId, {
+              requestKey,
+              payloadHash,
+              error: {
+                code: errorCode,
+                message: error && error.message ? error.message : 'request failed'
+              }
+            });
+          } else {
+            await this.inflightStore.remove(requestMeta.requestId);
+          }
+        }
         throw error;
+      } finally {
+        if (abortListener && safeRequest.signal && typeof safeRequest.signal.removeEventListener === 'function') {
+          try {
+            safeRequest.signal.removeEventListener('abort', abortListener);
+          } catch (_) {
+            // best-effort
+          }
+        }
       }
+    }
+
+    _hashLlmPayload(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const text = JSON.stringify(source);
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+      }
+      return (hash >>> 0).toString(16);
+    }
+
+    _extractUsageSnapshot(usage) {
+      if (!usage || typeof usage !== 'object') {
+        return null;
+      }
+      const pickNumber = (...keys) => {
+        for (let i = 0; i < keys.length; i += 1) {
+          const key = keys[i];
+          const value = usage[key];
+          if (Number.isFinite(Number(value))) {
+            return Number(value);
+          }
+        }
+        return null;
+      };
+      const inputTokens = pickNumber('inputTokens', 'input_tokens', 'prompt_tokens');
+      const outputTokens = pickNumber('outputTokens', 'output_tokens', 'completion_tokens');
+      let totalTokens = pickNumber('totalTokens', 'total_tokens');
+      if (totalTokens === null && (inputTokens !== null || outputTokens !== null)) {
+        totalTokens = Number(inputTokens || 0) + Number(outputTokens || 0);
+      }
+      if (inputTokens === null && outputTokens === null && totalTokens === null) {
+        return null;
+      }
+      return { inputTokens, outputTokens, totalTokens };
+    }
+
+    _extractRateSnapshot(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object') {
+        return null;
+      }
+      return {
+        remainingRequests: snapshot.remainingRequests === undefined ? null : snapshot.remainingRequests,
+        remainingTokens: snapshot.remainingTokens === undefined ? null : snapshot.remainingTokens,
+        limitRequests: snapshot.limitRequests === undefined ? null : snapshot.limitRequests,
+        limitTokens: snapshot.limitTokens === undefined ? null : snapshot.limitTokens,
+        resetRequestsAt: snapshot.resetRequestsAt || null,
+        resetTokensAt: snapshot.resetTokensAt || null,
+        reservedRequests: snapshot.reservedRequests === undefined ? null : snapshot.reservedRequests,
+        reservedTokens: snapshot.reservedTokens === undefined ? null : snapshot.reservedTokens,
+        cooldownUntilTs: snapshot.cooldownUntilTs || null
+      };
     }
 
     async _readLlmSettings() {
@@ -569,7 +791,7 @@
 
     async _handleUiCommand(envelope) {
       if (!envelope || !envelope.payload) {
-        return { ok: false, error: { code: 'INVALID_UI_COMMAND', message: 'Missing envelope payload' } };
+        return { ok: false, error: { code: 'INVALID_UI_COMMAND', message: 'Отсутствует payload конверта' } };
       }
       const UiProtocol = NT && NT.UiProtocol ? NT.UiProtocol : null;
       const payload = envelope.payload || {};
@@ -587,12 +809,12 @@
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.CLEAR_EVENT_LOG : 'CLEAR_EVENT_LOG')) {
         await this.eventLogStore.clear();
         this.uiHub.broadcastEventReset();
-        this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Event log cleared', { source: 'ui' }));
+        this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Журнал событий очищен', { source: 'ui' }));
         return { ok: true };
       }
 
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BENCHMARK_SELECTED_MODELS : 'BENCHMARK_SELECTED_MODELS')) {
-        this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BENCH_START, 'Benchmark request received', { source: 'ui' }));
+        this._logEvent(this.eventFactory.info(NT.EventTypes.Tags.BENCH_START, 'Получен запрос на бенчмарк', { source: 'ui' }));
         try {
           const modelSpecs = await this._loadSelectedModels();
           await this.ai.benchmarkSelected(modelSpecs, { force: Boolean(commandPayload.force) });
@@ -601,12 +823,12 @@
           await this.settingsStore.set({
             modelBenchmarkStatus: { status: 'failed', errorCode: 'BENCHMARK_START_FAILED', updatedAt: Date.now() }
           });
-          return { ok: false, error: { code: 'BENCHMARK_START_FAILED', message: 'Benchmark start failed' } };
+          return { ok: false, error: { code: 'BENCHMARK_START_FAILED', message: 'Не удалось запустить бенчмарк' } };
         }
       }
 
       if (!this.translationOrchestrator) {
-        return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Translation orchestrator is unavailable' } };
+        return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Оркестратор перевода недоступен' } };
       }
 
       const tabId = this._resolveCommandTabId(envelope, commandPayload);
@@ -620,17 +842,21 @@
           force: Boolean(commandPayload.force)
         });
         if (!result.ok) {
-          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.TRANSLATION_FAIL, 'Start translation rejected', {
+          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.TRANSLATION_FAIL, 'Запуск перевода отклонён', {
             source: 'ui',
             tabId,
-            reason: result.error && result.error.code ? result.error.code : 'unknown'
+            reason: result.error && result.error.code ? result.error.code : 'неизвестно'
           }));
         }
         return result;
       }
 
       if (commandName === commands.CANCEL_TRANSLATION || commandName === 'CANCEL_TRANSLATION') {
-        return this.translationOrchestrator.cancelJob({ tabId, reason: 'USER_CANCELLED' });
+        const result = await this.translationOrchestrator.cancelJob({ tabId, reason: 'USER_CANCELLED' });
+        if (result && result.ok && result.job && result.job.id && this.offscreenExecutor && typeof this.offscreenExecutor.cancelByJobId === 'function') {
+          await this.offscreenExecutor.cancelByJobId(result.job.id, { maxRequests: 20 }).catch(() => ({ ok: false, cancelled: 0 }));
+        }
+        return result;
       }
 
       if (commandName === commands.SET_TRANSLATION_CATEGORIES || commandName === 'SET_TRANSLATION_CATEGORIES') {
@@ -642,10 +868,17 @@
       }
 
       if (commandName === commands.CLEAR_TRANSLATION_DATA || commandName === 'CLEAR_TRANSLATION_DATA') {
-        return this.translationOrchestrator.clearJobData({
+        const activeJob = (tabId !== null && tabId !== undefined && this.translationJobStore && typeof this.translationJobStore.getActiveJob === 'function')
+          ? await this.translationJobStore.getActiveJob(tabId).catch(() => null)
+          : null;
+        const result = await this.translationOrchestrator.clearJobData({
           tabId,
           includeCache: commandPayload.includeCache !== false
         });
+        if (activeJob && activeJob.id && this.offscreenExecutor && typeof this.offscreenExecutor.cancelByJobId === 'function') {
+          await this.offscreenExecutor.cancelByJobId(activeJob.id, { maxRequests: 20 }).catch(() => ({ ok: false, cancelled: 0 }));
+        }
+        return result;
       }
 
       if (commandName === commands.SET_TRANSLATION_VISIBILITY || commandName === 'SET_TRANSLATION_VISIBILITY') {
@@ -656,11 +889,11 @@
         return this.translationOrchestrator.retryFailed({ tabId, jobId: commandPayload.jobId || null });
       }
 
-      this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Unknown UI command', {
+      this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Неизвестная команда UI', {
         source: 'ui',
-        stage: commandName || 'unknown'
+        stage: commandName || 'неизвестно'
       }));
-      return { ok: false, error: { code: 'UNKNOWN_UI_COMMAND', message: String(commandName || 'unknown') } };
+      return { ok: false, error: { code: 'UNKNOWN_UI_COMMAND', message: String(commandName || 'неизвестно') } };
     }
 
     _resolveCommandTabId(envelope, commandPayload) {
@@ -675,7 +908,7 @@
 
     async _handleContentMessage(message, sender) {
       if (!this.translationOrchestrator) {
-        return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Translation orchestrator unavailable' } };
+        return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Оркестратор перевода недоступен' } };
       }
       return this.translationOrchestrator.handleContentMessage({ message, sender });
     }
@@ -808,15 +1041,18 @@
         reason: 'TAB_CLOSED'
       }).then((result) => {
         if (result && result.cancelled) {
-          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.TRANSLATION_CANCEL, 'Translation job cancelled because tab was removed', {
+          if (result.job && result.job.id && this.offscreenExecutor && typeof this.offscreenExecutor.cancelByJobId === 'function') {
+            this.offscreenExecutor.cancelByJobId(result.job.id, { maxRequests: 20 }).catch(() => ({ ok: false, cancelled: 0 }));
+          }
+          this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.TRANSLATION_CANCEL, 'Задача перевода отменена из-за закрытия вкладки', {
             tabId: numericTabId,
             isWindowClosing: Boolean(removeInfo && removeInfo.isWindowClosing)
           }));
         }
       }).catch((error) => {
-        this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Failed to cancel translation on tab removal', {
+        this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.BG_ERROR, 'Не удалось отменить перевод при закрытии вкладки', {
           tabId: numericTabId,
-          message: error && error.message ? error.message : 'unknown'
+          message: error && error.message ? error.message : 'неизвестно'
         }));
       });
     }
