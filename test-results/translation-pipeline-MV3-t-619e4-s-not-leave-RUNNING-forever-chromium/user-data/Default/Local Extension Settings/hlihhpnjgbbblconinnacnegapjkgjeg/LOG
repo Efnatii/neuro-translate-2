@@ -1,0 +1,53 @@
+2026/02/24-04:40:29.617 80a4 Creating DB C:\__MY_PROJECTS__\git\neuro-translate-2\test-results\translation-pipeline-MV3-t-619e4-s-not-leave-RUNNING-forever-chromium\user-data\Default\Local Extension Settings\hlihhpnjgbbblconinnacnegapjkgjeg since it was missing.
+2026/02/24-04:40:29.626 80a4 Reusing MANIFEST C:\__MY_PROJECTS__\git\neuro-translate-2\test-results\translation-pipeline-MV3-t-619e4-s-not-leave-RUNNING-forever-chromium\user-data\Default\Local Extension Settings\hlihhpnjgbbblconinnacnegapjkgjeg/MANIFEST-000001
+2026/02/24-04:40:33.952 83ec Level-0 table #5: started
+2026/02/24-04:40:33.993 83ec Level-0 table #5: 989694 bytes OK
+2026/02/24-04:40:33.996 83ec Delete type=0 #3
+2026/02/24-04:40:35.973 24c4 Level-0 table #7: started
+2026/02/24-04:40:36.008 24c4 Level-0 table #7: 792373 bytes OK
+2026/02/24-04:40:36.011 24c4 Delete type=0 #4
+2026/02/24-04:40:36.360 24c4 Compacting 1@1 + 1@2 files
+2026/02/24-04:40:36.366 24c4 Generated table #8@1: 36 keys, 40747 bytes
+2026/02/24-04:40:36.366 24c4 Compacted 1@1 + 1@2 files => 40747 bytes
+2026/02/24-04:40:36.367 24c4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/24-04:40:36.369 24c4 Delete type=2 #5
+2026/02/24-04:40:36.369 24c4 Delete type=2 #7
+2026/02/24-04:40:38.808 24c4 Level-0 table #10: started
+2026/02/24-04:40:38.824 24c4 Level-0 table #10: 857971 bytes OK
+2026/02/24-04:40:38.827 24c4 Delete type=0 #6
+2026/02/24-04:40:39.086 24c4 Compacting 1@1 + 1@2 files
+2026/02/24-04:40:39.091 24c4 Generated table #11@1: 36 keys, 47748 bytes
+2026/02/24-04:40:39.091 24c4 Compacted 1@1 + 1@2 files => 47748 bytes
+2026/02/24-04:40:39.093 24c4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/24-04:40:39.093 24c4 Delete type=2 #8
+2026/02/24-04:40:39.094 24c4 Delete type=2 #10
+2026/02/24-04:40:41.432 24c4 Level-0 table #13: started
+2026/02/24-04:40:41.458 24c4 Level-0 table #13: 871053 bytes OK
+2026/02/24-04:40:41.460 24c4 Delete type=0 #9
+2026/02/24-04:40:41.633 24c4 Compacting 1@1 + 1@2 files
+2026/02/24-04:40:41.640 24c4 Generated table #14@1: 36 keys, 52158 bytes
+2026/02/24-04:40:41.640 24c4 Compacted 1@1 + 1@2 files => 52158 bytes
+2026/02/24-04:40:41.641 24c4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/24-04:40:41.642 24c4 Delete type=2 #11
+2026/02/24-04:40:41.642 24c4 Delete type=2 #13
+2026/02/24-04:40:43.916 24c4 Level-0 table #16: started
+2026/02/24-04:40:43.931 24c4 Level-0 table #16: 889094 bytes OK
+2026/02/24-04:40:43.934 24c4 Delete type=0 #12
+2026/02/24-04:40:44.271 24c4 Compacting 1@1 + 1@2 files
+2026/02/24-04:40:44.300 24c4 Generated table #17@1: 36 keys, 56744 bytes
+2026/02/24-04:40:44.300 24c4 Compacted 1@1 + 1@2 files => 56744 bytes
+2026/02/24-04:40:44.301 24c4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/24-04:40:44.302 24c4 Delete type=2 #14
+2026/02/24-04:40:44.302 24c4 Delete type=2 #16
+2026/02/24-04:40:47.945 24c4 Level-0 table #19: started
+2026/02/24-04:40:47.964 24c4 Level-0 table #19: 948991 bytes OK
+2026/02/24-04:40:47.966 24c4 Delete type=0 #15
+2026/02/24-04:40:48.253 24c4 Compacting 1@1 + 1@2 files
+2026/02/24-04:40:48.281 24c4 Generated table #20@1: 36 keys, 59221 bytes
+2026/02/24-04:40:48.281 24c4 Compacted 1@1 + 1@2 files => 59221 bytes
+2026/02/24-04:40:48.282 24c4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/24-04:40:50.531 24c4 Level-0 table #22: started
+2026/02/24-04:40:50.551 24c4 Level-0 table #22: 953008 bytes OK
+2026/02/24-04:40:50.553 24c4 Delete type=2 #17
+2026/02/24-04:40:50.553 24c4 Delete type=0 #18
+2026/02/24-04:40:50.553 24c4 Delete type=2 #19

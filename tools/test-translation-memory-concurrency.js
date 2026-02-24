@@ -335,6 +335,38 @@ async function run() {
   const block = await store.getBlock('block:1');
   assert.strictEqual(block.translatedText, 'newer', 'block writes should be last-write-wins by updatedAt');
 
+  await store.upsertBlock({
+    blockKey: 'block:quality',
+    originalHash: 'orig:quality',
+    targetLang: 'ru',
+    translatedText: 'proofread-text',
+    qualityTag: 'proofread',
+    updatedAt: 300
+  });
+  await store.upsertBlock({
+    blockKey: 'block:quality',
+    originalHash: 'orig:quality',
+    targetLang: 'ru',
+    translatedText: 'raw-newer',
+    qualityTag: 'raw',
+    updatedAt: 400
+  });
+  const preferredOverRaw = await store.getBlock('block:quality');
+  assert.strictEqual(preferredOverRaw.qualityTag, 'proofread', 'raw update should not downgrade better cached quality');
+  assert.strictEqual(preferredOverRaw.translatedText, 'proofread-text', 'raw update should not replace higher-quality text');
+
+  await store.upsertBlock({
+    blockKey: 'block:quality',
+    originalHash: 'orig:quality',
+    targetLang: 'ru',
+    translatedText: 'styled-older',
+    qualityTag: 'styled',
+    updatedAt: 250
+  });
+  const upgradedByQuality = await store.getBlock('block:quality');
+  assert.strictEqual(upgradedByQuality.qualityTag, 'styled', 'higher-quality tag should win even with older updatedAt');
+  assert.strictEqual(upgradedByQuality.translatedText, 'styled-older', 'higher-quality cached text should be preserved');
+
   console.log('PASS: translation memory concurrency');
 }
 

@@ -143,7 +143,8 @@
           translationPageCacheEnabled: true,
           translationApiCacheEnabled: true,
           translationCompareDiffThreshold: 8000,
-          translationPopupActiveTab: 'control'
+          translationPopupActiveTab: 'control',
+          debugAllowTestCommands: false
         }
       });
       this.tabStateStore = new NT.TabStateStore({ chromeApi: this.chromeApi });
@@ -370,7 +371,8 @@
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
         'translationCompareDiffThreshold',
-        'translationPopupActiveTab'
+        'translationPopupActiveTab',
+        'debugAllowTestCommands'
       ]);
       const status = state.modelBenchmarkStatus || null;
       const now = Date.now();
@@ -458,6 +460,9 @@
       }
       if (!Object.prototype.hasOwnProperty.call(state, 'translationPopupActiveTab')) {
         await this.settingsStore.set({ translationPopupActiveTab: 'control' });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'debugAllowTestCommands')) {
+        await this.settingsStore.set({ debugAllowTestCommands: false });
       }
     }
 
@@ -1172,6 +1177,38 @@
         }).catch(() => ({ ok: true }));
         if (!reserve || reserve.ok !== true) {
           const waitMs = Math.max(250, Number.isFinite(Number(reserve && reserve.waitMs)) ? Number(reserve.waitMs) : 30 * 1000);
+          let budgetSnapshot = null;
+          if (this.rateLimitBudgetStore && typeof this.rateLimitBudgetStore.getBudgetSnapshot === 'function') {
+            budgetSnapshot = await this.rateLimitBudgetStore.getBudgetSnapshot({ provider: budgetProvider }).catch(() => null);
+          }
+          this._logEvent(this.eventFactory.warn(
+            NT.EventTypes.Tags.AI_RATE_LIMIT,
+            'Shared budget reserve denied',
+            {
+              tabId: tabId !== null && tabId !== undefined ? tabId : null,
+              jobId: requestMeta.jobId || null,
+              stage: requestMeta.stage || null,
+              requestId: requestMeta.requestId || null,
+              reason: reserve && reserve.reason ? reserve.reason : 'unknown',
+              waitMs,
+              provider: budgetProvider,
+              requestsRemaining: budgetSnapshot && Number.isFinite(Number(budgetSnapshot.requestsRemaining))
+                ? Number(budgetSnapshot.requestsRemaining)
+                : null,
+              tokensRemaining: budgetSnapshot && Number.isFinite(Number(budgetSnapshot.tokensRemaining))
+                ? Number(budgetSnapshot.tokensRemaining)
+                : null,
+              reservedRequests: budgetSnapshot && Number.isFinite(Number(budgetSnapshot.reservedRequests))
+                ? Number(budgetSnapshot.reservedRequests)
+                : null,
+              reservedTokens: budgetSnapshot && Number.isFinite(Number(budgetSnapshot.reservedTokens))
+                ? Number(budgetSnapshot.reservedTokens)
+                : null,
+              resetAt: budgetSnapshot && Number.isFinite(Number(budgetSnapshot.resetAt))
+                ? Number(budgetSnapshot.resetAt)
+                : null
+            }
+          ));
           await this._markJobWaitingForBudget({
             jobId: requestMeta.jobId || null,
             waitMs,
@@ -2089,6 +2126,52 @@
         return result;
       }
 
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_SET_PROXY_CONFIG : 'BG_TEST_SET_PROXY_CONFIG')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        const result = await this._testSetProxyConfig(commandPayload || {});
+        await this._broadcastSecurityPatch().catch(() => {});
+        return result;
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_GET_LOGS : 'BG_TEST_GET_LOGS')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testGetLogs(commandPayload || {});
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_RELOAD_EXTENSION : 'BG_TEST_RELOAD_EXTENSION')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        const source = commandPayload && typeof commandPayload === 'object' ? commandPayload : {};
+        const mode = typeof source.mode === 'string' ? source.mode.trim().toLowerCase() : 'soft';
+        if (mode === 'hard') {
+          global.setTimeout(() => {
+            try {
+              if (this.chromeApi && this.chromeApi.runtime && typeof this.chromeApi.runtime.reload === 'function') {
+                this.chromeApi.runtime.reload();
+              }
+            } catch (_) {
+              // best-effort
+            }
+          }, 40);
+          return { ok: true, reloading: true, mode: 'hard', ts: Date.now() };
+        }
+        const soft = await this._testSoftReloadExtension({
+          reason: typeof source.reason === 'string' && source.reason ? source.reason : 'test_reload_extension'
+        });
+        return {
+          ok: true,
+          reloading: false,
+          mode: 'soft',
+          ts: Date.now(),
+          ...(soft && typeof soft === 'object' ? soft : {})
+        };
+      }
+
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.RUN_SECURITY_AUDIT : 'RUN_SECURITY_AUDIT')) {
         const result = await this._runSecurityAudit();
         this._securityState.lastAudit = result && result.report ? result.report : null;
@@ -2107,9 +2190,13 @@
       const commands = UiProtocol && UiProtocol.Commands ? UiProtocol.Commands : {};
       if (commandName === commands.START_TRANSLATION || commandName === 'START_TRANSLATION') {
         await this._ensureTranslationPipelineEnabled();
+        const requestedUrl = commandPayload && typeof commandPayload.url === 'string'
+          ? commandPayload.url.trim()
+          : '';
+        const resolvedUrl = requestedUrl || await this._resolveTabUrl(tabId);
         const result = await this.translationOrchestrator.startJob({
           tabId,
-          url: commandPayload.url || '',
+          url: resolvedUrl || '',
           targetLang: commandPayload.targetLang || 'ru',
           force: Boolean(commandPayload.force)
         });
@@ -2207,6 +2294,30 @@
         return result;
       }
 
+      if (commandName === commands.REQUEST_PROOFREAD_SCOPE || commandName === 'REQUEST_PROOFREAD_SCOPE') {
+        const result = await this.translationOrchestrator.requestProofreadScope({
+          tabId,
+          jobId: commandPayload.jobId || null,
+          scope: commandPayload.scope || 'all_selected_categories',
+          category: commandPayload.category || null,
+          blockIds: Array.isArray(commandPayload.blockIds) ? commandPayload.blockIds : null,
+          mode: commandPayload.mode || 'auto'
+        });
+        this._kickScheduler('ui:request_proofread_scope');
+        return result;
+      }
+
+      if (commandName === commands.REQUEST_BLOCK_ACTION || commandName === 'REQUEST_BLOCK_ACTION') {
+        const result = await this.translationOrchestrator.requestBlockAction({
+          tabId,
+          jobId: commandPayload.jobId || null,
+          blockId: commandPayload.blockId || null,
+          action: commandPayload.action || 'style_improve'
+        });
+        this._kickScheduler('ui:request_block_action');
+        return result;
+      }
+
       if (commandName === commands.SET_TRANSLATION_VISIBILITY || commandName === 'SET_TRANSLATION_VISIBILITY') {
         const result = await this.translationOrchestrator.setVisibility({
           tabId,
@@ -2261,6 +2372,118 @@
         ok: true,
         mode: next
       };
+    }
+
+    async _isTestCommandsEnabled() {
+      if (!this.settingsStore || typeof this.settingsStore.get !== 'function') {
+        return false;
+      }
+      const state = await this.settingsStore.get(['debugAllowTestCommands']).catch(() => ({}));
+      return Boolean(state && state.debugAllowTestCommands === true);
+    }
+
+    _denyTestCommandResult(commandName) {
+      return {
+        ok: false,
+        error: {
+          code: 'TEST_COMMANDS_DISABLED',
+          message: `Команда ${String(commandName || 'unknown')} отключена (debugAllowTestCommands=false)`
+        }
+      };
+    }
+
+    async _testSetProxyConfig(payload) {
+      if (!this.credentialsStore || typeof this.credentialsStore.setProxyConfig !== 'function') {
+        return { ok: false, error: { code: 'CREDENTIALS_STORE_UNAVAILABLE', message: 'CredentialsStore недоступен' } };
+      }
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const baseUrl = typeof source.baseUrl === 'string' ? source.baseUrl.trim() : '';
+      if (!baseUrl) {
+        return { ok: false, error: { code: 'PROXY_URL_INVALID', message: 'Требуется baseUrl для proxy' } };
+      }
+      try {
+        const saved = await this.credentialsStore.setProxyConfig({
+          baseUrl,
+          authHeaderName: source.authHeaderName || 'X-NT-Token',
+          authToken: source.authToken || '',
+          projectId: source.projectId || '',
+          persistToken: source.persistToken === true
+        });
+        if (typeof this.credentialsStore.setMode === 'function') {
+          await this.credentialsStore.setMode('PROXY');
+        }
+        return {
+          ok: true,
+          mode: 'PROXY',
+          proxy: saved && saved.proxy ? saved.proxy : null,
+          bypassedPermissionCheck: true
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: error && error.code ? error.code : 'PROXY_CONFIG_INVALID',
+            message: error && error.message ? error.message : 'Ошибка сохранения proxy-конфига в test-команде'
+          }
+        };
+      }
+    }
+
+    async _testGetLogs(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const requested = Number(source.limit);
+      const limit = Number.isFinite(requested)
+        ? Math.max(1, Math.min(400, Math.round(requested)))
+        : 200;
+      if (!this.eventLogStore || typeof this.eventLogStore.getTail !== 'function') {
+        return { ok: true, seq: 0, logs: [] };
+      }
+      const tail = await this.eventLogStore.getTail(limit).catch(() => ({ seq: 0, items: [] }));
+      return {
+        ok: true,
+        seq: Number.isFinite(Number(tail && tail.seq)) ? Number(tail.seq) : 0,
+        logs: Array.isArray(tail && tail.items) ? tail.items : []
+      };
+    }
+
+    async _testSoftReloadExtension({ reason = 'test_reload_extension' } = {}) {
+      const out = {
+        reason: String(reason || 'test_reload_extension'),
+        restoredState: false,
+        offscreenWarmup: false,
+        inflightRecovery: null,
+        alarmsEnsured: false,
+        schedulerTicked: false
+      };
+      await this._hydrateRuntimeSchedulers().catch(() => ({ ok: false }));
+      if (this.translationOrchestrator && typeof this.translationOrchestrator.restoreStateAfterRestart === 'function') {
+        await this.translationOrchestrator.restoreStateAfterRestart().catch(() => ({ ok: false }));
+        out.restoredState = true;
+      }
+      const warmup = await this._warmupOffscreenCapabilities().catch(() => ({ ok: false }));
+      out.offscreenWarmup = Boolean(warmup && warmup.ok);
+      const recovery = await this._recoverOffscreenInflightAfterRestart().catch(() => ({ ok: false }));
+      out.inflightRecovery = recovery && typeof recovery === 'object'
+        ? {
+          ok: Boolean(recovery.ok),
+          activeInOffscreen: Number(recovery.activeInOffscreen || 0),
+          attached: Number(recovery.attached || 0),
+          adoptedDone: Number(recovery.adoptedDone || 0),
+          markedLost: Number(recovery.markedLost || 0)
+        }
+        : null;
+      if (this.scheduler && typeof this.scheduler.ensureAlarms === 'function') {
+        await this.scheduler.ensureAlarms().catch(() => ({ ok: false }));
+        out.alarmsEnsured = true;
+      }
+      if (this.scheduler && typeof this.scheduler.tick === 'function') {
+        await this.scheduler.tick('test_soft_reload').catch(() => ({ ok: false }));
+        out.schedulerTicked = true;
+      } else {
+        this._kickScheduler('test_soft_reload');
+      }
+      await this._broadcastRuntimeToolingPatch().catch(() => {});
+      return out;
     }
 
     _toProxyOriginPattern(baseUrl) {
@@ -2425,7 +2648,10 @@
           hasAuth: connection ? connection.hasAuth === true : null,
           error: {
             code: error && error.code ? error.code : 'TEST_CONNECTION_FAILED',
-            message: error && error.message ? error.message : 'Connection test failed'
+            message: error && error.message ? error.message : 'Connection test failed',
+            debug: error && error.debug && typeof error.debug === 'object'
+              ? error.debug
+              : null
           }
         };
       }
@@ -2562,7 +2788,8 @@
         'translationCompareDiffThreshold',
         'translationPopupActiveTab',
         'translationVisibilityByTab',
-        'translationDisplayModeByTab'
+        'translationDisplayModeByTab',
+        'debugAllowTestCommands'
       ];
       const watchedKeys = [
         'translationStatusByTab',
@@ -2750,6 +2977,32 @@
         await this.settingsStore.set({ translationModelList: effective });
       }
       return effective;
+    }
+
+    async _resolveTabUrl(tabId) {
+      const numericTabId = Number(tabId);
+      if (!Number.isFinite(numericTabId)) {
+        return '';
+      }
+      if (!this.chromeApi || !this.chromeApi.tabs || typeof this.chromeApi.tabs.get !== 'function') {
+        return '';
+      }
+      return new Promise((resolve) => {
+        try {
+          this.chromeApi.tabs.get(numericTabId, (tab) => {
+            const runtimeError = this.chromeApi.runtime && this.chromeApi.runtime.lastError
+              ? this.chromeApi.runtime.lastError
+              : null;
+            if (runtimeError || !tab || typeof tab.url !== 'string') {
+              resolve('');
+              return;
+            }
+            resolve(tab.url);
+          });
+        } catch (_) {
+          resolve('');
+        }
+      });
     }
 
     async _ensureTranslationPipelineEnabled() {

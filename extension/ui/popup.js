@@ -157,6 +157,36 @@
       key: 'memory.update_context_summary',
       label: 'memory.update_context_summary',
       hint: 'Обновление краткого контекстного summary для следующих шагов.'
+    },
+    {
+      key: 'proof.plan_proofreading',
+      label: 'proof.plan_proofreading',
+      hint: 'Планирование блока(ов) для стадии вычитки.'
+    },
+    {
+      key: 'proof.get_next_blocks',
+      label: 'proof.get_next_blocks',
+      hint: 'Получение очередных блоков на вычитку.'
+    },
+    {
+      key: 'proof.proofread_block_stream',
+      label: 'proof.proofread_block_stream',
+      hint: 'Потоковая вычитка одного блока с page.apply_delta.'
+    },
+    {
+      key: 'proof.mark_block_done',
+      label: 'proof.mark_block_done',
+      hint: 'Фиксация результата вычитки и quality-tag.'
+    },
+    {
+      key: 'proof.mark_block_failed',
+      label: 'proof.mark_block_failed',
+      hint: 'Фиксация ошибки вычитки по блоку.'
+    },
+    {
+      key: 'proof.finish',
+      label: 'proof.finish',
+      hint: 'Завершение стадии вычитки при пустом pending.'
     }
   ];
 
@@ -183,7 +213,13 @@
     'job.mark_block_failed': 'on',
     'agent.audit_progress': 'auto',
     'memory.build_glossary': 'auto',
-    'memory.update_context_summary': 'auto'
+    'memory.update_context_summary': 'auto',
+    'proof.plan_proofreading': 'on',
+    'proof.get_next_blocks': 'on',
+    'proof.proofread_block_stream': 'on',
+    'proof.mark_block_done': 'on',
+    'proof.mark_block_failed': 'on',
+    'proof.finish': 'on'
   };
 
   const LOCAL_AGENT_TUNING_DEFAULTS = {
@@ -337,8 +373,17 @@
       new DetailsStateManager({ doc: this.doc, storageKeyPrefix: 'nt.ui.popup.details', ui: this.ui }).init();
       await this._migrateLegacyUiState();
 
-      const activeTab = await this.ui.getActiveTab();
-      this.activeTabId = activeTab ? activeTab.id : null;
+      const presetTabId = this.ui
+        && this.ui.helloContext
+        && Number.isFinite(Number(this.ui.helloContext.tabId))
+        ? Number(this.ui.helloContext.tabId)
+        : null;
+      if (presetTabId !== null) {
+        this.activeTabId = presetTabId;
+      } else {
+        const activeTab = await this.ui.getActiveTab();
+        this.activeTabId = activeTab ? activeTab.id : null;
+      }
       if (this.ui && typeof this.ui.setHelloContext === 'function') {
         this.ui.setHelloContext({ tabId: this.activeTabId });
       }
@@ -759,6 +804,9 @@
       this.startButtonLabel = this.startButton ? this.startButton.querySelector('.popup__action-label') : null;
       this.cancelButton = this.doc.querySelector('[data-action="cancel-translation"]');
       this.clearButton = this.doc.querySelector('[data-action="clear-translation-data"]');
+      this.proofreadAutoButton = this.doc.querySelector('[data-action="proofread-auto"]');
+      this.proofreadAllButton = this.doc.querySelector('[data-action="proofread-all"]');
+      this.proofreadCurrentCategoryButton = this.doc.querySelector('[data-action="proofread-current-category"]');
       this.erasePageMemoryButton = this.doc.querySelector('[data-action="erase-page-memory"]');
       this.eraseAllMemoryButton = this.doc.querySelector('[data-action="erase-all-memory"]');
       this.displayModeSelect = this.doc.querySelector('[data-field="display-mode-select"]');
@@ -1325,6 +1373,30 @@
       if (this.clearButton) {
         this.clearButton.addEventListener('click', () => this.clearTranslationData());
       }
+      if (this.proofreadAutoButton) {
+        this.proofreadAutoButton.addEventListener('click', () => this.requestProofreadScope({
+          scope: 'all_selected_categories',
+          mode: 'auto'
+        }));
+      }
+      if (this.proofreadAllButton) {
+        this.proofreadAllButton.addEventListener('click', () => this.requestProofreadScope({
+          scope: 'all_selected_categories',
+          mode: 'manual'
+        }));
+      }
+      if (this.proofreadCurrentCategoryButton) {
+        this.proofreadCurrentCategoryButton.addEventListener('click', () => {
+          const category = Array.isArray(this.state.selectedCategories) && this.state.selectedCategories.length
+            ? this.state.selectedCategories[0]
+            : null;
+          this.requestProofreadScope({
+            scope: category ? 'category' : 'all_selected_categories',
+            category,
+            mode: 'manual'
+          });
+        });
+      }
       if (this.erasePageMemoryButton) {
         this.erasePageMemoryButton.addEventListener('click', () => this.erasePageMemory());
       }
@@ -1793,6 +1865,65 @@
       this.ui.sendUiCommand(command, {
         tabId: this.activeTabId
       });
+    }
+
+    async requestProofreadScope({ scope = 'all_selected_categories', category = null, blockIds = null, mode = 'auto' } = {}) {
+      if (this.activeTabId === null) {
+        return;
+      }
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.REQUEST_PROOFREAD_SCOPE
+        : 'REQUEST_PROOFREAD_SCOPE';
+      const jobId = this.state.translationJob && this.state.translationJob.id
+        ? this.state.translationJob.id
+        : null;
+      const payload = {
+        tabId: this.activeTabId,
+        jobId,
+        scope: scope === 'category' || scope === 'blocks' ? scope : 'all_selected_categories',
+        mode: mode === 'manual' ? 'manual' : 'auto'
+      };
+      const categoryKey = typeof category === 'string' ? category.trim() : '';
+      if (categoryKey) {
+        payload.category = categoryKey;
+      }
+      if (Array.isArray(blockIds) && blockIds.length) {
+        payload.blockIds = blockIds
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+          .slice(0, 300);
+      }
+      this.ui.sendUiCommand(command, payload);
+      if (this.statusTrace) {
+        this.statusTrace.textContent = 'Запрос вычитки отправлен. План обновится после подтверждения BG.';
+      }
+    }
+
+    async requestBlockAction({ blockId, action = 'style_improve' } = {}) {
+      if (this.activeTabId === null) {
+        return;
+      }
+      const id = typeof blockId === 'string' ? blockId.trim() : '';
+      if (!id) {
+        return;
+      }
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.REQUEST_BLOCK_ACTION
+        : 'REQUEST_BLOCK_ACTION';
+      const jobId = this.state.translationJob && this.state.translationJob.id
+        ? this.state.translationJob.id
+        : null;
+      this.ui.sendUiCommand(command, {
+        tabId: this.activeTabId,
+        jobId,
+        blockId: id,
+        action: action === 'literal' ? 'literal' : 'style_improve'
+      });
+      if (this.statusTrace) {
+        this.statusTrace.textContent = `Запрос действия по блоку ${id} отправлен.`;
+      }
     }
 
     async clearTranslationData() {
@@ -3994,6 +4125,13 @@
       const cancellable = job && (job.status === 'running' || job.status === 'preparing' || job.status === 'completing' || job.status === 'awaiting_categories');
       const categoryStep = this._isCategorySelectionStep();
       const canSubmitCategories = !categoryStep || this._currentCategoryDraft().length > 0;
+      const selectedCategories = this._currentSelectedCategories();
+      const canProofread = this.activeTabId !== null
+        && Boolean(job)
+        && (job.status === 'running'
+          || job.status === 'done'
+          || job.status === 'failed'
+          || job.status === 'awaiting_categories');
       if (this.startButton) {
         this.startButton.disabled = this.activeTabId === null || Boolean(running) || !canSubmitCategories;
         const startTitle = !this.state.translationPipelineEnabled
@@ -4011,10 +4149,46 @@
       if (this.clearButton) {
         this.clearButton.disabled = this.activeTabId === null;
       }
+      if (this.proofreadAutoButton) {
+        this.proofreadAutoButton.disabled = !canProofread || selectedCategories.length === 0;
+        this.proofreadAutoButton.setAttribute(
+          'title',
+          selectedCategories.length
+            ? 'Агент сам выберет блоки для вычитки в выбранных категориях'
+            : 'Сначала выберите хотя бы одну категорию'
+        );
+      }
+      if (this.proofreadAllButton) {
+        this.proofreadAllButton.disabled = !canProofread || selectedCategories.length === 0;
+        this.proofreadAllButton.setAttribute(
+          'title',
+          selectedCategories.length
+            ? 'Запустить вычитку всех выбранных категорий'
+            : 'Сначала выберите хотя бы одну категорию'
+        );
+      }
+      if (this.proofreadCurrentCategoryButton) {
+        this.proofreadCurrentCategoryButton.disabled = !canProofread || selectedCategories.length === 0;
+        this.proofreadCurrentCategoryButton.setAttribute(
+          'title',
+          selectedCategories.length
+            ? `Запустить вычитку категории: ${selectedCategories[0]}`
+            : 'Сначала выберите хотя бы одну категорию'
+        );
+      }
     }
   }
 
   async function resolveInitialPopupTabId(chromeApi) {
+    try {
+      const query = new URLSearchParams(global.location && global.location.search ? global.location.search : '');
+      const fromQuery = Number(query.get('tabId'));
+      if (Number.isFinite(fromQuery)) {
+        return fromQuery;
+      }
+    } catch (_) {
+      // fallback to active tab query
+    }
     if (!chromeApi || !chromeApi.tabs || typeof chromeApi.tabs.query !== 'function') {
       return null;
     }

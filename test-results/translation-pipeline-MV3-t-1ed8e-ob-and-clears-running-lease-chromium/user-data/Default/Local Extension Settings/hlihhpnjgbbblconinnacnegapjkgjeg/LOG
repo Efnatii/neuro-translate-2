@@ -1,0 +1,5 @@
+2026/02/24-04:39:39.988 1d14 Creating DB C:\__MY_PROJECTS__\git\neuro-translate-2\test-results\translation-pipeline-MV3-t-1ed8e-ob-and-clears-running-lease-chromium\user-data\Default\Local Extension Settings\hlihhpnjgbbblconinnacnegapjkgjeg since it was missing.
+2026/02/24-04:39:39.996 1d14 Reusing MANIFEST C:\__MY_PROJECTS__\git\neuro-translate-2\test-results\translation-pipeline-MV3-t-1ed8e-ob-and-clears-running-lease-chromium\user-data\Default\Local Extension Settings\hlihhpnjgbbblconinnacnegapjkgjeg/MANIFEST-000001
+2026/02/24-04:39:44.547 8274 Level-0 table #5: started
+2026/02/24-04:39:44.575 8274 Level-0 table #5: 946053 bytes OK
+2026/02/24-04:39:44.578 8274 Delete type=0 #3

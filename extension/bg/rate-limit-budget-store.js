@@ -31,6 +31,13 @@
       return Number.isFinite(numeric) ? numeric : null;
     }
 
+    _hasFiniteNumber(value) {
+      if (value === null || value === undefined || value === '') {
+        return false;
+      }
+      return Number.isFinite(Number(value));
+    }
+
     _parseResetMs(value) {
       if (value === null || value === undefined || value === '') {
         return null;
@@ -93,11 +100,11 @@
         out.byProvider[provider] = {
           provider,
           updatedAt: Number.isFinite(Number(row.updatedAt)) ? Number(row.updatedAt) : this._now(),
-          cooldownUntilTs: Number.isFinite(Number(row.cooldownUntilTs)) ? Number(row.cooldownUntilTs) : null,
+          cooldownUntilTs: this._hasFiniteNumber(row.cooldownUntilTs) ? Number(row.cooldownUntilTs) : null,
           global: {
             requestsRemaining: this._parseNumber(row.global && row.global.requestsRemaining),
             tokensRemaining: this._parseNumber(row.global && row.global.tokensRemaining),
-            resetAt: Number.isFinite(Number(row.global && row.global.resetAt)) ? Number(row.global.resetAt) : null
+            resetAt: this._hasFiniteNumber(row.global && row.global.resetAt) ? Number(row.global.resetAt) : null
           },
           perModel: row.perModel && typeof row.perModel === 'object' ? row.perModel : {},
           grants
@@ -262,20 +269,20 @@
       await this._saveState(state);
 
       const reserved = this._sumGrants(current.grants);
-      const requestsRemaining = current.global && Number.isFinite(Number(current.global.requestsRemaining))
+      const requestsRemaining = current.global && this._hasFiniteNumber(current.global.requestsRemaining)
         ? Number(current.global.requestsRemaining) - reserved.requests
         : null;
-      const tokensRemaining = current.global && Number.isFinite(Number(current.global.tokensRemaining))
+      const tokensRemaining = current.global && this._hasFiniteNumber(current.global.tokensRemaining)
         ? Number(current.global.tokensRemaining) - reserved.tokens
         : null;
       return {
         provider: providerKey,
         requestsRemaining: requestsRemaining !== null ? requestsRemaining : null,
         tokensRemaining: tokensRemaining !== null ? tokensRemaining : null,
-        resetAt: current.global && Number.isFinite(Number(current.global.resetAt))
+        resetAt: current.global && this._hasFiniteNumber(current.global.resetAt)
           ? Number(current.global.resetAt)
           : null,
-        cooldownUntilTs: Number.isFinite(Number(current.cooldownUntilTs))
+        cooldownUntilTs: this._hasFiniteNumber(current.cooldownUntilTs)
           ? Number(current.cooldownUntilTs)
           : null,
         reservedRequests: reserved.requests,
@@ -310,7 +317,7 @@
       const estReq = Number.isFinite(Number(estRequests)) ? Math.max(1, Number(estRequests)) : 1;
       const estTok = Number.isFinite(Number(estTokens)) ? Math.max(0, Number(estTokens)) : 0;
 
-      if (Number.isFinite(Number(current.cooldownUntilTs)) && Number(current.cooldownUntilTs) > now) {
+      if (this._hasFiniteNumber(current.cooldownUntilTs) && Number(current.cooldownUntilTs) > now) {
         return {
           ok: false,
           waitMs: Math.max(0, Number(current.cooldownUntilTs) - now),
@@ -319,27 +326,27 @@
       }
 
       const reserved = this._sumGrants(current.grants);
-      const globalReq = Number.isFinite(Number(current.global && current.global.requestsRemaining))
+      const globalReq = this._hasFiniteNumber(current.global && current.global.requestsRemaining)
         ? Number(current.global.requestsRemaining) - reserved.requests
         : null;
-      const globalTok = Number.isFinite(Number(current.global && current.global.tokensRemaining))
+      const globalTok = this._hasFiniteNumber(current.global && current.global.tokensRemaining)
         ? Number(current.global.tokensRemaining) - reserved.tokens
         : null;
       const modelRow = model && current.perModel && typeof current.perModel === 'object'
         ? current.perModel[model] || null
         : null;
       const modelReserved = model ? this._sumGrants(current.grants, { model }) : { requests: 0, tokens: 0 };
-      const modelReq = modelRow && Number.isFinite(Number(modelRow.requestsRemaining))
+      const modelReq = modelRow && this._hasFiniteNumber(modelRow.requestsRemaining)
         ? Number(modelRow.requestsRemaining) - modelReserved.requests
         : null;
-      const modelTok = modelRow && Number.isFinite(Number(modelRow.tokensRemaining))
+      const modelTok = modelRow && this._hasFiniteNumber(modelRow.tokensRemaining)
         ? Number(modelRow.tokensRemaining) - modelReserved.tokens
         : null;
 
       const resetCandidates = [
-        current.global && Number.isFinite(Number(current.global.resetAt)) ? Number(current.global.resetAt) : null,
-        modelRow && Number.isFinite(Number(modelRow.resetAt)) ? Number(modelRow.resetAt) : null
-      ].filter((item) => Number.isFinite(Number(item)));
+        current.global && this._hasFiniteNumber(current.global.resetAt) ? Number(current.global.resetAt) : null,
+        modelRow && this._hasFiniteNumber(modelRow.resetAt) ? Number(modelRow.resetAt) : null
+      ].filter((item) => this._hasFiniteNumber(item));
       const resetAt = resetCandidates.length ? Math.min(...resetCandidates) : null;
       if ((globalReq !== null && globalReq < estReq) || (modelReq !== null && modelReq < estReq)) {
         return {
@@ -436,7 +443,7 @@
         ? Math.max(250, Math.min(15 * 60 * 1000, Number(retryAfterMs)))
         : 30000;
       const nextCooldown = now + retryMs;
-      current.cooldownUntilTs = Number.isFinite(Number(current.cooldownUntilTs))
+      current.cooldownUntilTs = this._hasFiniteNumber(current.cooldownUntilTs)
         ? Math.max(Number(current.cooldownUntilTs), nextCooldown)
         : nextCooldown;
       current.updatedAt = now;

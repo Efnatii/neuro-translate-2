@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>NT E2E Simple</title>
+    <style>
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 24px; line-height: 1.45; }
+      main { max-width: 920px; }
+      section { margin-bottom: 18px; }
+      .panel { border: 1px solid #d6d9df; border-radius: 8px; padding: 12px 14px; }
+      .mono { font-family: Consolas, "Courier New", monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="simple-title">Neuro Translate e2e sample page</h1>
+      <section class="panel">
+        <p id="simple-intro">
+          This paragraph is used to verify streaming translation updates. The text is intentionally long enough
+          to trigger multiple delta chunks while the extension applies partial updates into the document.
+        </p>
+        <p id="simple-details">
+          Another content block keeps deterministic wording for cache and memory checks. It should remain stable
+          between page reloads so page-level restore can be validated without calling the remote model.
+        </p>
+      </section>
+      <section>
+        <label for="sample-input" id="simple-label">Search label</label>
+        <input id="sample-input" type="text" value="Input placeholder is ignored by text-node scanner">
+        <button id="simple-button">Run action</button>
+      </section>
+      <section class="panel">
+        <h2 id="simple-subtitle">Technical terms</h2>
+        <p id="simple-glossary" class="mono">CPU throughput, memory bandwidth, scheduler lease heartbeat, retry backoff.</p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -71,6 +71,8 @@
       this.jobAbortControllers = new Map();
       this.contentCapsByTab = {};
       this.pendingPatchFlushByJob = new Map();
+      this.pendingMemoryUpsertsByJob = new Map();
+      this.jobSaveLocks = new Map();
     }
 
     isContentMessageType(type) {
@@ -131,6 +133,8 @@
         message: 'Сканирую содержимое страницы',
         attempts: 0,
         scanReceived: false,
+        scanRequestedAt: now,
+        scanNudgeTs: 0,
         forceTranslate: Boolean(force),
         pageSignature: null,
         cacheKey: null,
@@ -146,6 +150,22 @@
         apiCacheEnabled: true,
         displayMode,
         compareDiffThreshold,
+        proofreading: {
+          enabled: false,
+          mode: 'auto',
+          pass: 0,
+          pendingBlockIds: [],
+          doneBlockIds: [],
+          failedBlockIds: [],
+          criteria: {
+            preferTechnical: false,
+            maxBlocksAuto: 120,
+            minCharCount: 24,
+            requireGlossaryConsistency: false
+          },
+          lastPlanTs: null,
+          lastError: null
+        },
         proofreadingState: {
           totalPasses: 0,
           completedPasses: 0,
@@ -316,6 +336,15 @@
         completedPasses: 0,
         updatedAt: Date.now()
       };
+      const proof = this._ensureJobProofreadingState(job);
+      proof.enabled = false;
+      proof.mode = 'auto';
+      proof.pass = 0;
+      proof.pendingBlockIds = [];
+      proof.doneBlockIds = [];
+      proof.failedBlockIds = [];
+      proof.lastPlanTs = null;
+      proof.lastError = null;
       if (job.agentState && typeof job.agentState === 'object') {
         job.agentState.selectedCategories = selectedCategories.slice();
       }
@@ -635,6 +664,81 @@
       return { ok: true, job: this._toJobSummary(job), changedKeys: diff.changedKeys || [] };
     }
 
+    async requestProofreadScope({ tabId, jobId = null, scope = 'all_selected_categories', category = null, blockIds = null, mode = 'auto' } = {}) {
+      const job = await this._resolveJobForAutoTuneAction({ tabId, jobId });
+      if (!job) {
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача для вычитки не найдена' } };
+      }
+      const settings = await this._readAgentSettings();
+      this._ensureJobRunSettings(job, { settings });
+      this._ensureJobProofreadingState(job);
+      const args = {
+        scope: scope === 'category' || scope === 'blocks' ? scope : 'all_selected_categories',
+        mode: mode === 'manual' ? 'manual' : 'auto'
+      };
+      if (typeof category === 'string' && category.trim()) {
+        args.category = category.trim();
+      }
+      if (Array.isArray(blockIds) && blockIds.length) {
+        args.blockIds = blockIds.filter((item) => typeof item === 'string' && item).slice(0, 400);
+      }
+      const executed = await this._executeAutoTuneTool({
+        job,
+        settings,
+        toolName: 'ui.request_proofread_scope',
+        args
+      });
+      const refreshed = await this.jobStore.getJob(job.id).catch(() => null);
+      const source = refreshed || job;
+      if (executed && executed.ok !== false) {
+        source.status = 'running';
+        source.currentBatchId = source.currentBatchId || `${source.id}:proofreading`;
+        await this._saveJob(source, { setActive: true });
+        this._processJob(source.id).catch(() => {});
+      }
+      return {
+        ok: Boolean(executed && executed.ok !== false),
+        result: executed || null,
+        job: this._toJobSummary(source)
+      };
+    }
+
+    async requestBlockAction({ tabId, jobId = null, blockId, action } = {}) {
+      const key = typeof blockId === 'string' ? blockId.trim() : '';
+      if (!key) {
+        return { ok: false, error: { code: 'INVALID_BLOCK_ID', message: 'Требуется blockId' } };
+      }
+      const job = await this._resolveJobForAutoTuneAction({ tabId, jobId });
+      if (!job) {
+        return { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'Задача для действия над блоком не найдена' } };
+      }
+      const settings = await this._readAgentSettings();
+      this._ensureJobRunSettings(job, { settings });
+      this._ensureJobProofreadingState(job);
+      const executed = await this._executeAutoTuneTool({
+        job,
+        settings,
+        toolName: 'ui.request_block_action',
+        args: {
+          blockId: key,
+          action: action === 'literal' ? 'literal' : 'style_improve'
+        }
+      });
+      const refreshed = await this.jobStore.getJob(job.id).catch(() => null);
+      const source = refreshed || job;
+      if (executed && executed.ok !== false) {
+        source.status = 'running';
+        source.currentBatchId = source.currentBatchId || `${source.id}:proofreading`;
+        await this._saveJob(source, { setActive: true });
+        this._processJob(source.id).catch(() => {});
+      }
+      return {
+        ok: Boolean(executed && executed.ok !== false),
+        result: executed || null,
+        job: this._toJobSummary(source)
+      };
+    }
+
     async setVisibility({ tabId, visible, mode } = {}) {
       const numericTabId = Number(tabId);
       if (!Number.isFinite(numericTabId)) {
@@ -654,13 +758,28 @@
         : null;
       const displayMode = this._normalizeDisplayMode(mode, Boolean(visible));
       const compareDiffThreshold = await this._getCompareDiffThreshold({ job: activeJob });
-      await this._sendToTab(numericTabId, {
+      const visibilityPayload = {
         type: protocol.BG_SET_VISIBILITY,
         visible: displayMode !== 'original',
         mode: displayMode,
         compareDiffThreshold,
         ...(contentSessionId ? { contentSessionId } : {})
-      });
+      };
+      const visibilitySent = await this._sendToTab(numericTabId, visibilityPayload);
+      if (
+        visibilitySent
+        && visibilitySent.ok
+        && visibilitySent.response
+        && visibilitySent.response.ignored === true
+        && contentSessionId
+      ) {
+        await this._sendToTab(numericTabId, {
+          type: protocol.BG_SET_VISIBILITY,
+          visible: displayMode !== 'original',
+          mode: displayMode,
+          compareDiffThreshold
+        });
+      }
       if (this.tabStateStore && typeof this.tabStateStore.upsertDisplayMode === 'function') {
         await this.tabStateStore.upsertDisplayMode(numericTabId, displayMode);
       } else if (this.tabStateStore && typeof this.tabStateStore.upsertVisibility === 'function') {
@@ -669,6 +788,7 @@
       if (activeJob && activeJob.id) {
         activeJob.displayMode = displayMode;
         activeJob.compareDiffThreshold = compareDiffThreshold;
+        await this._saveJob(activeJob, { setActive: true });
         this._queuePatchEvent(activeJob, {
           blockId: '__display_mode__',
           phase: this._resolvePatchPhase(activeJob),
@@ -717,13 +837,21 @@
       const visible = mode !== 'original';
       const compareDiffThreshold = await this._getCompareDiffThreshold({ job });
       try {
-        await this._sendToTab(tabId, {
+        const out = await this._sendToTab(tabId, {
           type: protocol.BG_SET_VISIBILITY,
           visible,
           mode,
           compareDiffThreshold,
           ...(contentSessionId ? { contentSessionId } : {})
         });
+        if (out && out.ok && out.response && out.response.ignored === true && contentSessionId) {
+          await this._sendToTab(tabId, {
+            type: protocol.BG_SET_VISIBILITY,
+            visible,
+            mode,
+            compareDiffThreshold
+          });
+        }
       } catch (_) {
         // best-effort
       }
@@ -892,6 +1020,8 @@
           job.status = 'preparing';
           job.message = 'Восстановление после перезапуска; пересканирую страницу';
           job.scanReceived = false;
+          job.scanRequestedAt = Date.now();
+          job.scanNudgeTs = 0;
           job.currentBatchId = null;
           await this._saveJob(job, { setActive: true });
         }
@@ -918,6 +1048,8 @@
           }).catch(() => {});
           job.compareDiffThreshold = await this._getCompareDiffThreshold({ job });
           const protocol = NT.TranslationProtocol || {};
+          job.scanRequestedAt = Date.now();
+          job.scanNudgeTs = 0;
           const sent = await this._sendToTab(job.tabId, {
             type: protocol.BG_START_JOB,
             jobId: job.id,
@@ -1002,9 +1134,31 @@
         if (tabId !== null) {
           const active = await this.jobStore.getActiveJob(tabId);
           if (active && (active.status === 'preparing' || active.status === 'running' || active.status === 'completing' || active.status === 'awaiting_categories')) {
-            if (msg && typeof msg.contentSessionId === 'string' && msg.contentSessionId) {
-              active.contentSessionId = msg.contentSessionId;
+            const incomingSessionId = (msg && typeof msg.contentSessionId === 'string' && msg.contentSessionId)
+              ? msg.contentSessionId
+              : null;
+            const previousSessionId = (active && typeof active.contentSessionId === 'string' && active.contentSessionId)
+              ? active.contentSessionId
+              : null;
+            const hasSessionChanged = Boolean(incomingSessionId && previousSessionId && incomingSessionId !== previousSessionId);
+            if (incomingSessionId) {
+              active.contentSessionId = incomingSessionId;
             }
+
+            const canSkipRescan = (
+              active.status === 'awaiting_categories'
+              && active.scanReceived === true
+              && !hasSessionChanged
+            );
+            if (canSkipRescan) {
+              active.displayMode = await this._resolveTabDisplayMode(tabId);
+              active.compareDiffThreshold = await this._getCompareDiffThreshold({ job: active });
+              await this._saveJob(active, { setActive: true });
+              const sessionId = incomingSessionId || previousSessionId || null;
+              await this._syncVisibilityToContent(tabId, { contentSessionId: sessionId, job: active }).catch(() => {});
+              return { ok: true };
+            }
+
             try {
               const prefix = `${active.id}:`;
               Array.from(this.pendingApplyAcks.keys()).forEach((key) => {
@@ -1023,6 +1177,8 @@
             active.status = 'preparing';
             active.message = 'Контент-скрипт переподключён; пересканирую страницу';
             active.scanReceived = false;
+            active.scanRequestedAt = Date.now();
+            active.scanNudgeTs = 0;
             active.currentBatchId = null;
             active.displayMode = await this._resolveTabDisplayMode(tabId);
             active.reconnectCount = Number.isFinite(Number(active.reconnectCount))
@@ -1034,13 +1190,12 @@
               message: 'content.rescan.requested',
               meta: {
                 jobId: active.id,
-                reconnectCount: active.reconnectCount
+                reconnectCount: active.reconnectCount,
+                hasSessionChanged
               }
             });
             await this._saveJob(active, { setActive: true });
-            const sessionId = (msg && typeof msg.contentSessionId === 'string' && msg.contentSessionId)
-              ? msg.contentSessionId
-              : (active.contentSessionId || null);
+            const sessionId = incomingSessionId || previousSessionId || null;
             active.compareDiffThreshold = await this._getCompareDiffThreshold({ job: active });
             await this._syncVisibilityToContent(tabId, { contentSessionId: sessionId, job: active }).catch(() => {});
             await this._sendToTab(tabId, {
@@ -1238,6 +1393,15 @@
           selectedCategories: recommendedCategories
         };
       }
+      const cachedAwaiting = await this._tryRestoreAwaitingFromPageCache({
+        job,
+        blocks: normalized,
+        settings,
+        message
+      });
+      if (cachedAwaiting && cachedAwaiting.ok) {
+        return cachedAwaiting;
+      }
       const planningSettings = {
         ...settings,
         translationCategoryMode: 'auto',
@@ -1283,6 +1447,15 @@
       const effectiveBlocks = normalized.slice();
       const blocksById = {};
       effectiveBlocks.forEach((item) => {
+        if (!item.quality || typeof item.quality !== 'object') {
+          item.quality = {
+            tag: 'raw',
+            lastUpdatedTs: null,
+            modelUsed: null,
+            routeUsed: null,
+            pass: null
+          };
+        }
         blocksById[item.blockId] = item;
       });
       const availableCategories = this._collectAvailableCategories(blocksById);
@@ -1315,6 +1488,15 @@
         completedPasses: 0,
         updatedAt: Date.now()
       };
+      const proof = this._ensureJobProofreadingState(latest);
+      proof.enabled = false;
+      proof.mode = 'auto';
+      proof.pass = 0;
+      proof.pendingBlockIds = [];
+      proof.doneBlockIds = [];
+      proof.failedBlockIds = [];
+      proof.lastPlanTs = null;
+      proof.lastError = null;
       if (this.translationAgent && latest.agentState && typeof this.translationAgent.markPhase === 'function' && effectiveBlocks.length) {
         this.translationAgent.markPhase(latest, 'awaiting_categories', `Ожидаю выбор категорий пользователем: ${recommendedCategories.join(', ') || 'нет'}`);
       }
@@ -1485,6 +1667,15 @@
         completedPasses: 0,
         updatedAt: Date.now()
       };
+      const proof = this._ensureJobProofreadingState(job);
+      proof.enabled = false;
+      proof.mode = 'auto';
+      proof.pass = 0;
+      proof.pendingBlockIds = [];
+      proof.doneBlockIds = [];
+      proof.failedBlockIds = [];
+      proof.lastPlanTs = null;
+      proof.lastError = null;
       if (job.agentState && typeof job.agentState === 'object') {
         job.agentState.selectedCategories = effectiveSelectedCategories.slice();
       }
@@ -1724,6 +1915,7 @@
               }
             }
             if (job.status === 'done') {
+              await this._waitForPendingMemoryUpserts(job.id, { timeoutMs: 3500 }).catch(() => ({ ok: false }));
               await this._persistJobCache(job).catch(() => {});
             }
             const keepActiveAfterDone = job.status === 'done' && this._shouldKeepJobActiveForCategoryExtensions(job);
@@ -1992,29 +2184,52 @@
         }
       });
 
+      const proofState = this._ensureJobProofreadingState(job);
+      const translatePending = Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0;
+      const plannedProofPasses = this._resolvePlannedProofreadingPasses(job);
+      if (translatePending <= 0 && !proofState.enabled && plannedProofPasses > 0) {
+        proofState.enabled = true;
+        proofState.mode = 'auto';
+        proofState.pass = proofState.pass > 0 ? proofState.pass : 1;
+        proofState.pendingBlockIds = [];
+        proofState.doneBlockIds = [];
+        proofState.failedBlockIds = [];
+        proofState.lastPlanTs = null;
+        proofState.lastError = null;
+        if (job.agentState && typeof job.agentState === 'object') {
+          job.agentState.phase = 'proofreading_in_progress';
+          job.agentState.status = 'running';
+        }
+      }
+      const runProofreading = translatePending <= 0 && proofState.enabled === true;
+
       let result = null;
       try {
-        result = await runner.runExecution({
-          job,
-          blocks: Object.keys(job.blocksById || {}).map((id) => job.blocksById[id]).filter(Boolean),
-          settings,
-          runLlmRequest
-        });
+        result = runProofreading
+          ? await runner.runProofreading({
+            job,
+            blocks: Object.keys(job.blocksById || {}).map((id) => job.blocksById[id]).filter(Boolean),
+            settings,
+            runLlmRequest
+          })
+          : await runner.runExecution({
+            job,
+            blocks: Object.keys(job.blocksById || {}).map((id) => job.blocksById[id]).filter(Boolean),
+            settings,
+            runLlmRequest
+          });
       } catch (error) {
         const normalizedError = (error && typeof error === 'object')
           ? error
           : {
-            code: 'AGENT_EXECUTION_FAILED',
-            message: 'Ошибка агент-исполнения'
+            code: runProofreading ? 'AGENT_PROOFREADING_FAILED' : 'AGENT_EXECUTION_FAILED',
+            message: runProofreading ? 'Ошибка агент-вычитки' : 'Ошибка агент-исполнения'
           };
         const requeued = await this._requeueJobForBackpressure(job, normalizedError);
         if (requeued) {
           return { continueLoop: false };
         }
-        await this._markFailed(
-          job,
-          normalizedError
-        );
+        await this._markFailed(job, normalizedError);
         return { continueLoop: false };
       }
 
@@ -2026,28 +2241,53 @@
         const normalizedError = (result && result.error && typeof result.error === 'object')
           ? result.error
           : {
-            code: 'AGENT_EXECUTION_FAILED',
-            message: 'Исполнение агентом завершилось ошибкой'
+            code: runProofreading ? 'AGENT_PROOFREADING_FAILED' : 'AGENT_EXECUTION_FAILED',
+            message: runProofreading
+              ? 'Вычитка агентом завершилась ошибкой'
+              : 'Исполнение агентом завершилось ошибкой'
           };
         const requeued = await this._requeueJobForBackpressure(refreshed, normalizedError);
         if (requeued) {
           return { continueLoop: false };
         }
-        await this._markFailed(
-          refreshed,
-          normalizedError
-        );
+        await this._markFailed(refreshed, normalizedError);
         return { continueLoop: false };
       }
       if (refreshed.status !== 'running') {
         return { continueLoop: false };
       }
 
-      const pendingCount = Array.isArray(refreshed.pendingBlockIds) ? refreshed.pendingBlockIds.length : 0;
-      if (pendingCount > 0) {
-        refreshed.message = `Агент выполняет перевод; осталось блоков: ${pendingCount}`;
+      const refreshedPending = Array.isArray(refreshed.pendingBlockIds) ? refreshed.pendingBlockIds.length : 0;
+      const refreshedProof = this._ensureJobProofreadingState(refreshed);
+      const proofPending = Array.isArray(refreshedProof.pendingBlockIds) ? refreshedProof.pendingBlockIds.length : 0;
+
+      if (!runProofreading) {
+        if (refreshedPending > 0) {
+          refreshed.message = `Агент выполняет перевод; осталось блоков: ${refreshedPending}`;
+          if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.markPhase === 'function') {
+            this.translationAgent.markPhase(refreshed, 'translating', refreshed.message);
+          }
+          await this._saveJob(refreshed, { setActive: true });
+          if (result && result.yielded) {
+            global.setTimeout(() => {
+              this._processJob(refreshed.id).catch(() => {});
+            }, 0);
+            return { continueLoop: false };
+          }
+          return { continueLoop: true };
+        }
+        if (refreshedProof.enabled === true) {
+          refreshed.message = 'Переход к вычитке';
+          if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.markPhase === 'function') {
+            this.translationAgent.markPhase(refreshed, 'proofreading', refreshed.message);
+          }
+          await this._saveJob(refreshed, { setActive: true });
+          return { continueLoop: true };
+        }
+      } else if (proofPending > 0) {
+        refreshed.message = `Агент выполняет вычитку; осталось блоков: ${proofPending}`;
         if (this.translationAgent && refreshed.agentState && typeof this.translationAgent.markPhase === 'function') {
-          this.translationAgent.markPhase(refreshed, 'translating', refreshed.message);
+          this.translationAgent.markPhase(refreshed, 'proofreading', refreshed.message);
         }
         await this._saveJob(refreshed, { setActive: true });
         if (result && result.yielded) {
@@ -2059,10 +2299,6 @@
         return { continueLoop: true };
       }
 
-      const proofreadRan = await this._runProofreadingPassIfNeeded(refreshed);
-      if (proofreadRan) {
-        return { continueLoop: true };
-      }
       refreshed.status = refreshed.failedBlockIds.length ? 'failed' : 'done';
       refreshed.message = refreshed.failedBlockIds.length ? 'Завершено с ошибками в блоках' : 'Перевод завершён';
       if (this.translationAgent && refreshed.agentState) {
@@ -2077,6 +2313,7 @@
         }
       }
       if (refreshed.status === 'done') {
+        await this._waitForPendingMemoryUpserts(refreshed.id, { timeoutMs: 3500 }).catch(() => ({ ok: false }));
         await this._persistJobCache(refreshed).catch(() => {});
       }
       const keepActiveAfterDone = refreshed.status === 'done' && this._shouldKeepJobActiveForCategoryExtensions(refreshed);
@@ -2100,6 +2337,15 @@
         return { ok: false, applied: false };
       }
       const protocol = NT.TranslationProtocol || {};
+      let displayMode = this._normalizeDisplayMode(job.displayMode, true);
+      try {
+        displayMode = await this._resolveTabDisplayMode(job.tabId);
+      } catch (_) {
+        displayMode = this._normalizeDisplayMode(job.displayMode, true);
+      }
+      const compareDiffThreshold = await this._getCompareDiffThreshold({ job });
+      job.displayMode = displayMode;
+      job.compareDiffThreshold = compareDiffThreshold;
       const deltaId = `${job.id}:${blockId}:delta:${Date.now()}:${Math.random().toString(16).slice(2)}`;
       const startedAt = Date.now();
       const block = job.blocksById && job.blocksById[blockId] ? job.blocksById[blockId] : null;
@@ -2123,6 +2369,8 @@
         deltaId,
         text,
         isFinal: Boolean(isFinal),
+        mode: displayMode,
+        compareDiffThreshold,
         contentSessionId: job.contentSessionId || null
       });
       if (!sent.ok) {
@@ -2621,88 +2869,126 @@
       });
     }
 
+    async _runWithJobSaveLock(jobId, fn) {
+      const key = String(jobId || '');
+      if (!key || typeof fn !== 'function') {
+        return null;
+      }
+      const current = this.jobSaveLocks.get(key) || Promise.resolve();
+      let result;
+      const next = current
+        .catch(() => null)
+        .then(async () => {
+          result = await fn();
+          return result;
+        });
+      this.jobSaveLocks.set(key, next);
+      try {
+        await next;
+        return result;
+      } finally {
+        if (this.jobSaveLocks.get(key) === next) {
+          this.jobSaveLocks.delete(key);
+        }
+      }
+    }
+
     async _saveJob(job, { setActive = false, clearActive = false } = {}) {
       if (!job || !job.id) {
         return;
       }
-      let prev = null;
-      try {
-        prev = await this.jobStore.getJob(job.id);
-      } catch (_) {
-        prev = null;
-      }
-      if (prev && this._isTerminalStatus(prev.status) && !this._isTerminalStatus(job.status)) {
-        job.status = prev.status;
-        job.message = prev.message || job.message;
-        job.lastError = prev.lastError || job.lastError;
-        job.currentBatchId = null;
-        const prevCompleted = Number.isFinite(Number(prev.completedBlocks)) ? Number(prev.completedBlocks) : 0;
-        const nextCompleted = Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0;
-        const prevTotal = Number.isFinite(Number(prev.totalBlocks)) ? Number(prev.totalBlocks) : 0;
-        const nextTotal = Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : 0;
-        job.completedBlocks = Math.max(prevCompleted, nextCompleted);
-        job.totalBlocks = Math.max(prevTotal, nextTotal);
-      }
-      if (!job.displayMode && prev && prev.displayMode) {
-        job.displayMode = prev.displayMode;
-      }
-      if ((!job.runSettings || typeof job.runSettings !== 'object') && prev && prev.runSettings && typeof prev.runSettings === 'object') {
-        job.runSettings = prev.runSettings;
-      }
-      this._ensureJobRunSettings(job, { settings: null });
-      job.displayMode = this._normalizeDisplayMode(job.displayMode, true);
-      if (
-        (!Number.isFinite(Number(job.compareDiffThreshold)) || Number(job.compareDiffThreshold) <= 0)
-        && prev
-        && Number.isFinite(Number(prev.compareDiffThreshold))
-      ) {
-        job.compareDiffThreshold = prev.compareDiffThreshold;
-      }
-      job.compareDiffThreshold = this._normalizeCompareDiffThreshold(job.compareDiffThreshold);
-      if (this._isTerminalStatus(job.status)) {
-        setActive = false;
-        clearActive = true;
-      }
-      const now = Date.now();
-      this._ensureJobRuntime(job, { prev, now });
-      const leaseMs = this._leaseMsForStatus(job.status);
-      job.updatedAt = now;
-      const runtimeLease = job.runtime
-        && job.runtime.lease
-        && Number.isFinite(Number(job.runtime.lease.leaseUntilTs))
-        ? Number(job.runtime.lease.leaseUntilTs)
-        : null;
-      const runtimeStatus = job.runtime && typeof job.runtime.status === 'string'
-        ? String(job.runtime.status).toUpperCase()
-        : null;
-      const hasBackoff = Boolean(
-        job.runtime
-        && job.runtime.retry
-        && Number.isFinite(Number(job.runtime.retry.nextRetryAtTs))
-        && Number(job.runtime.retry.nextRetryAtTs) > now
-      );
-      if (runtimeStatus === 'IDLE' || (runtimeStatus === 'QUEUED' && hasBackoff)) {
-        job.leaseUntilTs = null;
-        if (job.runtime && job.runtime.lease) {
-          job.runtime.lease.leaseUntilTs = null;
+      return this._runWithJobSaveLock(job.id, async () => {
+        let prev = null;
+        try {
+          prev = await this.jobStore.getJob(job.id);
+        } catch (_) {
+          prev = null;
         }
-      } else if (runtimeLease !== null && runtimeLease > now) {
-        job.leaseUntilTs = runtimeLease;
-      } else {
-        job.leaseUntilTs = leaseMs ? now + leaseMs : null;
-        if (job.runtime && job.runtime.lease) {
-          job.runtime.lease.leaseUntilTs = job.leaseUntilTs;
+        if (prev && this._isTerminalStatus(prev.status) && !this._isTerminalStatus(job.status)) {
+          job.status = prev.status;
+          job.message = prev.message || job.message;
+          job.lastError = prev.lastError || job.lastError;
+          job.currentBatchId = null;
+          const prevCompleted = Number.isFinite(Number(prev.completedBlocks)) ? Number(prev.completedBlocks) : 0;
+          const nextCompleted = Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0;
+          const prevTotal = Number.isFinite(Number(prev.totalBlocks)) ? Number(prev.totalBlocks) : 0;
+          const nextTotal = Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : 0;
+          job.completedBlocks = Math.max(prevCompleted, nextCompleted);
+          job.totalBlocks = Math.max(prevTotal, nextTotal);
         }
-      }
-      await this.jobStore.upsertJob(job);
-      if (setActive) {
-        await this.jobStore.setActiveJob(job.tabId, job.id);
-      }
-      if (clearActive) {
-        await this.jobStore.clearActiveJob(job.tabId, job.id);
-      }
-      await this._syncTabStatus(job);
-      this._emitUiPatch(job);
+        if (!job.displayMode && prev && prev.displayMode) {
+          job.displayMode = prev.displayMode;
+        }
+        let tabDisplayMode = null;
+        if (Number.isFinite(Number(job.tabId))) {
+          try {
+            tabDisplayMode = await this._resolveTabDisplayMode(Number(job.tabId));
+          } catch (_) {
+            tabDisplayMode = null;
+          }
+        }
+        if (tabDisplayMode === 'original' || tabDisplayMode === 'translated' || tabDisplayMode === 'compare') {
+          job.displayMode = tabDisplayMode;
+        }
+        if ((!job.runSettings || typeof job.runSettings !== 'object') && prev && prev.runSettings && typeof prev.runSettings === 'object') {
+          job.runSettings = prev.runSettings;
+        }
+        this._ensureJobRunSettings(job, { settings: null });
+        this._ensureJobProofreadingState(job);
+        job.displayMode = this._normalizeDisplayMode(job.displayMode, true);
+        if (
+          (!Number.isFinite(Number(job.compareDiffThreshold)) || Number(job.compareDiffThreshold) <= 0)
+          && prev
+          && Number.isFinite(Number(prev.compareDiffThreshold))
+        ) {
+          job.compareDiffThreshold = prev.compareDiffThreshold;
+        }
+        job.compareDiffThreshold = this._normalizeCompareDiffThreshold(job.compareDiffThreshold);
+        if (this._isTerminalStatus(job.status)) {
+          setActive = false;
+          clearActive = true;
+        }
+        const now = Date.now();
+        this._ensureJobRuntime(job, { prev, now });
+        const leaseMs = this._leaseMsForStatus(job.status);
+        job.updatedAt = now;
+        const runtimeLease = job.runtime
+          && job.runtime.lease
+          && Number.isFinite(Number(job.runtime.lease.leaseUntilTs))
+          ? Number(job.runtime.lease.leaseUntilTs)
+          : null;
+        const runtimeStatus = job.runtime && typeof job.runtime.status === 'string'
+          ? String(job.runtime.status).toUpperCase()
+          : null;
+        const hasBackoff = Boolean(
+          job.runtime
+          && job.runtime.retry
+          && Number.isFinite(Number(job.runtime.retry.nextRetryAtTs))
+          && Number(job.runtime.retry.nextRetryAtTs) > now
+        );
+        if (runtimeStatus === 'IDLE' || (runtimeStatus === 'QUEUED' && hasBackoff)) {
+          job.leaseUntilTs = null;
+          if (job.runtime && job.runtime.lease) {
+            job.runtime.lease.leaseUntilTs = null;
+          }
+        } else if (runtimeLease !== null && runtimeLease > now) {
+          job.leaseUntilTs = runtimeLease;
+        } else {
+          job.leaseUntilTs = leaseMs ? now + leaseMs : null;
+          if (job.runtime && job.runtime.lease) {
+            job.runtime.lease.leaseUntilTs = job.leaseUntilTs;
+          }
+        }
+        await this.jobStore.upsertJob(job);
+        if (setActive) {
+          await this.jobStore.setActiveJob(job.tabId, job.id);
+        }
+        if (clearActive) {
+          await this.jobStore.clearActiveJob(job.tabId, job.id);
+        }
+        await this._syncTabStatus(job);
+        this._emitUiPatch(job);
+      });
     }
 
     _runtimeStatusFromJobStatus(status) {
@@ -2723,6 +3009,12 @@
       }
       if (status === 'awaiting_categories') {
         return 'awaiting_categories';
+      }
+      const proof = job && job.proofreading && typeof job.proofreading === 'object'
+        ? job.proofreading
+        : null;
+      if (proof && (proof.enabled === true || (Array.isArray(proof.pendingBlockIds) && proof.pendingBlockIds.length))) {
+        return 'proofreading';
       }
       const phase = job && job.agentState && typeof job.agentState.phase === 'string'
         ? String(job.agentState.phase).toLowerCase()
@@ -2976,6 +3268,12 @@
       const phase = job && job.agentState && typeof job.agentState.phase === 'string'
         ? String(job.agentState.phase).toLowerCase()
         : '';
+      const proof = job && job.proofreading && typeof job.proofreading === 'object'
+        ? job.proofreading
+        : null;
+      if (proof && (proof.enabled === true || (Array.isArray(proof.pendingBlockIds) && proof.pendingBlockIds.length))) {
+        return 'proofreading';
+      }
       if (phase.includes('proofread')) {
         return 'proofreading';
       }
@@ -3175,6 +3473,9 @@
           const block = job.blocksById[blockId] || {};
           const originalText = typeof block.originalText === 'string' ? block.originalText : '';
           const translatedText = typeof block.translatedText === 'string' ? block.translatedText : '';
+          const quality = block && block.quality && typeof block.quality === 'object'
+            ? block.quality
+            : null;
           const status = failed.has(blockId)
             ? 'FAILED'
             : pending.has(blockId)
@@ -3188,6 +3489,7 @@
             translatedLength: translatedText.length,
             originalHash: block.originalHash || this._hashTextStable(originalText),
             translatedHash: translatedText ? this._hashTextStable(translatedText) : null,
+            qualityTag: quality && typeof quality.tag === 'string' ? quality.tag : 'raw',
             originalSnippet: this._buildPatchPreview(originalText),
             translatedSnippet: translatedText ? this._buildPatchPreview(translatedText) : ''
           };
@@ -3211,6 +3513,7 @@
       }
       const runtime = this._ensureJobRuntime(job, { now: Date.now() });
       const runSettings = this._ensureJobRunSettings(job, { settings: null });
+      const proofreading = this._ensureJobProofreadingState(job);
       const autoTune = runSettings && runSettings.autoTune && typeof runSettings.autoTune === 'object'
         ? runSettings.autoTune
         : null;
@@ -3269,6 +3572,18 @@
             }
           }
           : null,
+        proofreading: {
+          enabled: proofreading.enabled === true,
+          mode: proofreading.mode === 'manual' ? 'manual' : 'auto',
+          pass: Number.isFinite(Number(proofreading.pass)) ? Number(proofreading.pass) : 0,
+          pendingCount: Array.isArray(proofreading.pendingBlockIds) ? proofreading.pendingBlockIds.length : 0,
+          doneCount: Array.isArray(proofreading.doneBlockIds) ? proofreading.doneBlockIds.length : 0,
+          failedCount: Array.isArray(proofreading.failedBlockIds) ? proofreading.failedBlockIds.length : 0,
+          lastPlanTs: Number.isFinite(Number(proofreading.lastPlanTs)) ? Number(proofreading.lastPlanTs) : null,
+          lastError: proofreading.lastError && typeof proofreading.lastError === 'object'
+            ? proofreading.lastError
+            : null
+        },
         patchHistoryCount: job.agentState && Array.isArray(job.agentState.patchHistory)
           ? job.agentState.patchHistory.length
           : 0,
@@ -4072,6 +4387,55 @@
       return job.runSettings;
     }
 
+    _ensureJobProofreadingState(job) {
+      if (!job || typeof job !== 'object') {
+        return {
+          enabled: false,
+          mode: 'auto',
+          pass: 0,
+          pendingBlockIds: [],
+          doneBlockIds: [],
+          failedBlockIds: [],
+          criteria: {
+            preferTechnical: false,
+            maxBlocksAuto: 120,
+            minCharCount: 24,
+            requireGlossaryConsistency: false
+          },
+          lastPlanTs: null,
+          lastError: null
+        };
+      }
+      const src = job.proofreading && typeof job.proofreading === 'object'
+        ? job.proofreading
+        : {};
+      const out = {
+        enabled: src.enabled === true,
+        mode: src.mode === 'manual' ? 'manual' : 'auto',
+        pass: Number.isFinite(Number(src.pass)) ? Math.max(0, Math.min(2, Math.round(Number(src.pass)))) : 0,
+        pendingBlockIds: Array.isArray(src.pendingBlockIds) ? src.pendingBlockIds.slice() : [],
+        doneBlockIds: Array.isArray(src.doneBlockIds) ? src.doneBlockIds.slice() : [],
+        failedBlockIds: Array.isArray(src.failedBlockIds) ? src.failedBlockIds.slice() : [],
+        criteria: {
+          preferTechnical: Boolean(src.criteria && src.criteria.preferTechnical === true),
+          maxBlocksAuto: Number.isFinite(Number(src.criteria && src.criteria.maxBlocksAuto))
+            ? Math.max(1, Math.min(2000, Math.round(Number(src.criteria.maxBlocksAuto))))
+            : 120,
+          minCharCount: Number.isFinite(Number(src.criteria && src.criteria.minCharCount))
+            ? Math.max(0, Math.min(2000, Math.round(Number(src.criteria.minCharCount))))
+            : 24,
+          requireGlossaryConsistency: Boolean(src.criteria && src.criteria.requireGlossaryConsistency === true)
+        },
+        lastPlanTs: Number.isFinite(Number(src.lastPlanTs)) ? Number(src.lastPlanTs) : null,
+        lastError: src.lastError && typeof src.lastError === 'object' ? src.lastError : null
+      };
+      if (out.enabled && out.pass === 0) {
+        out.pass = 1;
+      }
+      job.proofreading = out;
+      return out;
+    }
+
     _resolveAutoTuneEnabledFromSettings(settings, fallback) {
       const tuning = settings && settings.translationAgentTuning && typeof settings.translationAgentTuning === 'object'
         ? settings.translationAgentTuning
@@ -4290,10 +4654,12 @@
         const originalHash = block.originalHash || this._hashTextStable(String(block.originalText || '').trim());
         block.originalHash = originalHash;
         let translatedText = null;
+        let restoredQualityTag = null;
         if (page && page.blocks && page.blocks[block.blockId] && typeof page.blocks[block.blockId] === 'object') {
           const record = page.blocks[block.blockId];
           if (record.originalHash && record.originalHash === originalHash && typeof record.translatedText === 'string' && record.translatedText) {
             translatedText = record.translatedText;
+            restoredQualityTag = typeof record.qualityTag === 'string' ? record.qualityTag : null;
           }
         }
         if (!translatedText) {
@@ -4301,6 +4667,7 @@
           const blockRecord = await this.translationMemoryStore.getBlock(blockKey).catch(() => null);
           if (blockRecord && typeof blockRecord.translatedText === 'string' && blockRecord.translatedText) {
             translatedText = blockRecord.translatedText;
+            restoredQualityTag = typeof blockRecord.qualityTag === 'string' ? blockRecord.qualityTag : null;
             await this.translationMemoryStore.touchBlock(blockKey).catch(() => ({ ok: false }));
           }
         }
@@ -4308,6 +4675,11 @@
           continue;
         }
         block.translatedText = translatedText;
+        block.quality = block.quality && typeof block.quality === 'object' ? block.quality : {};
+        block.quality.tag = restoredQualityTag === 'proofread' || restoredQualityTag === 'literal' || restoredQualityTag === 'styled'
+          ? restoredQualityTag
+          : 'raw';
+        block.quality.lastUpdatedTs = Date.now();
         restoredItems.push({
           blockId: block.blockId,
           text: translatedText
@@ -4577,6 +4949,145 @@
         reusedCount,
         pendingCount,
         fromCache: true
+      };
+    }
+
+    async _tryRestoreAwaitingFromPageCache({ job, blocks, settings, message } = {}) {
+      if (!this.pageCacheStore || !job || !Array.isArray(blocks) || !blocks.length) {
+        return null;
+      }
+      if (!job.url || !job.targetLang) {
+        return null;
+      }
+      if (settings && settings.translationPageCacheEnabled === false) {
+        return null;
+      }
+      if (job.forceTranslate) {
+        return null;
+      }
+
+      const pageSignature = this._buildPageSignature(blocks);
+      if (!pageSignature) {
+        return null;
+      }
+
+      let cacheEntry = null;
+      try {
+        cacheEntry = await this.pageCacheStore.getEntry({
+          url: job.url,
+          targetLang: job.targetLang || 'ru'
+        });
+      } catch (_) {
+        return null;
+      }
+      if (!cacheEntry) {
+        return null;
+      }
+      const signatureMatch = cacheEntry.signature === pageSignature;
+      const cachedBlockCount = Number.isFinite(Number(cacheEntry.blockCount))
+        ? Number(cacheEntry.blockCount)
+        : 0;
+      const blockCountClose = cachedBlockCount > 0
+        ? Math.abs(cachedBlockCount - blocks.length) <= 1
+        : false;
+      const coverageIsFull = Boolean(cacheEntry && cacheEntry.coverage && cacheEntry.coverage.isFull === true);
+      const canUseUrlFallback = !signatureMatch && coverageIsFull && blockCountClose;
+      if (!signatureMatch && !canUseUrlFallback) {
+        return null;
+      }
+
+      const items = Array.isArray(cacheEntry.items)
+        ? cacheEntry.items.filter((item) => item && item.blockId && typeof item.text === 'string' && item.text)
+        : [];
+      if (!items.length) {
+        return null;
+      }
+
+      const blocksById = {};
+      blocks.forEach((item) => {
+        if (item && item.blockId) {
+          blocksById[item.blockId] = item;
+        }
+      });
+      const itemMap = {};
+      items.forEach((item) => {
+        if (blocksById[item.blockId] && !Object.prototype.hasOwnProperty.call(itemMap, item.blockId)) {
+          itemMap[item.blockId] = item.text;
+        }
+      });
+      const cachedBlockIds = Object.keys(itemMap);
+      if (!cachedBlockIds.length) {
+        return null;
+      }
+
+      const latest = await this.jobStore.getJob(job.id);
+      if (!latest || this._isTerminalStatus(latest.status)) {
+        return { ok: true, ignored: true };
+      }
+      if (message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
+        latest.contentSessionId = message.contentSessionId;
+      }
+
+      const availableCategories = this._collectAvailableCategories(blocksById);
+      const coverageCategories = cacheEntry && cacheEntry.coverage && Array.isArray(cacheEntry.coverage.categories)
+        ? cacheEntry.coverage.categories
+        : [];
+      const recommendedCategories = this._normalizeSelectedCategories(
+        coverageCategories.length ? coverageCategories : availableCategories,
+        availableCategories,
+        availableCategories
+      );
+
+      latest.scanReceived = true;
+      latest.blocksById = blocksById;
+      latest.totalBlocks = 0;
+      latest.pendingBlockIds = [];
+      latest.failedBlockIds = [];
+      latest.completedBlocks = 0;
+      latest.status = 'awaiting_categories';
+      latest.message = signatureMatch
+        ? `Найден кэш страницы (${cachedBlockIds.length} блоков). Выберите категории для восстановления.`
+        : `Найден кэш по URL (${cachedBlockIds.length} блоков). Подтвердите категории для восстановления.`;
+      latest.pageSignature = pageSignature;
+      latest.cacheKey = this.pageCacheStore
+        ? this.pageCacheStore.buildKey({ url: latest.url || '', targetLang: latest.targetLang || 'ru' })
+        : null;
+      latest.availableCategories = availableCategories;
+      latest.selectedCategories = recommendedCategories;
+      latest.apiCacheEnabled = settings.translationApiCacheEnabled !== false;
+      if (!latest.memoryRestore || typeof latest.memoryRestore !== 'object') {
+        latest.memoryRestore = {
+          ok: true,
+          restoredCount: cachedBlockIds.length,
+          appliedCount: 0,
+          coverage: cachedBlockIds.length >= blocks.length ? 'full_page' : 'partial',
+          matchType: signatureMatch ? 'page_cache_signature' : 'page_cache_url_fallback',
+          pageKey: latest.memoryContext && latest.memoryContext.pageKey ? latest.memoryContext.pageKey : null,
+          recommendedCategories: recommendedCategories.slice()
+        };
+      }
+      this._recordRuntimeAction(latest, {
+        tool: 'cacheManager',
+        status: 'ok',
+        message: 'cache.awaiting_restore.ready',
+        meta: {
+          cacheKey: latest.cacheKey || null,
+          cachedCount: cachedBlockIds.length,
+          signatureMatch,
+          categories: recommendedCategories.slice(0, 24)
+        }
+      });
+      if (this.translationAgent && latest.agentState && typeof this.translationAgent.markPhase === 'function') {
+        this.translationAgent.markPhase(latest, 'cache_restore', latest.message);
+      }
+      await this._saveJob(latest, { setActive: true });
+      return {
+        ok: true,
+        blockCount: blocks.length,
+        awaitingCategorySelection: true,
+        fromCache: true,
+        availableCategories,
+        selectedCategories: recommendedCategories
       };
     }
 
@@ -4880,7 +5391,8 @@
           delete job.translationMemoryBySource[key];
         });
       }
-      this._upsertPersistentMemoryEntries({ job, blocks, items }).catch(() => {});
+      const upsertPromise = this._upsertPersistentMemoryEntries({ job, blocks, items }).catch(() => {});
+      this._trackPendingMemoryUpsert(job.id, upsertPromise);
     }
 
     async _upsertPersistentMemoryEntries({ job, blocks, items } = {}) {
@@ -4949,12 +5461,16 @@
         }
         const originalHash = block.originalHash || this._hashTextStable(String(block.originalText || '').trim());
         const blockKey = this._buildBlockMemoryKey(job.targetLang || 'ru', originalHash);
+        const qualityTag = block.quality && typeof block.quality === 'object'
+          && (block.quality.tag === 'proofread' || block.quality.tag === 'literal' || block.quality.tag === 'styled')
+          ? block.quality.tag
+          : 'raw';
         await this.translationMemoryStore.upsertBlock({
           blockKey,
           originalHash,
           targetLang: job.targetLang || 'ru',
           translatedText: item.text,
-          qualityTag: 'raw',
+          qualityTag,
           modelUsed: block.modelUsed || null,
           routeUsed: block.routeUsed || null,
           sourcePageKeys: [context.pageKey]
@@ -4963,6 +5479,7 @@
         pageRecord.blocks[item.blockId] = {
           originalHash,
           translatedText: item.text,
+          qualityTag,
           modelUsed: block.modelUsed || null,
           routeUsed: block.routeUsed || null,
           updatedAt: now
@@ -4973,7 +5490,9 @@
             translatedBlockIds: [],
             stats: {
               count: 0,
-              passCount: 1
+              passCount: 1,
+              proofreadCount: 0,
+              proofreadCoverage: 0
             },
             doneAt: null
           };
@@ -4987,8 +5506,19 @@
         }
         categoryEntry.stats = categoryEntry.stats && typeof categoryEntry.stats === 'object'
           ? categoryEntry.stats
-          : { count: 0, passCount: 1 };
+          : { count: 0, passCount: 1, proofreadCount: 0, proofreadCoverage: 0 };
         categoryEntry.stats.count = categoryEntry.translatedBlockIds.length;
+        const proofreadCount = categoryEntry.translatedBlockIds.reduce((acc, id) => {
+          const row = pageRecord.blocks && pageRecord.blocks[id] && typeof pageRecord.blocks[id] === 'object'
+            ? pageRecord.blocks[id]
+            : null;
+          const tag = row && typeof row.qualityTag === 'string' ? row.qualityTag : 'raw';
+          return acc + (tag === 'proofread' || tag === 'literal' || tag === 'styled' ? 1 : 0);
+        }, 0);
+        categoryEntry.stats.proofreadCount = proofreadCount;
+        categoryEntry.stats.proofreadCoverage = categoryEntry.stats.count > 0
+          ? Number((proofreadCount / categoryEntry.stats.count).toFixed(4))
+          : 0;
         categoryEntry.doneAt = now;
       }
 
@@ -5226,6 +5756,79 @@
         }
       }
       this.pendingPatchFlushByJob.delete(jobId);
+      this._dropPendingMemoryUpserts(jobId);
+    }
+
+    _trackPendingMemoryUpsert(jobId, promise) {
+      if (!jobId || !promise || typeof promise.then !== 'function') {
+        return;
+      }
+      let bucket = this.pendingMemoryUpsertsByJob.get(jobId);
+      if (!bucket) {
+        bucket = new Set();
+        this.pendingMemoryUpsertsByJob.set(jobId, bucket);
+      }
+      bucket.add(promise);
+      const detach = () => {
+        const current = this.pendingMemoryUpsertsByJob.get(jobId);
+        if (!current) {
+          return;
+        }
+        current.delete(promise);
+        if (!current.size) {
+          this.pendingMemoryUpsertsByJob.delete(jobId);
+        }
+      };
+      promise.then(detach).catch(detach);
+    }
+
+    async _waitForPendingMemoryUpserts(jobId, { timeoutMs = 3000 } = {}) {
+      if (!jobId) {
+        return { ok: true, waited: false, pending: 0 };
+      }
+      const bucket = this.pendingMemoryUpsertsByJob.get(jobId);
+      if (!bucket || !bucket.size) {
+        return { ok: true, waited: false, pending: 0 };
+      }
+      const pending = Array.from(bucket);
+      if (!pending.length) {
+        return { ok: true, waited: false, pending: 0 };
+      }
+      const timeout = Number.isFinite(Number(timeoutMs))
+        ? Math.max(200, Math.min(10000, Math.round(Number(timeoutMs))))
+        : 3000;
+      const timeoutResult = await new Promise((resolve) => {
+        const timerId = global.setTimeout(() => {
+          resolve({ timeout: true });
+        }, timeout);
+        Promise.allSettled(pending).then(() => {
+          try {
+            global.clearTimeout(timerId);
+          } catch (_) {
+            // best-effort
+          }
+          resolve({ timeout: false });
+        }).catch(() => {
+          try {
+            global.clearTimeout(timerId);
+          } catch (_) {
+            // best-effort
+          }
+          resolve({ timeout: false });
+        });
+      });
+      return {
+        ok: timeoutResult && timeoutResult.timeout !== true,
+        waited: true,
+        pending: bucket.size
+      };
+    }
+
+    _dropPendingMemoryUpserts(jobId) {
+      if (!jobId) {
+        return;
+      }
+      this.pendingMemoryUpsertsByJob.delete(jobId);
     }
   }
 

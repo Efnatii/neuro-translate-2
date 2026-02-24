@@ -819,6 +819,12 @@
       const phase = job && job.agentState && typeof job.agentState.phase === 'string'
         ? job.agentState.phase
         : '';
+      const proof = job && job.proofreading && typeof job.proofreading === 'object'
+        ? job.proofreading
+        : null;
+      if (proof && (proof.enabled === true || (Array.isArray(proof.pendingBlockIds) && proof.pendingBlockIds.length))) {
+        return 'proofreading';
+      }
       if (phase.indexOf('proofread') >= 0) {
         return 'proofreading';
       }
@@ -2048,6 +2054,9 @@
           originalText: originalText.slice(0, 2400),
           translatedText: translatedText.slice(0, 2400),
           qualityTag: quality.tag,
+          requestedAction: proof.requestedActionByBlockId && typeof proof.requestedActionByBlockId === 'object'
+            ? (proof.requestedActionByBlockId[blockId] || null)
+            : null,
           risk,
           charCount: originalText.length
         };
@@ -2069,7 +2078,8 @@
             score: row.risk.score,
             diffRatio: row.risk.diffRatio,
             hasTermSignals: row.risk.hasTermSignals,
-            longBlock: row.risk.longBlock
+            longBlock: row.risk.longBlock,
+            requestedAction: row.requestedAction || null
           }
         })),
         pendingCount: pending.length,
@@ -2091,7 +2101,15 @@
       if (!block) {
         throw this._toolError('BLOCK_NOT_FOUND', `Unknown blockId: ${blockId}`);
       }
-      const mode = args.mode === 'literal' || args.mode === 'style_improve' ? args.mode : 'proofread';
+      const proofState = this._ensureProofreadingState(job);
+      const requestedAction = proofState && proofState.requestedActionByBlockId && typeof proofState.requestedActionByBlockId === 'object'
+        ? proofState.requestedActionByBlockId[blockId]
+        : null;
+      const mode = args.mode === 'literal' || args.mode === 'style_improve'
+        ? args.mode
+        : (requestedAction === 'literal' || requestedAction === 'style_improve'
+          ? requestedAction
+          : 'proofread');
       const qualityTag = this._qualityTagForProofMode(mode);
       const quality = this._ensureBlockQuality(block);
       const currentText = typeof block.translatedText === 'string' ? block.translatedText : '';
@@ -2256,6 +2274,9 @@
         mode,
         resultText: finalText
       });
+      if (proofState && proofState.requestedActionByBlockId && typeof proofState.requestedActionByBlockId === 'object') {
+        delete proofState.requestedActionByBlockId[blockId];
+      }
       if (repeatResult.blocked) {
         return {
           ok: false,
@@ -2671,6 +2692,23 @@
     }
 
     async _toolMarkBlockDone(args, job) {
+      return this._markBlockDoneInternal(args, job, {
+        qualityTag: 'raw',
+        mode: 'execution'
+      });
+    }
+
+    async _toolMarkProofBlockDone(args, job) {
+      const qualityTag = args.qualityTag === 'literal' || args.qualityTag === 'styled'
+        ? args.qualityTag
+        : 'proofread';
+      return this._markBlockDoneInternal(args, job, {
+        qualityTag,
+        mode: 'proofreading'
+      });
+    }
+
+    async _markBlockDoneInternal(args, job, { qualityTag = 'raw', mode = 'execution' } = {}) {
       const blockId = typeof args.blockId === 'string' ? args.blockId.trim() : '';
       if (!blockId) {
         throw this._toolError('BAD_TOOL_ARGS', 'blockId is required');
@@ -2680,8 +2718,10 @@
       if (!block) {
         throw this._toolError('BLOCK_NOT_FOUND', `Unknown blockId: ${blockId}`);
       }
+      const before = typeof block.translatedText === 'string' && block.translatedText
+        ? block.translatedText
+        : (typeof block.originalText === 'string' ? block.originalText : '');
       const text = typeof args.text === 'string' ? args.text : '';
-      const before = typeof block.originalText === 'string' ? block.originalText : '';
       block.translatedText = text;
       if (typeof args.modelUsed === 'string' && args.modelUsed) {
         block.modelUsed = args.modelUsed;
@@ -2689,18 +2729,40 @@
       if (typeof args.routeUsed === 'string' && args.routeUsed) {
         block.routeUsed = args.routeUsed;
       }
-      job.pendingBlockIds = Array.isArray(job.pendingBlockIds)
-        ? job.pendingBlockIds.filter((id) => id !== blockId)
-        : [];
-      if (Array.isArray(job.failedBlockIds)) {
-        job.failedBlockIds = job.failedBlockIds.filter((id) => id !== blockId);
+      const quality = this._ensureBlockQuality(block);
+      quality.tag = qualityTag;
+      quality.lastUpdatedTs = Date.now();
+      quality.modelUsed = block.modelUsed || null;
+      quality.routeUsed = block.routeUsed || null;
+      const proof = this._ensureProofreadingState(job);
+      if (mode === 'execution') {
+        job.pendingBlockIds = Array.isArray(job.pendingBlockIds)
+          ? job.pendingBlockIds.filter((id) => id !== blockId)
+          : [];
+        if (Array.isArray(job.failedBlockIds)) {
+          job.failedBlockIds = job.failedBlockIds.filter((id) => id !== blockId);
+        }
+        const total = Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : Object.keys(byId).length;
+        const pendingCount = Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0;
+        const failedCount = Array.isArray(job.failedBlockIds) ? job.failedBlockIds.length : 0;
+        const derivedCompleted = Math.max(0, total - pendingCount - failedCount);
+        job.completedBlocks = Math.max(Number(job.completedBlocks || 0), derivedCompleted);
+      } else {
+        proof.pendingBlockIds = Array.isArray(proof.pendingBlockIds)
+          ? proof.pendingBlockIds.filter((id) => id !== blockId)
+          : [];
+        proof.failedBlockIds = Array.isArray(proof.failedBlockIds)
+          ? proof.failedBlockIds.filter((id) => id !== blockId)
+          : [];
+        proof.doneBlockIds = Array.isArray(proof.doneBlockIds) ? proof.doneBlockIds : [];
+        if (!proof.doneBlockIds.includes(blockId)) {
+          proof.doneBlockIds.push(blockId);
+        }
+        if (proof.requestedActionByBlockId && typeof proof.requestedActionByBlockId === 'object') {
+          delete proof.requestedActionByBlockId[blockId];
+        }
+        quality.pass = Number.isFinite(Number(proof.pass)) ? Number(proof.pass) : 1;
       }
-      const total = Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : Object.keys(byId).length;
-      const pendingCount = Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0;
-      const failedCount = Array.isArray(job.failedBlockIds) ? job.failedBlockIds.length : 0;
-      const derivedCompleted = Math.max(0, total - pendingCount - failedCount);
-      job.completedBlocks = Math.max(Number(job.completedBlocks || 0), derivedCompleted);
-
       const agentState = job.agentState && typeof job.agentState === 'object' ? job.agentState : null;
       if (agentState) {
         agentState.recentDiffItems = Array.isArray(agentState.recentDiffItems) ? agentState.recentDiffItems : [];
@@ -2721,15 +2783,21 @@
         ? agentState.recentDiffItems.slice(-20)
         : (Array.isArray(job.recentDiffItems) ? job.recentDiffItems.slice(-20) : []);
       if (agentState) {
-        this._upsertChecklist(agentState, 'translating', 'running', `done=${job.completedBlocks}`);
+        if (mode === 'proofreading') {
+          this._upsertChecklist(agentState, 'proofreading', 'running', `done=${proof.doneBlockIds.length}`);
+        } else {
+          this._upsertChecklist(agentState, 'translating', 'running', `done=${job.completedBlocks}`);
+        }
       }
-      await this._persistBlockToMemory(job, block).catch(() => ({ ok: false }));
-
+      await this._persistBlockToMemory(job, block, { qualityTag }).catch(() => ({ ok: false }));
       return {
         ok: true,
         blockId,
-        completedBlocks: job.completedBlocks,
-        pendingCount
+        completedBlocks: Number(job.completedBlocks || 0),
+        pendingCount: mode === 'proofreading'
+          ? (Array.isArray(proof.pendingBlockIds) ? proof.pendingBlockIds.length : 0)
+          : (Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0),
+        qualityTag
       };
     }
 
@@ -2765,6 +2833,129 @@
       };
     }
 
+    _toolMarkProofBlockFailed(args, job) {
+      const blockId = typeof args.blockId === 'string' ? args.blockId.trim() : '';
+      if (!blockId) {
+        throw this._toolError('BAD_TOOL_ARGS', 'blockId is required');
+      }
+      const code = typeof args.code === 'string' && args.code ? args.code : 'PROOF_BLOCK_FAILED';
+      const message = typeof args.message === 'string' && args.message
+        ? args.message
+        : 'proofreading block failed';
+      const proof = this._ensureProofreadingState(job);
+      proof.pendingBlockIds = Array.isArray(proof.pendingBlockIds)
+        ? proof.pendingBlockIds.filter((id) => id !== blockId)
+        : [];
+      proof.failedBlockIds = Array.isArray(proof.failedBlockIds) ? proof.failedBlockIds : [];
+      if (!proof.failedBlockIds.includes(blockId)) {
+        proof.failedBlockIds.push(blockId);
+      }
+      proof.lastError = { code, message };
+      const agentState = job.agentState && typeof job.agentState === 'object' ? job.agentState : null;
+      if (agentState) {
+        this._upsertChecklist(agentState, 'proofreading', 'running', `failed=${proof.failedBlockIds.length}`);
+      }
+      return {
+        ok: true,
+        blockId,
+        code,
+        failedCount: proof.failedBlockIds.length,
+        pendingCount: proof.pendingBlockIds.length
+      };
+    }
+
+    _toolFinishProofreading(args, job) {
+      const proof = this._ensureProofreadingState(job);
+      const pendingCount = Array.isArray(proof.pendingBlockIds) ? proof.pendingBlockIds.length : 0;
+      const doneCount = Array.isArray(proof.doneBlockIds) ? proof.doneBlockIds.length : 0;
+      const failedCount = Array.isArray(proof.failedBlockIds) ? proof.failedBlockIds.length : 0;
+      if (pendingCount > 0) {
+        return {
+          ok: false,
+          code: 'NEED_MORE_WORK',
+          message: 'proofreading pending is not empty',
+          pendingCount,
+          doneCount,
+          failedCount
+        };
+      }
+      proof.enabled = false;
+      const state = job.agentState && typeof job.agentState === 'object' ? job.agentState : null;
+      if (state) {
+        this._upsertChecklist(state, 'proofreading', 'done', `done=${doneCount} failed=${failedCount}`);
+        this._appendReport(state, {
+          type: 'proofread',
+          title: 'Вычитка завершена',
+          body: `done=${doneCount}, failed=${failedCount}`,
+          meta: {
+            reason: typeof args.reason === 'string' ? args.reason.slice(0, 220) : ''
+          }
+        });
+        state.phase = 'proofreading_done';
+      }
+      return {
+        ok: true,
+        pendingCount,
+        doneCount,
+        failedCount
+      };
+    }
+
+    _toolUiRequestProofreadScope(args, job) {
+      const planned = this._toolPlanProofreading({
+        scope: args.scope,
+        category: args.category,
+        blockIds: args.blockIds,
+        mode: args.mode || 'manual',
+        reason: 'ui_request'
+      }, job);
+      if (planned && planned.ok && Number(planned.pendingCount || 0) > 0) {
+        job.status = 'running';
+        const state = job.agentState && typeof job.agentState === 'object' ? job.agentState : (job.agentState = {});
+        state.phase = 'proofreading_in_progress';
+        state.status = 'running';
+        state.updatedAt = Date.now();
+      }
+      return { ok: true, planned };
+    }
+
+    _toolUiRequestBlockAction(args, job) {
+      const blockId = typeof args.blockId === 'string' ? args.blockId.trim() : '';
+      if (!blockId) {
+        throw this._toolError('BAD_TOOL_ARGS', 'blockId is required');
+      }
+      const action = args.action === 'literal' ? 'literal' : 'style_improve';
+      const proof = this._ensureProofreadingState(job);
+      proof.mode = 'manual';
+      proof.enabled = true;
+      proof.pendingBlockIds = Array.isArray(proof.pendingBlockIds) ? proof.pendingBlockIds : [];
+      if (!proof.pendingBlockIds.includes(blockId)) {
+        proof.pendingBlockIds.push(blockId);
+      }
+      proof.doneBlockIds = Array.isArray(proof.doneBlockIds)
+        ? proof.doneBlockIds.filter((id) => id !== blockId)
+        : [];
+      proof.requestedActionByBlockId = proof.requestedActionByBlockId && typeof proof.requestedActionByBlockId === 'object'
+        ? proof.requestedActionByBlockId
+        : {};
+      proof.requestedActionByBlockId[blockId] = action;
+      const state = job.agentState && typeof job.agentState === 'object' ? job.agentState : (job.agentState = {});
+      state.phase = 'proofreading_in_progress';
+      state.status = 'running';
+      this._appendReport(state, {
+        type: 'proofread',
+        title: 'Точечная вычитка',
+        body: `Блок ${blockId}: ${action === 'literal' ? 'дословно' : 'улучшить стиль'}`,
+        meta: { blockId, action }
+      });
+      return {
+        ok: true,
+        blockId,
+        action,
+        pendingCount: proof.pendingBlockIds.length
+      };
+    }
+
     _toolAuditProgress(args, job) {
       const reason = typeof args.reason === 'string' && args.reason ? args.reason : 'execution';
       const mandatory = args.mandatory === true;
@@ -2789,11 +2980,15 @@
       const pending = Array.isArray(job && job.pendingBlockIds) ? job.pendingBlockIds.slice() : [];
       const failed = Array.isArray(job && job.failedBlockIds) ? job.failedBlockIds.length : 0;
       const completed = Number.isFinite(Number(job && job.completedBlocks)) ? Number(job.completedBlocks) : 0;
+      const stage = this._resolveStage(job);
+      const proof = this._ensureProofreadingState(job);
+      const proofDone = Array.isArray(proof.doneBlockIds) ? proof.doneBlockIds.length : 0;
+      const proofFailed = Array.isArray(proof.failedBlockIds) ? proof.failedBlockIds.length : 0;
       const pendingHash = this._hashTextStable(pending.join('|'));
       const lastAppliedTs = state && Number.isFinite(Number(state.lastAppliedTs))
         ? Number(state.lastAppliedTs)
         : 0;
-      const progressKey = `${completed}:${failed}:${pendingHash}:${lastAppliedTs}`;
+      const progressKey = `${completed}:${failed}:${pendingHash}:${lastAppliedTs}:${stage}:${proofDone}:${proofFailed}`;
       if (state) {
         const progress = state.progressAudit && typeof state.progressAudit === 'object'
           ? state.progressAudit
@@ -3151,7 +3346,7 @@
       };
     }
 
-    async _persistBlockToMemory(job, block) {
+    async _persistBlockToMemory(job, block, { qualityTag = null } = {}) {
       if (!this.translationMemoryStore || !job || !block || !this._isMemoryEnabled(this.memorySettings || {})) {
         return { ok: false };
       }
@@ -3167,12 +3362,17 @@
       if (!text) {
         return { ok: false };
       }
+      const normalizedQualityTag = qualityTag === 'proofread' || qualityTag === 'literal' || qualityTag === 'styled'
+        ? qualityTag
+        : (block.quality && (block.quality.tag === 'proofread' || block.quality.tag === 'literal' || block.quality.tag === 'styled')
+          ? block.quality.tag
+          : 'raw');
       await this.translationMemoryStore.upsertBlock({
         blockKey,
         originalHash,
         targetLang: job.targetLang || 'ru',
         translatedText: text,
-        qualityTag: 'raw',
+        qualityTag: normalizedQualityTag,
         modelUsed: block.modelUsed || null,
         routeUsed: block.routeUsed || null,
         sourcePageKeys: [context.pageKey]
@@ -3196,6 +3396,7 @@
       pageRecord.blocks[block.blockId] = {
         originalHash,
         translatedText: text,
+        qualityTag: normalizedQualityTag,
         modelUsed: block.modelUsed || null,
         routeUsed: block.routeUsed || null,
         updatedAt: now
@@ -3204,7 +3405,7 @@
       if (!pageRecord.categories[category] || typeof pageRecord.categories[category] !== 'object') {
         pageRecord.categories[category] = {
           translatedBlockIds: [],
-          stats: { count: 0, passCount: 1 },
+          stats: { count: 0, passCount: 1, proofreadCount: 0, proofreadCoverage: 0 },
           doneAt: null
         };
       }
@@ -3213,8 +3414,19 @@
       if (!cat.translatedBlockIds.includes(block.blockId)) {
         cat.translatedBlockIds.push(block.blockId);
       }
-      cat.stats = cat.stats && typeof cat.stats === 'object' ? cat.stats : { count: 0, passCount: 1 };
+      cat.stats = cat.stats && typeof cat.stats === 'object' ? cat.stats : { count: 0, passCount: 1, proofreadCount: 0, proofreadCoverage: 0 };
       cat.stats.count = cat.translatedBlockIds.length;
+      const proofreadCount = cat.translatedBlockIds.reduce((acc, id) => {
+        const row = pageRecord.blocks && pageRecord.blocks[id] && typeof pageRecord.blocks[id] === 'object'
+          ? pageRecord.blocks[id]
+          : null;
+        const tag = row && typeof row.qualityTag === 'string' ? row.qualityTag : 'raw';
+        return acc + (tag === 'proofread' || tag === 'literal' || tag === 'styled' ? 1 : 0);
+      }, 0);
+      cat.stats.proofreadCount = proofreadCount;
+      cat.stats.proofreadCoverage = cat.stats.count > 0
+        ? Number((proofreadCount / cat.stats.count).toFixed(4))
+        : 0;
       cat.doneAt = now;
       pageRecord.updatedAt = now;
       pageRecord.lastUsedAt = now;

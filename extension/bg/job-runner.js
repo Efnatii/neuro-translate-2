@@ -263,9 +263,12 @@
           };
         }
       }
-      runtime.lease.heartbeatTs = Date.now();
+      const now = Date.now();
+      runtime.lease.heartbeatTs = now;
       runtime.lease.op = 'scanning';
       runtime.lease.opId = job.id;
+      job.scanRequestedAt = now;
+      job.scanNudgeTs = now;
       job.message = 'Ожидаю результат сканирования после восстановления';
       return { ok: true };
     }
@@ -454,8 +457,15 @@
       }
 
       if (job.status === 'preparing') {
-        const idleForMs = now - (Number(job.updatedAt) || now);
-        if (idleForMs > 30 * 1000) {
+        const baselineScanTs = Number.isFinite(Number(job.scanRequestedAt))
+          ? Number(job.scanRequestedAt)
+          : (Number.isFinite(Number(job.createdAt)) ? Number(job.createdAt) : now);
+        const lastNudgeTs = Number.isFinite(Number(job.scanNudgeTs))
+          ? Number(job.scanNudgeTs)
+          : 0;
+        const idleForMs = now - baselineScanTs;
+        const nudgeCooldownMs = 4000;
+        if (!job.scanReceived && idleForMs > 8000 && (now - lastNudgeTs) >= nudgeCooldownMs) {
           const nudged = await this._nudgePreparingJob(job, runtime);
           if (!nudged || nudged.ok !== true) {
             return this._handleRecovery(job, runtime, nudged && nudged.error ? nudged.error : {

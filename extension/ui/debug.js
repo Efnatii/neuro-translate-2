@@ -675,18 +675,28 @@
       if (this.fields.compareBlocks) {
         this.fields.compareBlocks.addEventListener('click', (event) => {
           const target = event && event.target && typeof event.target.closest === 'function'
-            ? event.target.closest('[data-action="open-compare-block"]')
+            ? event.target.closest('[data-action]')
             : null;
           if (!target) {
             return;
           }
+          const action = target.getAttribute('data-action');
           const blockId = target.getAttribute('data-block-id');
           if (!blockId) {
             return;
           }
-          this.state.compare.selectedBlockId = blockId;
-          this.state.compare.selectedPatchSeq = null;
-          this.renderCompareAndPatches();
+          if (action === 'open-compare-block') {
+            this.state.compare.selectedBlockId = blockId;
+            this.state.compare.selectedPatchSeq = null;
+            this.renderCompareAndPatches();
+            return;
+          }
+          if (action === 'request-block-action') {
+            const proofAction = target.getAttribute('data-proof-action') === 'literal'
+              ? 'literal'
+              : 'style_improve';
+            this.requestBlockAction(blockId, proofAction);
+          }
         });
       }
       if (this.fields.patchTimeline) {
@@ -1466,8 +1476,9 @@
         visible.forEach((item) => {
           const row = this.doc.createElement('div');
           row.className = 'debug__list-item';
+          const qualityLabel = item.qualityTag ? ` | quality=${item.qualityTag}` : '';
           const marker = compareState.selectedBlockId === item.blockId ? '* ' : '';
-          row.textContent = `${marker}${item.blockId} [${item.category}] ${item.status} | len ${item.originalLength}/${item.translatedLength}`;
+          row.textContent = `${marker}${item.blockId} [${item.category}] ${item.status} | len ${item.originalLength}/${item.translatedLength}${qualityLabel}`;
           const button = this.doc.createElement('button');
           button.type = 'button';
           button.className = 'debug__mini-btn';
@@ -1475,6 +1486,22 @@
           button.setAttribute('data-block-id', item.blockId);
           button.textContent = 'Открыть diff';
           row.appendChild(button);
+          const literalButton = this.doc.createElement('button');
+          literalButton.type = 'button';
+          literalButton.className = 'debug__mini-btn';
+          literalButton.setAttribute('data-action', 'request-block-action');
+          literalButton.setAttribute('data-block-id', item.blockId);
+          literalButton.setAttribute('data-proof-action', 'literal');
+          literalButton.textContent = 'Сделать дословно';
+          row.appendChild(literalButton);
+          const styleButton = this.doc.createElement('button');
+          styleButton.type = 'button';
+          styleButton.className = 'debug__mini-btn';
+          styleButton.setAttribute('data-action', 'request-block-action');
+          styleButton.setAttribute('data-block-id', item.blockId);
+          styleButton.setAttribute('data-proof-action', 'style_improve');
+          styleButton.textContent = 'Улучшить стиль';
+          row.appendChild(styleButton);
           this.fields.compareBlocks.appendChild(row);
         });
         if (!visible.length) {
@@ -1609,6 +1636,7 @@
           blockId: item.blockId || 'block',
           category: item.category || 'other',
           status: item.status || 'PENDING',
+          qualityTag: item.qualityTag || 'raw',
           originalLength: Number(item.originalLength || 0),
           translatedLength: Number(item.translatedLength || 0),
           originalSnippet: item.originalSnippet || '',
@@ -1620,11 +1648,46 @@
         blockId: item && item.blockId ? item.blockId : 'block',
         category: item && item.category ? item.category : 'other',
         status: 'DONE',
+        qualityTag: item && item.qualityTag ? item.qualityTag : 'raw',
         originalLength: item && item.before ? String(item.before).length : 0,
         translatedLength: item && item.after ? String(item.after).length : 0,
         originalSnippet: item && item.before ? item.before : '',
         translatedSnippet: item && item.after ? item.after : ''
       }));
+    }
+
+    requestBlockAction(blockId, action) {
+      const id = typeof blockId === 'string' ? blockId.trim() : '';
+      if (!id) {
+        return;
+      }
+      const tabIdCandidate = Number.isFinite(Number(this.state.tabId))
+        ? Number(this.state.tabId)
+        : (this.state.translationJob && Number.isFinite(Number(this.state.translationJob.tabId))
+          ? Number(this.state.translationJob.tabId)
+          : null);
+      if (!Number.isFinite(tabIdCandidate)) {
+        if (this.fields.message) {
+          this.fields.message.textContent = 'Не удалось определить tabId для команды вычитки.';
+        }
+        return;
+      }
+      const jobId = this.state.translationJob && this.state.translationJob.id
+        ? this.state.translationJob.id
+        : null;
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.REQUEST_BLOCK_ACTION
+        : 'REQUEST_BLOCK_ACTION';
+      this.ui.sendUiCommand(command, {
+        tabId: tabIdCandidate,
+        jobId,
+        blockId: id,
+        action: action === 'literal' ? 'literal' : 'style_improve'
+      });
+      if (this.fields.message) {
+        this.fields.message.textContent = `Запрошена вычитка блока ${id} (${action === 'literal' ? 'дословно' : 'стиль'})`;
+      }
     }
 
     async exportReport(kind) {

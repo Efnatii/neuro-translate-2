@@ -22,7 +22,9 @@
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.openai.com https://* http://localhost:* http://127.0.0.1:*;"
   },
   "host_permissions": [
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

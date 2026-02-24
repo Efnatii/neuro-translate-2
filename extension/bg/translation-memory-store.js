@@ -121,6 +121,25 @@
       }
     }
 
+    _normalizeQualityTag(value, fallback = 'raw') {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (raw === 'proofread' || raw === 'literal' || raw === 'styled' || raw === 'raw') {
+        return raw;
+      }
+      return fallback;
+    }
+
+    _qualityTagRank(tag) {
+      const normalized = this._normalizeQualityTag(tag, 'raw');
+      if (normalized === 'raw') {
+        return 0;
+      }
+      if (normalized === 'proofread') {
+        return 1;
+      }
+      return 2;
+    }
+
     _normalizeIndex(raw) {
       const source = raw && typeof raw === 'object' ? raw : {};
       const byUrlSrc = source.byUrl && typeof source.byUrl === 'object' ? source.byUrl : {};
@@ -303,7 +322,18 @@
       const sourceUpdatedAt = Number.isFinite(Number(source.updatedAt))
         ? Number(source.updatedAt)
         : now;
-      const preferIncoming = !current || sourceUpdatedAt >= currentUpdatedAt;
+      const currentQualityTag = this._normalizeQualityTag(current && current.qualityTag, 'raw');
+      const sourceQualityTag = this._normalizeQualityTag(source && source.qualityTag, currentQualityTag);
+      const currentRank = this._qualityTagRank(currentQualityTag);
+      const sourceRank = this._qualityTagRank(sourceQualityTag);
+      let preferIncoming = !current || sourceUpdatedAt >= currentUpdatedAt;
+      if (current) {
+        if (sourceRank > currentRank) {
+          preferIncoming = true;
+        } else if (sourceRank < currentRank) {
+          preferIncoming = false;
+        }
+      }
       const next = {
         ...(current && typeof current === 'object' ? current : {}),
         ...(this._cloneJson(source, {}) || {}),
@@ -314,8 +344,8 @@
           ? (typeof source.translatedText === 'string' ? source.translatedText : (current && typeof current.translatedText === 'string' ? current.translatedText : ''))
           : (current && typeof current.translatedText === 'string' ? current.translatedText : ''),
         qualityTag: preferIncoming
-          ? (source.qualityTag === 'proofread' ? 'proofread' : (source.qualityTag === 'raw' ? 'raw' : (current && current.qualityTag ? current.qualityTag : 'raw')))
-          : (current && current.qualityTag ? current.qualityTag : 'raw'),
+          ? sourceQualityTag
+          : currentQualityTag,
         modelUsed: preferIncoming
           ? (typeof source.modelUsed === 'string' ? source.modelUsed : (current && typeof current.modelUsed === 'string' ? current.modelUsed : null))
           : (current && typeof current.modelUsed === 'string' ? current.modelUsed : null),

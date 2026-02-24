@@ -1,0 +1,7 @@
+https://developers.openai.com/cookbook
+https://developers.openai.com/resources
+https://developers.openai.com/blog
+https://developers.openai.com/api/docs
+https://developers.openai.com/api/reference/overview
+https://developers.openai.com/apps-sdk
+https://developers.openai.com/commerce

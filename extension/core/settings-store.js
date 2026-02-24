@@ -254,7 +254,8 @@
         'translationPopupActiveTab',
         'translationVisibilityByTab',
         'translationDisplayModeByTab',
-        'translationCompareDiffThreshold'
+        'translationCompareDiffThreshold',
+        'debugAllowTestCommands'
       ]);
       const apiKey = typeof data.apiKey === 'string' ? data.apiKey : '';
       const compareDiffThreshold = Number.isFinite(Number(data.translationCompareDiffThreshold))
@@ -308,7 +309,8 @@
         translationDisplayModeByTab: data.translationDisplayModeByTab && typeof data.translationDisplayModeByTab === 'object'
           ? data.translationDisplayModeByTab
           : {},
-        translationCompareDiffThreshold: compareDiffThreshold
+        translationCompareDiffThreshold: compareDiffThreshold,
+        debugAllowTestCommands: data.debugAllowTestCommands === true
       };
     }
 
@@ -374,7 +376,8 @@
         'translationPopupActiveTab',
         'translationVisibilityByTab',
         'translationDisplayModeByTab',
-        'translationCompareDiffThreshold'
+        'translationCompareDiffThreshold',
+        'debugAllowTestCommands'
       ];
       allow.forEach((key) => {
         if (!Object.prototype.hasOwnProperty.call(src, key)) {

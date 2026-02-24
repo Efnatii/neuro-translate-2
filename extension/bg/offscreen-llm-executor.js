@@ -641,10 +641,20 @@
         return this._normalizeOpenaiRequest(source.openai);
       }
       if (source.endpoint || source.headers || source.body) {
+        let bodyObj = {};
+        if (source.body && typeof source.body === 'object') {
+          bodyObj = source.body;
+        } else if (typeof source.body === 'string' && source.body) {
+          try {
+            bodyObj = JSON.parse(source.body);
+          } catch (_) {
+            bodyObj = {};
+          }
+        }
         return {
-          endpoint: source.endpoint || null,
+          endpoint: source.endpoint || source.url || null,
           headers: source.headers && typeof source.headers === 'object' ? source.headers : {},
-          body: source.body && typeof source.body === 'object' ? source.body : {}
+          body: bodyObj
         };
       }
       return {

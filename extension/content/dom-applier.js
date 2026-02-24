@@ -39,6 +39,7 @@
           originalText,
           translatedText: null,
           currentRenderedText: originalText,
+          compareInlineApplied: false,
           compareHtmlCache: null,
           compareCacheKey: null,
           compareStats: null,
@@ -181,6 +182,7 @@
       if (this.displayMode === 'original') {
         this._writePlainText(record, record.originalText);
         record.currentRenderedText = record.originalText;
+        record.compareInlineApplied = false;
         this._clearCompareDecorations(record);
         return {
           applied: before !== record.currentRenderedText,
@@ -194,6 +196,7 @@
       if (this.displayMode === 'translated') {
         this._writePlainText(record, translated);
         record.currentRenderedText = translated;
+        record.compareInlineApplied = false;
         this._clearCompareDecorations(record);
         return {
           applied: before !== record.currentRenderedText,
@@ -208,6 +211,7 @@
       if (!canCompare) {
         this._writePlainText(record, translated);
         record.currentRenderedText = translated;
+        record.compareInlineApplied = false;
         if (translated !== record.originalText) {
           this._applyLargeDiffFallback(record, 'diff слишком большой, смотри debug');
         } else {
@@ -244,6 +248,7 @@
       if (!this._canUseInnerDiff(record)) {
         this._writePlainText(record, translated);
         record.currentRenderedText = translated;
+        record.compareInlineApplied = false;
         this._setCompareTooltip(record, record.originalText);
         this._applyLargeDiffFallback(record, 'diff для этого блока доступен только в debug');
         return {
@@ -271,6 +276,7 @@
       host.removeAttribute('data-nt-diff-note');
       host.innerHTML = record.compareHtmlCache || this._escapeHtml(translated);
       record.node = host.firstChild || record.node;
+      record.compareInlineApplied = true;
       record.currentRenderedText = translated;
       this._setCompareTooltip(record, '');
       return {
@@ -291,7 +297,16 @@
       if (!host.tagName || this.skipTags.has(String(host.tagName).toUpperCase())) {
         return false;
       }
-      return host.childNodes.length === 1 && host.firstChild === record.node;
+      if (record.compareInlineApplied === true) {
+        return true;
+      }
+      if (host.childNodes.length !== 1 || !host.firstChild) {
+        return false;
+      }
+      if (host.firstChild.nodeType === 3 && record.node !== host.firstChild) {
+        record.node = host.firstChild;
+      }
+      return host.firstChild === record.node;
     }
 
     _writePlainText(record, text) {

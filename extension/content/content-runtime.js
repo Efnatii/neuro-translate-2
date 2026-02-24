@@ -166,6 +166,12 @@
       sendResponse({ ok: false, error: { code: 'JOB_MISMATCH', message: 'No active job for delta' } });
       return;
     }
+    const requestedMode = message && typeof message.mode === 'string' ? message.mode : null;
+    const thresholdRerender = !requestedMode && applier.displayMode === 'compare';
+    const compareDiffThreshold = applyCompareDiffThreshold(message, { rerender: thresholdRerender });
+    if (requestedMode && requestedMode !== applier.displayMode) {
+      applier.setDisplayMode(requestedMode);
+    }
     const result = applier.applyDelta({
       jobId: message.jobId,
       blockId: message.blockId || null,
@@ -184,6 +190,7 @@
         ? Number(result.nodeCountTouched)
         : 0,
       displayMode: result && result.displayMode ? result.displayMode : null,
+      compareDiffThreshold,
       ok: true,
       contentSessionId
     }, {
@@ -199,7 +206,8 @@
       nodeCountTouched: Number.isFinite(Number(result && result.nodeCountTouched))
         ? Number(result.nodeCountTouched)
         : 0,
-      displayMode: result && result.displayMode ? result.displayMode : null
+      displayMode: result && result.displayMode ? result.displayMode : null,
+      compareDiffThreshold
     });
   }
 

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>NT E2E Big</title>
+    <style>
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; }
+      h1 { margin-bottom: 10px; }
+      .item { margin: 0 0 8px; padding: 8px 10px; border-bottom: 1px solid #eceff4; }
+    </style>
+  </head>
+  <body>
+    <h1 id="big-title">Large document for cancellation and scheduler tests</h1>
+    <div id="big-root"></div>
+    <script>
+      (function build() {
+        const root = document.getElementById('big-root');
+        for (let i = 0; i < 220; i += 1) {
+          const p = document.createElement('p');
+          p.className = 'item';
+          p.id = 'big-p-' + i;
+          p.textContent = 'Paragraph #' + i + ' keeps deterministic content for stress translation and queue fairness checks.';
+          root.appendChild(p);
+        }
+      })();
+    </script>
+  </body>
+</html>

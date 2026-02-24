@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>NT E2E Dynamic</title>
+    <style>
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; }
+      .card { border: 1px solid #d7dbe3; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      code { background: #f2f5fa; padding: 2px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="dynamic-title">Dynamic page for reload recovery</h1>
+    <div class="card">
+      <p id="dynamic-main">
+        This page mutates one node every two seconds. Translation workflow should recover after reload and continue.
+      </p>
+      <p id="dynamic-note">Dynamic note: tick-0</p>
+      <p id="dynamic-tech">Lease watchdog and offscreen attach should remain stable during content restarts.</p>
+      <button id="dynamic-button">Refresh data</button>
+    </div>
+    <script>
+      (function runTicker() {
+        const target = document.getElementById('dynamic-note');
+        let tick = 0;
+        setInterval(() => {
+          tick += 1;
+          target.textContent = 'Dynamic note: tick-' + tick;
+        }, 2000);
+      })();
+    </script>
+  </body>
+</html>

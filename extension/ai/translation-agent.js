@@ -611,9 +611,34 @@
           await toolRegistry.execute({
             name: 'agent.set_plan',
             arguments: {
-              ...fallbackPlan,
-              recommendedCategories: settingsSelectedCategories,
-              reason: planningError ? `fallback:${planningError.code}` : 'fallback:missing_plan'
+              plan: {
+                summary: typeof fallbackPlan.summary === 'string' ? fallbackPlan.summary : '',
+                style: typeof fallbackPlan.style === 'string' ? fallbackPlan.style : 'balanced',
+                batchSize: Number.isFinite(Number(fallbackPlan.batchSize))
+                  ? Math.max(1, Math.round(Number(fallbackPlan.batchSize)))
+                  : 1,
+                proofreadingPasses: Number.isFinite(Number(fallbackPlan.proofreadingPasses))
+                  ? Math.max(0, Math.round(Number(fallbackPlan.proofreadingPasses)))
+                  : 0,
+                categoryOrder: Array.isArray(fallbackPlan.categoryOrder)
+                  ? fallbackPlan.categoryOrder
+                    .map((item) => this._normalizeCategory(item))
+                    .filter(Boolean)
+                    .slice(0, 60)
+                  : [],
+                instructions: typeof fallbackPlan.instructions === 'string' ? fallbackPlan.instructions : '',
+                modelHints: fallbackPlan.modelHints && typeof fallbackPlan.modelHints === 'object'
+                  ? {
+                    strongFor: Array.isArray(fallbackPlan.modelHints.strongFor)
+                      ? fallbackPlan.modelHints.strongFor.slice(0, 40)
+                      : [],
+                    fastFor: Array.isArray(fallbackPlan.modelHints.fastFor)
+                      ? fallbackPlan.modelHints.fastFor.slice(0, 40)
+                      : []
+                  }
+                  : { strongFor: [], fastFor: [] }
+              },
+              recommendedCategories: settingsSelectedCategories.slice(0, 60)
             },
             job: safeJob,
             blocks: inputBlocks,

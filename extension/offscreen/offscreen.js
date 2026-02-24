@@ -86,6 +86,7 @@
       if (!global.chrome || !global.chrome.runtime || !global.chrome.runtime.onMessage) {
         return;
       }
+      const runtimeTypes = new Set(Object.keys(TYPES).map((key) => TYPES[key]));
       const respondOk = (sendResponse, out) => {
         try {
           sendResponse(out || { ok: true });
@@ -107,6 +108,11 @@
         }
       };
       global.chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        const parsed = this._unwrap(message);
+        const type = parsed && typeof parsed.type === 'string' ? parsed.type : null;
+        if (!type || !runtimeTypes.has(type)) {
+          return false;
+        }
         this._handleIncoming({ message, transport: 'runtime' })
           .then((out) => respondOk(sendResponse, out))
           .catch((error) => respondError(sendResponse, error));
