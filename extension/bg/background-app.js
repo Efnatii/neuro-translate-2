@@ -2843,14 +2843,14 @@
         ? Math.max(1, Math.min(400, Math.round(requested)))
         : 200;
       if (!this.eventLogStore || typeof this.eventLogStore.getTail !== 'function') {
-        return { ok: true, seq: 0, logs: [] };
+        return this._redactTestPayload({ ok: true, seq: 0, logs: [] });
       }
       const tail = await this.eventLogStore.getTail(limit).catch(() => ({ seq: 0, items: [] }));
-      return {
+      return this._redactTestPayload({
         ok: true,
         seq: Number.isFinite(Number(tail && tail.seq)) ? Number(tail.seq) : 0,
         logs: Array.isArray(tail && tail.items) ? tail.items : []
-      };
+      });
     }
 
     _redactTestPayload(payload) {
@@ -3040,13 +3040,13 @@
 
     async _testGetActiveJobState(payload, fallbackTabId = null) {
       const context = await this._resolveTestJobContext({ payload, fallbackTabId });
-      return {
+      return this._redactTestPayload({
         ok: true,
         tabId: context.tabId,
         activeJobId: context.activeJobId || null,
         lastJobId: context.lastJobId || null,
         job: context.job ? this._redactTestPayload(context.job) : null
-      };
+      });
     }
 
     async _testExportReportJson(payload, fallbackTabId = null) {

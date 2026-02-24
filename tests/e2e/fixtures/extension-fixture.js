@@ -366,6 +366,9 @@ const test = base.extend({
         const settingsRes = await app.sendCommand('SET_SETTINGS', {
           patch: {
             debugAllowTestCommands: true,
+            debug: {
+              allowTestCommands: true
+            },
             translationAgentTuning: {
               proofreadingPassesOverride: 0,
               plannerMaxOutputTokens: 700

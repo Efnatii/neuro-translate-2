@@ -416,7 +416,10 @@
           : {},
         translationCompareDiffThreshold: compareDiffThreshold,
         translationCompareRendering: compareRendering,
-        debugAllowTestCommands: data.debugAllowTestCommands === true
+        debugAllowTestCommands: data.debugAllowTestCommands === true,
+        debug: {
+          allowTestCommands: data.debugAllowTestCommands === true
+        }
       };
     }
 
@@ -497,6 +500,12 @@
         }
         out[key] = src[key];
       });
+      if (!Object.prototype.hasOwnProperty.call(out, 'debugAllowTestCommands')) {
+        const debug = src.debug && typeof src.debug === 'object' ? src.debug : null;
+        if (debug && Object.prototype.hasOwnProperty.call(debug, 'allowTestCommands')) {
+          out.debugAllowTestCommands = debug.allowTestCommands === true;
+        }
+      }
       if (Object.prototype.hasOwnProperty.call(out, 'translationCompareDiffThreshold')) {
         const value = Number(out.translationCompareDiffThreshold);
         out.translationCompareDiffThreshold = Number.isFinite(value)
@@ -531,6 +540,9 @@
       }
       if (Object.prototype.hasOwnProperty.call(out, 'translationPerfDegradedScanOnHeavy')) {
         out.translationPerfDegradedScanOnHeavy = out.translationPerfDegradedScanOnHeavy !== false;
+      }
+      if (Object.prototype.hasOwnProperty.call(out, 'debugAllowTestCommands')) {
+        out.debugAllowTestCommands = out.debugAllowTestCommands === true;
       }
       return out;
     }

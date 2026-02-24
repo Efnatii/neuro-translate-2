@@ -152,6 +152,9 @@ async function startPipelineToAwaiting({ app, popup, tabId }) {
       throw new Error('Execution started before awaiting_categories/user choice');
     }
 
+    const chooserVisible = await popup.locator('[data-section="category-chooser"]').isVisible({ timeout: 120 }).catch(() => false);
+    expect(chooserVisible).toBeFalsy();
+
     assertNoPrematureSelectionOrGlossary(state);
 
     if (stage === 'preanalysis' || stage === 'scan' || stage === 'scanning' || status === 'preparing') {
@@ -183,6 +186,10 @@ async function startPipelineToAwaiting({ app, popup, tabId }) {
   expect(Boolean(awaiting.planPresent)).toBeTruthy();
   expect(Boolean(awaiting.planFinalized)).toBeTruthy();
   expect(awaiting.userQuestion && awaiting.userQuestion.optionsCount > 0).toBeTruthy();
+  await expect(popup.locator('[data-section="category-chooser"]')).toBeVisible({ timeout: 20000 });
+  await expect.poll(async () => {
+    return popup.locator('[data-section="category-chooser-list"] input[type="checkbox"]:not([disabled])').count();
+  }, { timeout: 20000 }).toBeGreaterThan(0);
 
   return { jobId, awaitingState };
 }
@@ -420,8 +427,7 @@ test.describe.serial('REAL fimfiction pipeline', () => {
       await startExecutionFromAwaiting({ app, popup, tabId, jobId });
       await waitStreamingChange({ app, anchor: firstLine, originalSnippet, jobId, tabId, timeoutMs: 120000 });
 
-      const cancelRes = await app.sendCommand('CANCEL_TRANSLATION', { tabId }, tabId);
-      expect(cancelRes && cancelRes.ok).toBeTruthy();
+      await popup.locator('[data-action="cancel-translation"]').click();
 
       const cancelledRes = await pollJobState(app, {
         jobId,
