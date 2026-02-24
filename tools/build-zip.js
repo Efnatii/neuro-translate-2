@@ -7,6 +7,7 @@ const MANIFEST_PATH = path.join(ROOT, 'manifest.json');
 const DIST_DIR = path.join(ROOT, 'dist');
 const STAGE_DIR = path.join(ROOT, '.dist', 'package');
 const BUILD_INFO_PATH = path.join(ROOT, 'extension', 'buildInfo.json');
+const BUILD_FLAGS_REL_PATH = path.join('extension', 'core', 'build-flags.js');
 
 function normalizeRelPath(value) {
   return String(value || '').replace(/\\/g, '/');
@@ -140,6 +141,20 @@ function stageFiles(relFiles) {
   });
 }
 
+function disableTestCommandsInStage() {
+  const stagedFlagsPath = path.join(STAGE_DIR, BUILD_FLAGS_REL_PATH);
+  if (!fs.existsSync(stagedFlagsPath)) {
+    return false;
+  }
+  const source = fs.readFileSync(stagedFlagsPath, 'utf8');
+  const patched = source.replace(/allowTestCommandsInBuild\s*:\s*true/g, 'allowTestCommandsInBuild: false');
+  if (patched === source) {
+    return false;
+  }
+  fs.writeFileSync(stagedFlagsPath, patched, 'utf8');
+  return true;
+}
+
 function runZipCommand(zipPath) {
   if (process.platform === 'win32') {
     const escapedDestination = String(zipPath).replace(/'/g, "''");
@@ -178,6 +193,7 @@ function buildZip() {
     throw new Error('No files selected for package');
   }
   stageFiles(relFiles);
+  const testCommandsDisabled = disableTestCommandsInStage();
 
   fs.mkdirSync(DIST_DIR, { recursive: true });
   const zipName = `neuro-translate-edge-mv3-${version}.zip`;
@@ -189,6 +205,7 @@ function buildZip() {
   console.log(`manifest version: ${version}`);
   console.log(`build info: ${path.relative(ROOT, BUILD_INFO_PATH)}`);
   console.log(`files packaged: ${relFiles.length}`);
+  console.log(`release test commands disabled: ${testCommandsDisabled ? 'yes' : 'no (build-flags file not found or unchanged)'}`);
   console.log(`zip: ${path.relative(ROOT, zipPath)} (${size} bytes)`);
   console.log(`git sha: ${buildInfo.gitSha}`);
   console.log(`build time: ${buildInfo.buildTime}`);

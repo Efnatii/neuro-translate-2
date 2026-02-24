@@ -17,6 +17,7 @@
  */
 importScripts(
   '../core/nt-namespace.js',
+  '../core/build-flags.js',
   '../ai/model-selection-policy.js',
   '../core/agent-settings-policy.js',
   '../core/time.js',

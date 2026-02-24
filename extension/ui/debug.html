@@ -2,402 +2,230 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <title>Neuro Translate — Отладка</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Neuro Translate - Панель оператора</title>
     <link rel="stylesheet" href="./debug.css">
   </head>
   <body>
-    <main class="debug">
-      <header>
-        <h1 class="debug__title">Neuro Translate — Отладка</h1>
-        <p class="debug__subtitle" data-field="site">Сайт: —</p>
+    <main class="debug" id="debugRoot">
+      <header class="debug__header">
+        <div class="debug__title-wrap">
+          <h1 class="debug__title">Панель оператора</h1>
+          <div class="debug__sub" data-field="header-job">tab: - | job: -</div>
+          <div class="debug__sub" data-field="header-state">status: - | stage: -</div>
+          <div class="debug__sub" data-field="header-runtime">lease: - | retry: - | offscreen: - | activeRequests: -</div>
+        </div>
+        <div class="debug__header-actions">
+          <button type="button" class="debug__btn" data-action="export-json">Экспорт отчета JSON</button>
+          <button type="button" class="debug__btn" data-action="export-html">Экспорт HTML</button>
+          <button type="button" class="debug__btn" data-action="copy-diagnostics">Копировать диагностику</button>
+          <button type="button" class="debug__btn debug__btn--primary" data-action="kick-scheduler">Пнуть планировщик</button>
+        </div>
       </header>
 
-      <details class="debug__section" data-section="progress" open>
-        <summary title="Текущий агрегированный прогресс по активному переводу">Прогресс и общий статус</summary>
-        <div class="debug__status">
-          <div class="debug__label">Прогресс</div>
-          <progress value="0" max="100" data-field="progress"></progress>
-          <div class="debug__row"><span>Готово</span><span data-field="completed">—</span></div>
-          <div class="debug__row"><span>Всего</span><span data-field="total">—</span></div>
-          <div class="debug__row"><span>В работе</span><span data-field="inProgress">—</span></div>
-          <div class="debug__row"><span>Сообщение</span><span data-field="message">нет данных</span></div>
-          <div class="debug__controls">
-            <button type="button" data-action="kick-scheduler" title="Создаёт wake alarm и запускает scheduler tick">Пнуть планировщик</button>
-            <button type="button" data-action="pause-other-tabs" title="Временно снижает приоритет задач в других вкладках">Пауза других вкладок</button>
-            <label class="debug__checkbox">
-              <input type="checkbox" data-field="sessions-only-active">
-              Только активные
-            </label>
-          </div>
-        </div>
-      </details>
+      <div class="debug__layout">
+        <aside class="debug__nav" aria-label="Разделы">
+          <a href="#overview" data-route-link="overview">1. Обзор</a>
+          <a href="#plan" data-route-link="plan">2. План</a>
+          <a href="#tools" data-route-link="tools">3. Инструменты</a>
+          <a href="#diff-patches" data-route-link="diff-patches">4. Diff / Патчи</a>
+          <a href="#categories" data-route-link="categories">5. Категории</a>
+          <a href="#memory" data-route-link="memory">6. Память</a>
+          <a href="#ratelimits" data-route-link="ratelimits">7. Rate limits</a>
+          <a href="#perf" data-route-link="perf">8. Perf</a>
+          <a href="#security" data-route-link="security">9. Security audit</a>
+          <a href="#export" data-route-link="export">10. Export</a>
+        </aside>
 
-      <details class="debug__section" data-section="modelDecision" open>
-        <summary title="Последнее решение маршрутизатора моделей">Решение по модели</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Политика</span><span data-field="decision-policy">—</span></div>
-          <div class="debug__row"><span>Выбранная модель</span><span data-field="decision-model">—</span></div>
-          <div class="debug__row"><span>Причина</span><span data-field="decision-reason">—</span></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="job" open>
-        <summary title="Состояние текущей или последней задачи перевода">Задача перевода</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>ID задачи</span><span data-field="translation-job-id">—</span></div>
-          <div class="debug__row"><span>Статус</span><span data-field="translation-job-status">—</span></div>
-          <div class="debug__row"><span>Stage</span><span data-field="runtime-stage">—</span></div>
-          <div class="debug__row"><span>Lease</span><span data-field="runtime-lease">—</span></div>
-          <div class="debug__row"><span>Retry</span><span data-field="runtime-retry">—</span></div>
-          <div class="debug__row"><span>Offscreen</span><span data-field="offscreen-state">—</span></div>
-          <div class="debug__row"><span>Sessions</span><span data-field="scheduler-sessions">—</span></div>
-          <div class="debug__row">
-            <span>Sessions detail</span>
-            <table class="debug__table">
-              <thead>
-                <tr>
-                  <th>tabId</th>
-                  <th>url</th>
-                  <th>jobId</th>
-                  <th>stage</th>
-                  <th>status</th>
-                  <th>lease</th>
-                  <th>nextRetry</th>
-                  <th>lastError</th>
-                </tr>
-              </thead>
-              <tbody data-field="scheduler-sessions-table"></tbody>
-            </table>
-          </div>
-          <div class="debug__row"><span>Queue</span><span data-field="scheduler-queue">—</span></div>
-          <div class="debug__row"><span>Shared budget</span><span data-field="scheduler-budget">—</span></div>
-          <div class="debug__row"><span>Прогресс</span><span data-field="translation-progress">0%</span></div>
-          <div class="debug__row"><span>Ошибки блоков</span><span data-field="translation-failed-count">0</span></div>
-          <div class="debug__row"><span>Последняя ошибка</span><span data-field="translation-last-error">—</span></div>
-          <div class="debug__row"><span>Fetch debug baseUrl</span><span data-field="translation-last-error-base-url">—</span></div>
-          <div class="debug__row"><span>Fetch debug transport</span><span data-field="translation-last-error-transport">—</span></div>
-          <div class="debug__row"><span>Fetch debug host</span><span data-field="translation-last-error-endpoint-host">—</span></div>
-          <div class="debug__row"><span>Fetch debug online</span><span data-field="translation-last-error-online">—</span></div>
-          <div class="debug__row"><span>Fetch debug probe</span><span data-field="translation-last-error-probe-status">—</span></div>
-          <div class="debug__row"><span>Fetch debug error</span><span data-field="translation-last-error-probe-error">—</span></div>
-          <div class="debug__row"><span>Fetch debug steps</span><div data-field="translation-last-error-probe-steps" class="debug__list"></div></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="troubleshooting" open>
-        <summary title="Быстрый разбор причин, почему перевод не стартует или зависает">Troubleshooting</summary>
-        <div class="debug__status">
-          <div class="debug__row">
-            <span>Не стартует</span>
-            <div class="debug__list">
-              <div class="debug__list-item">1) Проверьте активную вкладку и host permissions для текущего origin.</div>
-              <div class="debug__list-item">2) Убедитесь, что content script инжектирован и frame caps получены.</div>
-              <div class="debug__list-item">3) Если статус <code>awaiting_categories</code>, выберите категории в popup и запустите перевод.</div>
-              <div class="debug__list-item">4) Проверьте credentials/proxy в popup (BYOK/Proxy, test connection).</div>
-              <div class="debug__list-item">5) Проверьте last error и секцию Events (filter: level=error).</div>
+        <section class="debug__content">
+          <section class="debug__panel" data-route="overview">
+            <h2>Обзор</h2>
+            <div class="debug__kv" data-field="overview-kv"></div>
+            <div class="debug__row-actions">
+              <button type="button" class="debug__btn" data-action="cancel-job">Отменить</button>
+              <button type="button" class="debug__btn" data-action="erase-job">Стереть</button>
+              <button type="button" class="debug__btn" data-action="kick-scheduler">Пнуть планировщик</button>
+              <button type="button" class="debug__btn" data-action="copy-diagnostics">Копировать диагностику</button>
             </div>
-          </div>
-          <div class="debug__row">
-            <span>RUNNING долго</span>
-            <div class="debug__list">
-              <div class="debug__list-item">1) Сверьте lease/retry в секции "Задача перевода".</div>
-              <div class="debug__list-item">2) Проверьте состояние offscreen и scheduler queue.</div>
-              <div class="debug__list-item">3) Нажмите "Пнуть планировщик" и проверьте новые события.</div>
-              <div class="debug__list-item">4) При потере inflight/offscreen перезапустите задачу.</div>
+          </section>
+
+          <section class="debug__panel" data-route="plan" hidden>
+            <h2>План (taxonomy + pipeline)</h2>
+            <div class="debug__hint" data-field="plan-hint"></div>
+            <div class="debug__table-wrap">
+              <table class="debug__table">
+                <thead>
+                  <tr>
+                    <th>id</th>
+                    <th>titleRu</th>
+                    <th>defaultTranslate</th>
+                    <th>countUnits</th>
+                    <th>routingSummary</th>
+                    <th>batchingSummary</th>
+                    <th>contextSummary</th>
+                    <th>qcSummary</th>
+                  </tr>
+                </thead>
+                <tbody data-field="plan-categories"></tbody>
+              </table>
             </div>
-          </div>
-          <div class="debug__row">
-            <span>Iframe/Shadow</span>
-            <div class="debug__list">
-              <div class="debug__list-item">1) Проверьте Frames/Shadow DOM: injected/scanned/skippedReason.</div>
-              <div class="debug__list-item">2) Для недоступных origin/frame нужен permission; closed shadow root недоступен.</div>
-              <div class="debug__list-item">3) Если DOM изменился, выполните reclassify/rescan.</div>
+            <div class="debug__hint" data-field="plan-mapping"></div>
+          </section>
+
+          <section class="debug__panel" data-route="tools" hidden>
+            <h2>Инструменты (tool trace)</h2>
+            <div class="debug__filters">
+              <select data-field="tools-filter-name"></select>
+              <select data-field="tools-filter-status">
+                <option value="all">status: all</option>
+                <option value="ok">ok</option>
+                <option value="failed">failed</option>
+                <option value="coalesced">coalesced</option>
+                <option value="skipped">skipped</option>
+              </select>
+              <input type="text" data-field="tools-filter-search" placeholder="Поиск по trace">
+              <button type="button" class="debug__btn" data-action="copy-tools-50">Скопировать последние 50</button>
             </div>
-          </div>
-        </div>
-      </details>
+            <div class="debug__table-wrap debug__table-wrap--tall">
+              <table class="debug__table">
+                <thead>
+                  <tr>
+                    <th>ts</th>
+                    <th>tool</th>
+                    <th>status</th>
+                    <th>args</th>
+                    <th>result</th>
+                  </tr>
+                </thead>
+                <tbody data-field="tools-table"></tbody>
+              </table>
+            </div>
+            <pre class="debug__pre" data-field="tools-details">Выберите строку для деталей</pre>
+          </section>
 
-      <details class="debug__section" data-section="classifier" open>
-        <summary title="Детерминированная классификация блоков: категории, confidence и сработавшие правила">
-          Classifier
-        </summary>
-        <div class="debug__status">
-          <div class="debug__row">
-            <span>Summary</span>
-            <div data-field="classifier-summary" class="debug__list"></div>
-          </div>
-          <div class="debug__controls">
-            <select data-field="classifier-category-filter" title="Фильтр по категории">
-              <option value="all">Category: all</option>
+          <section class="debug__panel" data-route="diff-patches" hidden>
+            <h2>Diff / Патчи</h2>
+            <div class="debug__split">
+              <div>
+                <div class="debug__filters">
+                  <input type="text" data-field="diff-filter-category" placeholder="category filter">
+                  <input type="text" data-field="diff-filter-status" placeholder="status filter">
+                </div>
+                <div class="debug__list" data-field="diff-blocks"></div>
+              </div>
+              <div>
+                <div class="debug__diff-head">Оригинал / Перевод</div>
+                <div class="debug__diff-grid">
+                  <pre class="debug__pre" data-field="diff-original">-</pre>
+                  <pre class="debug__pre" data-field="diff-translated">-</pre>
+                </div>
+                <div class="debug__row-actions">
+                  <button type="button" class="debug__btn" data-action="block-literal">Сделать дословно</button>
+                  <button type="button" class="debug__btn" data-action="block-style">Улучшить стиль</button>
+                  <button type="button" class="debug__btn" data-action="block-proofread">Вычитать</button>
+                </div>
+                <div class="debug__hint" data-field="diff-meta">modelUsed: - | routeUsed: - | updatedAt: -</div>
+              </div>
+            </div>
+            <h3>Patch history</h3>
+            <div class="debug__filters">
+              <input type="text" data-field="patch-filter-block" placeholder="blockId">
+              <select data-field="patch-filter-kind">
+                <option value="all">kind: all</option>
+                <option value="delta">delta</option>
+                <option value="final">final</option>
+                <option value="restore">restore</option>
+              </select>
+              <input type="text" data-field="patch-filter-phase" placeholder="phase">
+            </div>
+            <div class="debug__table-wrap debug__table-wrap--tall">
+              <table class="debug__table">
+                <thead>
+                  <tr>
+                    <th>seq</th>
+                    <th>ts</th>
+                    <th>kind</th>
+                    <th>blockId</th>
+                    <th>hash</th>
+                    <th>preview</th>
+                  </tr>
+                </thead>
+                <tbody data-field="patch-table"></tbody>
+              </table>
+            </div>
+            <pre class="debug__pre" data-field="patch-details">Выберите патч для деталей</pre>
+          </section>
+
+          <section class="debug__panel" data-route="categories" hidden>
+            <h2>Категории</h2>
+            <div class="debug__hint" data-field="categories-hint"></div>
+            <div class="debug__list" data-field="categories-list"></div>
+            <div class="debug__row-actions">
+              <button type="button" class="debug__btn" data-action="apply-categories">Применить выбор категорий</button>
+              <button type="button" class="debug__btn" data-action="reclassify">Пересчитать классификацию</button>
+            </div>
+          </section>
+
+          <section class="debug__panel" data-route="memory" hidden>
+            <h2>Память</h2>
+            <div class="debug__kv" data-field="memory-kv"></div>
+            <div class="debug__row-actions">
+              <button type="button" class="debug__btn" data-action="erase-memory-page">Стереть память этой страницы</button>
+              <button type="button" class="debug__btn" data-action="erase-memory-all">Стереть всю память</button>
+            </div>
+          </section>
+
+          <section class="debug__panel" data-route="ratelimits" hidden>
+            <h2>Rate limits</h2>
+            <div class="debug__kv" data-field="ratelimits-kv"></div>
+            <div class="debug__list" data-field="ratelimits-list"></div>
+          </section>
+
+          <section class="debug__panel" data-route="perf" hidden>
+            <h2>Perf</h2>
+            <div class="debug__kv" data-field="perf-kv"></div>
+            <div class="debug__list" data-field="perf-top"></div>
+          </section>
+
+          <section class="debug__panel" data-route="security" hidden>
+            <h2>Security audit</h2>
+            <div class="debug__hint" data-field="security-summary"></div>
+            <pre class="debug__pre" data-field="security-json">-</pre>
+            <div class="debug__row-actions">
+              <button type="button" class="debug__btn" data-action="run-security-audit">Запустить Security audit</button>
+              <button type="button" class="debug__btn" data-action="repair-all">Repair/Compact</button>
+            </div>
+          </section>
+
+          <section class="debug__panel" data-route="export" hidden>
+            <h2>Export</h2>
+            <label class="debug__label" for="export-text-mode">includeTextMode</label>
+            <select id="export-text-mode" class="debug__input" data-field="export-text-mode">
+              <option value="snippets">snippets</option>
+              <option value="none">none</option>
+              <option value="full">full</option>
             </select>
-            <input type="text" data-field="classifier-rule-filter" placeholder="rule-id filter (e.g. hidden)" title="Фильтр по id правила">
-            <button type="button" data-action="classifier-reclassify-force" title="Принудительно обновить классификацию (force=true)">
-              Reclassify (force)
-            </button>
-          </div>
-          <div class="debug__row">
-            <span>Blocks</span>
-            <div data-field="classifier-blocks" class="debug__list"></div>
-          </div>
-        </div>
-      </details>
+            <div class="debug__hint">full может содержать фрагменты текста страницы; ключи все равно маскируются.</div>
+            <div class="debug__row-actions">
+              <button type="button" class="debug__btn" data-action="export-json">Скачать JSON</button>
+              <button type="button" class="debug__btn" data-action="export-html">Скачать HTML</button>
+              <button type="button" class="debug__btn" data-action="copy-diagnostics">Копировать диагностику</button>
+            </div>
+            <div class="debug__hint" data-field="export-status">-</div>
+          </section>
+        </section>
+      </div>
 
-      <details class="debug__section" data-section="frames-shadow" open>
-        <summary title="Диагностика фреймов и Open Shadow DOM для скана/применения">Frames/Shadow DOM</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Frames summary</span><span data-field="frames-summary">—</span></div>
-          <div class="debug__row">
-            <span>Frames</span>
-            <table class="debug__table">
-              <thead>
-                <tr>
-                  <th>frameId</th>
-                  <th>frameUrl</th>
-                  <th>injected</th>
-                  <th>scannedBlocks</th>
-                  <th>skippedReason</th>
-                </tr>
-              </thead>
-              <tbody data-field="frames-table"></tbody>
-            </table>
-          </div>
-          <div class="debug__row"><span>Shadow DOM</span><span data-field="shadow-summary">—</span></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="compare-rendering" open>
-        <summary title="Режим compare: CSS Highlights API или fallback wrappers">Compare Rendering</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Highlights supported</span><span data-field="compare-highlights-supported">—</span></div>
-          <div class="debug__row"><span>Active mode</span><span data-field="compare-mode-active">—</span></div>
-          <div class="debug__row"><span>Counters</span><span data-field="compare-highlights-counters">—</span></div>
-          <div class="debug__controls">
-            <button type="button" data-action="recompute-highlights" title="Повторно построить compare-подсветку для активной задачи">
-              Recompute highlights now
-            </button>
-          </div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="agent" open>
-        <summary title="Подробное состояние переводчика-агента">Состояние агента</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Фаза</span><span data-field="agent-phase">—</span></div>
-          <div class="debug__row"><span>Профиль</span><span data-field="agent-profile">—</span></div>
-          <div class="debug__row"><span>Категории</span><span data-field="agent-categories">—</span></div>
-          <div class="debug__row"><span>Термины глоссария</span><span data-field="agent-glossary-size">0</span></div>
-          <div class="debug__row"><span>Сжатия контекста</span><span data-field="agent-compressions">0</span></div>
-          <div class="debug__row"><span>Сводка контекста</span><span data-field="agent-context-summary">—</span></div>
-          <div class="debug__row"><span>Последний rate-limit</span><span data-field="agent-rate-last">—</span></div>
-          <div class="debug__row"><span>История rate-limit</span><div data-field="agent-rate-history" class="debug__list"></div></div>
-          <div class="debug__row"><span>Чеклист</span><div data-field="agent-checklist" class="debug__list"></div></div>
-          <div class="debug__row"><span>Вызовы инструментов</span><div data-field="agent-tools" class="debug__list"></div></div>
-          <div class="debug__row"><span>Трасса инструментов</span><div data-field="agent-tool-trace" class="debug__list"></div></div>
-          <div class="debug__row"><span>Отчёты</span><div data-field="agent-reports" class="debug__list"></div></div>
-          <div class="debug__row"><span>AutoTune</span><span data-field="autotune-status">—</span></div>
-          <div class="debug__row"><span>AutoTune proposals</span><div data-field="autotune-proposals" class="debug__list"></div></div>
-          <div class="debug__row"><span>AutoTune details</span><pre data-field="autotune-proposal-details" class="debug__pre">—</pre></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="settings" open>
-        <summary title="Текущие user/effective настройки из SettingsStore">Настройки (effective и overrides)</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Schema</span><span data-field="settings-schema">—</span></div>
-          <div class="debug__row"><span>Профиль</span><span data-field="settings-profile">—</span></div>
-          <div class="debug__row"><span>Reasoning</span><span data-field="settings-reasoning">—</span></div>
-          <div class="debug__row"><span>Кэш</span><span data-field="settings-cache">—</span></div>
-          <div class="debug__row"><span>Инструменты</span><span data-field="settings-tools">—</span></div>
-          <div class="debug__row"><span>Модели</span><span data-field="settings-models">—</span></div>
-          <div class="debug__row"><span>Overrides</span><span data-field="settings-overrides">—</span></div>
-          <div class="debug__row"><span>Toolset hash</span><span data-field="toolset-hash">—</span></div>
-          <div class="debug__row"><span>Capabilities</span><span data-field="capabilities-summary">—</span></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="memory" open>
-        <summary title="Диагностика памяти перевода страницы и block dedupe">Memory</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>pageKey</span><span data-field="memory-page-key">—</span></div>
-          <div class="debug__row"><span>DOM hash</span><span data-field="memory-dom-hash">—</span></div>
-          <div class="debug__row"><span>URL (normalized)</span><span data-field="memory-url">—</span></div>
-          <div class="debug__row"><span>Последний restore</span><span data-field="memory-restore">—</span></div>
-          <div class="debug__row"><span>Операции</span><div data-field="memory-ops" class="debug__list"></div></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="diff" open>
-        <summary title="Недавние изменения текста на странице">Изменения текста</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Последние изменения</span><div data-field="diff-list" class="debug__list"></div></div>
-          <div class="debug__row"><span>Patch events</span><span data-field="patch-events-count">0</span></div>
-          <div class="debug__row"><span>Coalesced apply_delta</span><span data-field="coalesced-count">0</span></div>
-          <div class="debug__row"><span>Avg delta->apply</span><span data-field="delta-apply-latency">—</span></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="perf" open>
-        <summary title="Перфоманс-профиль: scan/classify/apply и топ тяжёлых задач">Performance</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Summary</span><span data-field="perf-summary">—</span></div>
-          <div class="debug__row">
-            <span>Global totals</span>
-            <table class="debug__table">
-              <thead>
-                <tr>
-                  <th>metric</th>
-                  <th>value</th>
-                </tr>
-              </thead>
-              <tbody data-field="perf-global-table"></tbody>
-            </table>
-          </div>
-          <div class="debug__row">
-            <span>Top offenders (last 20 jobs)</span>
-            <table class="debug__table">
-              <thead>
-                <tr>
-                  <th>jobId</th>
-                  <th>status</th>
-                  <th>score</th>
-                  <th>scanMs</th>
-                  <th>classifyMs</th>
-                  <th>apply</th>
-                  <th>avgDeltaMs</th>
-                </tr>
-              </thead>
-              <tbody data-field="perf-jobs-table"></tbody>
-            </table>
-          </div>
-          <div class="debug__controls">
-            <button type="button" data-action="export-perf-snapshot" title="Экспортировать JSON perf snapshot (копия в буфер)">
-              Export perf snapshot
-            </button>
-          </div>
-          <div class="debug__row"><span>Export status</span><span data-field="perf-export-status">—</span></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="compare" open>
-        <summary title="Сравнение оригинала и перевода по блокам + история патчей">Сравнение и патчи</summary>
-        <div class="debug__status">
-          <div class="debug__controls">
-            <input type="text" data-field="compare-search" placeholder="Поиск blockId/category" title="Фильтр блоков по id или категории">
-            <select data-field="compare-status" title="Фильтр по статусу блока">
-              <option value="all">Статус: все</option>
-              <option value="DONE">Статус: DONE</option>
-              <option value="PENDING">Статус: PENDING</option>
-              <option value="FAILED">Статус: FAILED</option>
-            </select>
-          </div>
-          <div class="debug__row"><span>Блоки</span><div data-field="compare-blocks" class="debug__list"></div></div>
-          <div class="debug__row"><span>Оригинал</span><pre data-field="diff-original" class="debug__pre">—</pre></div>
-          <div class="debug__row"><span>Перевод</span><pre data-field="diff-translated" class="debug__pre">—</pre></div>
-          <div class="debug__row"><span>Diff</span><div data-field="diff-rendered" class="debug__diff-rendered">—</div></div>
-          <div class="debug__row"><span>Patch timeline</span><div data-field="patch-timeline" class="debug__list"></div></div>
-          <div class="debug__row"><span>Patch details</span><pre data-field="patch-details" class="debug__pre">—</pre></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="export" open>
-        <summary title="Экспорт отчёта с обязательной redaction секретов">Экспорт отчёта</summary>
-        <div class="debug__status">
-          <div class="debug__controls">
-            <select data-field="export-text-mode" title="Объём текстовых данных в отчёте">
-              <option value="snippets">Текст: snippets</option>
-              <option value="none">Текст: none</option>
-              <option value="full">Текст: full</option>
-            </select>
-            <button type="button" data-action="export-json" title="Скачать JSON отчёт">Экспорт JSON</button>
-            <button type="button" data-action="export-html" title="Скачать HTML отчёт">Экспорт HTML</button>
-            <button type="button" data-action="export-copy" title="Скопировать JSON отчёт в буфер">Копировать отчёт</button>
-            <button type="button" data-action="copy-diagnostics" title="Copy compact diagnostics snapshot (redacted)">Copy diagnostics</button>
-          </div>
-          <div class="debug__row"><span>Статус</span><span data-field="export-status">—</span></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="security" open>
-        <summary title="Быстрый аудит безопасности расширения">Security audit</summary>
-        <div class="debug__status">
-          <div class="debug__controls">
-            <button type="button" data-action="security-audit">Запустить Security audit</button>
-          </div>
-          <div class="debug__row"><span>Credentials</span><span data-field="security-credentials">—</span></div>
-          <div class="debug__row"><span>Test connection</span><span data-field="security-test-connection">—</span></div>
-          <div class="debug__row"><span>Audit status</span><span data-field="security-audit-status">—</span></div>
-          <div class="debug__row"><span>Audit report</span><pre data-field="security-audit-report" class="debug__pre">—</pre></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="benchmarks" open>
-        <summary title="Результаты внутренних бенчмарков моделей">Бенчмарки моделей</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Состояние</span><span data-field="bench-status">—</span></div>
-          <div class="debug__row"><span>Текущая модель</span><span data-field="bench-current">—</span></div>
-          <div class="debug__row"><span>Сообщение</span><span data-field="bench-message">—</span></div>
-          <table class="debug__table">
-            <thead>
-              <tr>
-                <th>Модель</th>
-                <th>Медиана (мс)</th>
-                <th>Обновлено</th>
-              </tr>
-            </thead>
-            <tbody data-field="bench-table"></tbody>
-          </table>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="limits" open>
-        <summary title="Текущие лимиты и охлаждения по моделям">Лимиты запросов/токенов</summary>
-        <div class="debug__status">
-          <div class="debug__row"><span>Текущая модель</span><span data-field="rate-current-model">—</span></div>
-          <div class="rate-head">
-            <span>Модель</span><span>Ост. req</span><span>Ост. tok</span><span>Резерв</span><span>Охлаждение</span><span>Сброс</span>
-          </div>
-          <div class="rate-table" data-field="rate-table"></div>
-        </div>
-      </details>
-
-      <details class="debug__section" data-section="events" open>
-        <summary title="Журнал событий по UI/BG/AI">События</summary>
-        <div class="debug__status">
-          <div class="debug__controls">
-            <select data-field="event-level" title="Фильтр по уровню события">
-              <option value="all">Уровень: все</option>
-              <option value="info">Уровень: info</option>
-              <option value="warn">Уровень: warn</option>
-              <option value="error">Уровень: error</option>
-            </select>
-            <select data-field="event-tag" title="Фильтр по тегу события">
-              <option value="all">Тег: все</option>
-            </select>
-            <input type="text" placeholder="Поиск по тексту" data-field="event-search" title="Поиск по тегу, сообщению и метаданным события">
-            <button type="button" data-action="event-copy" title="Скопировать весь журнал событий в JSON">Копировать JSON</button>
-            <button type="button" data-action="event-clear" title="Очистить журнал событий">Очистить</button>
-            <button type="button" data-action="event-older" title="Загрузить более старые события">Старые события</button>
-          </div>
-          <div class="debug__event-log" id="eventList" data-field="event-log"></div>
-        </div>
-      </details>
+      <div class="nt-toast-host" data-field="toast-host" aria-live="polite"></div>
     </main>
 
     <script src="../core/nt-namespace.js"></script>
-    <script src="../core/time.js"></script>
-    <script src="../core/html.js"></script>
-    <script src="../core/retry-loop.js"></script>
-    <script src="../core/chrome-local-store-base.js"></script>
-    <script src="../core/event-types.js"></script>
-    <script src="../core/agent-settings-policy.js"></script>
-    <script src="../core/settings-store.js"></script>
     <script src="../core/message-envelope.js"></script>
     <script src="../core/ui-protocol.js"></script>
-    <script src="../core/ui-port-client.js"></script>
     <script src="../core/redaction.js"></script>
-    <script src="../core/runtime-paths.js"></script>
-    <script src="../content/diff-highlighter.js"></script>
-    <script src="./ui-module.js"></script>
+    <script src="./ui-i18n-ru.js"></script>
+    <script src="./ui-kit.js"></script>
+    <script src="./ui-protocol-client.js"></script>
     <script src="./report-exporter.js"></script>
     <script src="./debug.js"></script>
   </body>

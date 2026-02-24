@@ -142,11 +142,14 @@ function hasDownloadsUsage(projectRoot) {
 
 function auditTestCommandGuards(projectRoot) {
   const bgPath = path.join(projectRoot, 'extension', 'bg', 'background-app.js');
+  const buildFlagsPath = path.join(projectRoot, 'extension', 'core', 'build-flags.js');
   if (!fs.existsSync(bgPath)) {
     return {
       foundTestCommands: false,
       hasGuardCheck: false,
-      hasDefaultDisabled: false
+      hasDefaultDisabled: false,
+      hasBuildFlagGuard: false,
+      hasBuildFlagFile: false
     };
   }
   const source = fs.readFileSync(bgPath, 'utf8');
@@ -154,7 +157,11 @@ function auditTestCommandGuards(projectRoot) {
   const hasGuardCheck = /_isTestCommandsEnabled\s*\(/m.test(source)
     && /debugAllowTestCommands/m.test(source);
   const hasDefaultDisabled = /debugAllowTestCommands\s*:\s*false/m.test(source);
-  return { foundTestCommands, hasGuardCheck, hasDefaultDisabled };
+  const hasBuildFlagGuard = /_isBuildTestCommandsEnabled\s*\(/m.test(source)
+    && /allowTestCommandsInBuild/m.test(source);
+  const hasBuildFlagFile = fs.existsSync(buildFlagsPath)
+    && /allowTestCommandsInBuild\s*:\s*(true|false)/m.test(fs.readFileSync(buildFlagsPath, 'utf8'));
+  return { foundTestCommands, hasGuardCheck, hasDefaultDisabled, hasBuildFlagGuard, hasBuildFlagFile };
 }
 
 function newIssue(severity, code, message, details = null) {
@@ -333,6 +340,20 @@ function auditManifest({ manifestPath = DEFAULT_MANIFEST_PATH, projectRoot = nul
       SEVERITY.CRITICAL,
       'TEST_COMMAND_DEFAULT_UNSAFE',
       'debugAllowTestCommands default=false was not detected in background defaults'
+    ));
+  }
+  if (testGuard.foundTestCommands && !testGuard.hasBuildFlagGuard) {
+    issues.push(newIssue(
+      SEVERITY.CRITICAL,
+      'TEST_COMMAND_BUILD_GUARD_MISSING',
+      'BG_TEST_* commands are present but allowTestCommandsInBuild guard was not detected'
+    ));
+  }
+  if (testGuard.foundTestCommands && !testGuard.hasBuildFlagFile) {
+    issues.push(newIssue(
+      SEVERITY.CRITICAL,
+      'TEST_COMMAND_BUILD_FLAG_FILE_MISSING',
+      'extension/core/build-flags.js with allowTestCommandsInBuild flag was not detected'
     ));
   }
 

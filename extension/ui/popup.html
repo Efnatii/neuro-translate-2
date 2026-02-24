@@ -2,587 +2,225 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Neuro Translate</title>
     <link rel="stylesheet" href="./popup.css">
   </head>
   <body>
-    <main class="popup">
+    <main class="popup" id="popupRoot">
       <header class="popup__header">
-        <div class="popup__brand">
+        <div>
           <h1 class="popup__title">Neuro Translate</h1>
-          <p class="popup__subtitle">РР-Р°РіРµРЅС‚ РїРµСЂРµРІРѕРґР° СЃС‚СЂР°РЅРёС†С‹</p>
+          <p class="popup__subtitle" data-field="subtitle">Управление переводом страницы</p>
         </div>
-        <div class="popup__header-actions">
-          <button
-            class="popup__debug"
-            type="button"
-            data-action="open-debug"
-            title="РћС‚РєСЂС‹С‚СЊ СЂР°СЃС€РёСЂРµРЅРЅСѓСЋ СЃС‚СЂР°РЅРёС†Сѓ РѕС‚Р»Р°РґРєРё"
-          >
-            РћС‚Р»Р°РґРєР° в†—
-          </button>
-          <button
-            class="popup__debug popup__debug--secondary"
-            type="button"
-            data-action="open-export"
-            title="РћС‚РєСЂС‹С‚СЊ СЂР°Р·РґРµР» СЌРєСЃРїРѕСЂС‚Р° РѕС‚С‡С‘С‚Р° РІ debug"
-          >
-            Р­РєСЃРїРѕСЂС‚ РѕС‚С‡С‘С‚Р° в†—
-          </button>
-          <button
-            class="popup__debug popup__debug--secondary popup__debug--help"
-            type="button"
-            data-action="open-troubleshooting"
-            title="Открыть troubleshooting для текущей вкладки"
-          >
-            Почему не стартует?
-          </button>
-        </div>
+        <button
+          type="button"
+          class="popup__btn popup__btn--ghost"
+          data-action="open-debug"
+          title="Открывает расширенную страницу отладки"
+        >
+          Отладка
+        </button>
       </header>
 
-      <section class="popup__top-strip" aria-label="РЎС‚Р°С‚СѓСЃ Рё Р±С‹СЃС‚СЂС‹Рµ РґРµР№СЃС‚РІРёСЏ">
-        <div class="popup__status-card">
-          <div class="popup__status-header">
-            <span class="popup__label popup__label--strong">РЎС‚Р°С‚СѓСЃ С‚РµРєСѓС‰РµР№ РІРєР»Р°РґРєРё</span>
-            <span class="popup__status-text" data-field="status-text">вЂ”</span>
-          </div>
-          <div class="popup__agent-status" data-field="agent-status">РђРіРµРЅС‚: вЂ”</div>
-          <div class="popup__status-chips" data-section="status-chips">
-            <span class="popup__status-chip" data-field="status-chip-pipeline" title="РўРµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РїР°Р№РїР»Р°Р№РЅР° РїРµСЂРµРІРѕРґР°">
-              РџР°Р№РїР»Р°Р№РЅ: вЂ”
-            </span>
-            <span class="popup__status-chip" data-field="status-chip-model" title="Р­С„С„РµРєС‚РёРІРЅР°СЏ РїРѕР»РёС‚РёРєР° РІС‹Р±РѕСЂР° РјРѕРґРµР»Рё">
-              РњРѕРґРµР»Рё: вЂ”
-            </span>
-            <span class="popup__status-chip" data-field="status-chip-cache" title="РЎРѕСЃС‚РѕСЏРЅРёРµ РєСЌС€Р° СЃС‚СЂР°РЅРёС† Рё API">
-              РљСЌС€: вЂ”
-            </span>
-          </div>
-          <label class="popup__label popup__label--muted" for="status-progress">РџСЂРѕРіСЂРµСЃСЃ С€Р°РіР°</label>
-          <progress id="status-progress" class="popup__progress" value="0" max="100" data-field="status-progress"></progress>
-          <div class="popup__multi-jobs">
-            <span class="popup__label popup__label--muted" data-field="active-jobs-summary">РђРєС‚РёРІРЅС‹Рµ Р·Р°РґР°С‡Рё: 0</span>
-            <select class="popup__select popup__select--mode" data-field="active-jobs-select" aria-label="РђРєС‚РёРІРЅС‹Рµ Р·Р°РґР°С‡Рё"></select>
-            <button class="popup__debug popup__debug--secondary" type="button" data-action="goto-job-tab" title="РџРµСЂРµР№С‚Рё Рє РІРєР»Р°РґРєРµ РІС‹Р±СЂР°РЅРЅРѕР№ Р·Р°РґР°С‡Рё">
-              РџРµСЂРµР№С‚Рё
-            </button>
-          </div>
-        </div>
+      <div class="popup__connection">
+        <span class="popup__label">Связь:</span>
+        <span class="nt-badge nt-badge--neutral" data-field="connection-badge">...</span>
+        <span class="popup__connection-text" data-field="connection-text">Подключаюсь...</span>
+      </div>
 
-        <div class="popup__action-grid">
-          <button class="popup__icon-button popup__action-button" type="button" data-action="start-translation" title="Р—Р°РїСѓСЃС‚РёС‚СЊ РїРµСЂРµРІРѕРґ" aria-label="Р—Р°РїСѓСЃС‚РёС‚СЊ РїРµСЂРµРІРѕРґ">
-            <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 5L19 12L7 19Z"></path>
-            </svg>
-            <span class="popup__action-label">РџРµСЂРµРІРµСЃС‚Рё</span>
+      <section class="popup__accordion" data-field="accordion-root">
+        <article class="popup__section" data-acc-section="status" data-open="true">
+          <button class="popup__section-head" type="button" data-acc-toggle="status" aria-expanded="true">
+            <span>Статус</span>
+            <span class="popup__chevron">▾</span>
           </button>
-          <button class="popup__icon-button popup__action-button" type="button" data-action="cancel-translation" title="РћСЃС‚Р°РЅРѕРІРёС‚СЊ С‚РµРєСѓС‰РёР№ РїСЂРѕС†РµСЃСЃ РїРµСЂРµРІРѕРґР°" aria-label="РћСЃС‚Р°РЅРѕРІРёС‚СЊ РїРµСЂРµРІРѕРґ">
-            <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="7" y="7" width="10" height="10"></rect>
-            </svg>
-            <span class="popup__action-label">РћС‚РјРµРЅРёС‚СЊ</span>
-          </button>
-          <button class="popup__icon-button popup__action-button" type="button" data-action="clear-translation-data" title="РћС‚РјРµРЅРёС‚СЊ РїРµСЂРµРІРѕРґ Рё СЃС‚РµСЂРµС‚СЊ РґР°РЅРЅС‹Рµ СЃС‚СЂР°РЅРёС†С‹" aria-label="РћС‚РјРµРЅРёС‚СЊ Рё СЃС‚РµСЂРµС‚СЊ">
-            <svg class="popup__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="6" y="6" width="12" height="12"></rect>
-              <path d="M4 7H20"></path>
-              <path d="M9 7V5H15V7"></path>
-              <path d="M7 7L8 20H16L17 7"></path>
-            </svg>
-            <span class="popup__action-label">РЎС‚РµСЂРµС‚СЊ</span>
-          </button>
-          <div class="popup__action-mode popup__action-button--wide" title="РЎСЂР°РІРЅРµРЅРёРµ РїРѕРґСЃРІРµС‡РёРІР°РµС‚ РёР·РјРµРЅРµРЅРёСЏ. Р”Р»СЏ Р±РѕР»СЊС€РёС… Р±Р»РѕРєРѕРІ СЃРј. debug.">
-            <label class="popup__action-mode-label" for="display-mode-select">Р РµР¶РёРј РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ</label>
-            <select id="display-mode-select" class="popup__select popup__select--mode" data-field="display-mode-select" aria-label="Р РµР¶РёРј РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ">
-              <option value="translated">РџРµСЂРµРІРѕРґ</option>
-              <option value="original">РћСЂРёРіРёРЅР°Р»</option>
-              <option value="compare">РЎСЂР°РІРЅРµРЅРёРµ (diff)</option>
-            </select>
-          </div>
-        </div>
-        <div class="popup__buttons-row" data-section="proof-actions" title="РўРѕС‡РµС‡РЅС‹Р№ Р·Р°РїСѓСЃРє СЃС‚Р°РґРёРё РІС‹С‡РёС‚РєРё С‡РµСЂРµР· РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹">
-          <button class="popup__button" type="button" data-action="proofread-auto">Р’С‹С‡РёС‚Р°С‚СЊ (Р°РІС‚Рѕ)</button>
-          <button class="popup__button" type="button" data-action="proofread-all">Р’С‹С‡РёС‚Р°С‚СЊ РІСЃС‘ РІС‹Р±СЂР°РЅРЅРѕРµ</button>
-          <button class="popup__button" type="button" data-action="proofread-current-category">РўРµРєСѓС‰Р°СЏ РєР°С‚РµРіРѕСЂРёСЏ</button>
-        </div>
-      </section>
+          <div class="popup__section-body" data-acc-body="status">
+            <div class="popup__kv-grid">
+              <div class="popup__kv-key">Текущий этап</div>
+              <div class="popup__kv-value" data-field="stage">Нет данных</div>
+            </div>
 
-      <nav class="popup__tabs" role="tablist" aria-label="Р Р°Р·РґРµР»С‹">
-        <button
-          class="popup__tab is-active"
-          type="button"
-          role="tab"
-          id="popup-tab-button-control"
-          data-action="switch-tab"
-          data-tab="control"
-          aria-controls="popup-tab-control"
-          aria-selected="true"
-          tabindex="0"
-          title="Р—Р°РїСѓСЃРє РїРµСЂРµРІРѕРґР°, РєР°С‚РµРіРѕСЂРёРё Рё СЂР°СЃС€РёСЂРµРЅРЅС‹Р№ runtime-СЃС‚Р°С‚СѓСЃ"
-        >
-          РЈРїСЂР°РІР»РµРЅРёРµ
-        </button>
-        <button
-          class="popup__tab"
-          type="button"
-          role="tab"
-          id="popup-tab-button-agent"
-          data-action="switch-tab"
-          data-tab="agent"
-          aria-controls="popup-tab-agent"
-          aria-selected="false"
-          tabindex="-1"
-          title="РџСЂРѕС„РёР»СЊ, РјРѕРґРµР»СЊРЅР°СЏ РїРѕР»РёС‚РёРєР° Рё РЅР°СЃС‚СЂРѕР№РєРё СЂР°Р·РјС‹С€Р»РµРЅРёСЏ Р°РіРµРЅС‚Р°"
-        >
-          РђРіРµРЅС‚
-        </button>
-        <button
-          class="popup__tab"
-          type="button"
-          role="tab"
-          id="popup-tab-button-models"
-          data-action="switch-tab"
-          data-tab="models"
-          aria-controls="popup-tab-models"
-          aria-selected="false"
-          tabindex="-1"
-          title="API-РєР»СЋС‡, СЂР°Р·СЂРµС€С‘РЅРЅС‹Рµ РјРѕРґРµР»Рё, РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹ Рё РєСЌС€"
-        >
-          РњРѕРґРµР»Рё Рё РєСЌС€
-        </button>
-      </nav>
+            <div class="popup__progress-wrap">
+              <label class="popup__label" for="status-progress">Прогресс</label>
+              <progress id="status-progress" class="popup__progress" max="100" value="0" data-field="progress"></progress>
+              <div class="popup__progress-stats">
+                <span data-field="progress-done">Готово: 0</span>
+                <span data-field="progress-pending">Ожидает: 0</span>
+                <span data-field="progress-failed">С ошибкой: 0</span>
+              </div>
+            </div>
 
-      <section class="popup__tab-panels">
-        <section
-          class="popup__tab-panel is-active"
-          role="tabpanel"
-          id="popup-tab-control"
-          data-tab-panel="control"
-          aria-labelledby="popup-tab-button-control"
-        >
-          <div class="popup__context-note" title="РљР°С‚РµРіРѕСЂРёРё РїСЂРµРґР»Р°РіР°СЋС‚СЃСЏ РїРѕСЃР»Рµ РїРµСЂРІРёС‡РЅРѕРіРѕ РїР»Р°РЅРёСЂСѓСЋС‰РµРіРѕ Р°РЅР°Р»РёР·Р° Р°РіРµРЅС‚Р°">
-            Р’С‹Р±РѕСЂ РєР°С‚РµРіРѕСЂРёР№ РїРѕСЏРІР»СЏРµС‚СЃСЏ РїРѕСЃР»Рµ РїРµСЂРІРёС‡РЅРѕРіРѕ Р°РЅР°Р»РёР·Р° Р°РіРµРЅС‚Р°.
-          </div>
+            <div class="popup__status-lines">
+              <div class="popup__line-title">Последний статус агента</div>
+              <div class="popup__line" data-field="agent-digest">Нет данных</div>
+              <div class="popup__line" data-field="agent-line-1"></div>
+              <div class="popup__line" data-field="agent-line-2"></div>
+            </div>
 
-          <div class="popup__runtime-categories" data-section="category-chooser" hidden>
-            <div class="popup__label popup__runtime-categories-hint" data-field="category-chooser-hint">вЂ”</div>
-            <div class="popup__buttons-row popup__buttons-row--start" data-section="category-chooser-actions">
-              <button class="popup__button popup__button--small" type="button" data-action="reclassify-force" title="РћР±РЅРѕРІРёС‚СЊ РєР»Р°СЃСЃРёС„РёРєР°С†РёСЋ Р±Р»РѕРєРѕРІ РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ">
-                Reclassify (force)
+            <div class="popup__actions">
+              <button
+                type="button"
+                class="popup__btn popup__btn--primary"
+                data-action="start-translation"
+                title="Запускает перевод для текущей вкладки"
+              >
+                Перевести
+              </button>
+              <button
+                type="button"
+                class="popup__btn"
+                data-action="cancel-translation"
+                title="Останавливает текущую задачу"
+              >
+                Отменить
+              </button>
+              <button
+                type="button"
+                class="popup__btn"
+                data-action="clear-translation-data"
+                title="Удаляет задачу и данные перевода для вкладки"
+              >
+                Стереть задачу и данные
               </button>
             </div>
-            <div class="popup__categories popup__categories--runtime" data-section="category-chooser-list"></div>
+
+            <div class="popup__mode-group" role="group" aria-label="Режим отображения">
+              <button type="button" class="popup__btn popup__btn--chip" data-action="set-view-mode" data-mode="original" title="Показывать оригинальный текст">
+                Оригинал
+              </button>
+              <button type="button" class="popup__btn popup__btn--chip" data-action="set-view-mode" data-mode="translated" title="Показывать перевод">
+                Перевод
+              </button>
+              <button type="button" class="popup__btn popup__btn--chip" data-action="set-view-mode" data-mode="compare" title="Сравнение оригинала и перевода">
+                Сравнение
+              </button>
+            </div>
+
+            <div class="popup__warn" data-field="lease-warning" hidden></div>
           </div>
+        </article>
 
-          <details class="popup__details popup__details--runtime-status" data-section="runtime-status-extended" open>
-            <summary title="РџРѕРґСЂРѕР±РЅС‹Рµ live-РјРµС‚СЂРёРєРё РІС‹РїРѕР»РЅРµРЅРёСЏ РїРµСЂРµРІРѕРґС‡РёРєР°-Р°РіРµРЅС‚Р°">Р Р°СЃС€РёСЂРµРЅРЅС‹Р№ СЃС‚Р°С‚СѓСЃ</summary>
-            <div class="popup__status-metrics" data-section="status-metrics"></div>
-            <div class="popup__status-trace" data-field="status-trace">вЂ”</div>
-          </details>
-        </section>
-
-        <section
-          class="popup__tab-panel"
-          role="tabpanel"
-          id="popup-tab-agent"
-          data-tab-panel="agent"
-          aria-labelledby="popup-tab-button-agent"
-          hidden
-        >
-          <div class="popup__mini-statuses" data-section="agent-mini-statuses"></div>
-
-          <details class="popup__details" data-section="agent-model-policy" open>
-            <summary title="Р­С‚Рё РїР°СЂР°РјРµС‚СЂС‹ Р·Р°РґР°СЋС‚ Р±Р°Р·РѕРІС‹Р№ РїСЂРёРѕСЂРёС‚РµС‚ РІС‹Р±РѕСЂР° РјРѕРґРµР»Рё РґР»СЏ РїРµСЂРµРІРѕРґС‡РёРєР°-Р°РіРµРЅС‚Р°">
-              РџСЂРѕС„РёР»СЊ Рё РїРѕР»РёС‚РёРєР° РІС‹Р±РѕСЂР° РјРѕРґРµР»РµР№
-            </summary>
-
-            <div class="popup__field-group">
-              <label class="popup__label" for="agent-profile">РџСЂРѕС„РёР»СЊ Р°РіРµРЅС‚Р°</label>
-              <select id="agent-profile" class="popup__select" data-field="agent-profile" title="РџСЂРѕС„РёР»СЊ РІР»РёСЏРµС‚ РЅР° СЃС‚РёР»СЊ, Р±Р°С‚С‡РёРЅРі Рё СЃС‚СЂР°С‚РµРіРёСЋ РїРµСЂРµРІРѕРґР°">
-                <option value="auto">РђРІС‚Рѕ (Р°РґР°РїС‚РёРІРЅС‹Р№)</option>
-                <option value="fast">Р‘С‹СЃС‚СЂС‹Р№</option>
-                <option value="balanced">РЎР±Р°Р»Р°РЅСЃРёСЂРѕРІР°РЅРЅС‹Р№</option>
-                <option value="bulk">РњР°СЃСЃРѕРІС‹Р№</option>
-                <option value="accurate">РўРѕС‡РЅС‹Р№</option>
-                <option value="research">РСЃСЃР»РµРґРѕРІР°С‚РµР»СЊСЃРєРёР№</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
-
-            <div class="popup__tool-grid popup__tool-grid--compact">
-              <div class="popup__tool-row">
-                <label for="model-routing-mode" title="Auto: Р°РіРµРЅС‚ РІС‹Р±РёСЂР°РµС‚ СЃР°Рј; user_priority: РїСЂРµРґРїРѕС‡РёС‚Р°РµС‚ user priority; profile_priority: РїСЂРµРґРїРѕС‡РёС‚Р°РµС‚ РїСЂРѕС„РёР»СЊРЅС‹Р№ СЃРїРёСЃРѕРє">
-                  Р РѕСѓС‚РёРЅРі РјРѕРґРµР»РµР№
-                </label>
-                <select id="model-routing-mode" data-field="model-routing-mode" title="Р РµР¶РёРј РјР°СЂС€СЂСѓС‚РёР·Р°С†РёРё РІС‹Р±РѕСЂР° РјРѕРґРµР»Рё">
-                  <option value="auto">AUTO</option>
-                  <option value="user_priority">USER PRIORITY</option>
-                  <option value="profile_priority">PROFILE PRIORITY</option>
-                </select>
-              </div>
-              <div class="popup__tool-row">
-                <label for="agent-model-policy-mode" title="РђРІС‚Рѕ: Р°РіРµРЅС‚ РјРѕР¶РµС‚ СѓСЃРёР»РёРІР°С‚СЊ/СѓСЃРєРѕСЂСЏС‚СЊ РІС‹Р±РѕСЂ РјРѕРґРµР»Рё РїРѕ РєРѕРЅС‚РµРєСЃС‚Сѓ; Р¤РёРєСЃРёСЂРѕРІР°РЅРѕ: РёСЃРїРѕР»СЊР·СѓР№С‚Рµ Р·Р°РґР°РЅРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РєР°Рє Р±Р°Р·Сѓ">
-                  Р РµР¶РёРј РїСЂРёРѕСЂРёС‚РµС‚Р°
-                </label>
-                <select id="agent-model-policy-mode" data-field="agent-model-policy-mode" title="Р РµР¶РёРј РїСЂРёРјРµРЅРµРЅРёСЏ РїРѕР»РёС‚РёРєРё РІС‹Р±РѕСЂР° РјРѕРґРµР»Рё">
-                  <option value="auto">РђР’РўРћ</option>
-                  <option value="fixed">Р¤РРљРЎРР РћР’РђРќРћ</option>
-                </select>
-              </div>
-              <label class="popup__label popup__checkbox-row" title="Р•СЃР»Рё РІРєР»СЋС‡РµРЅРѕ, РїСЂРёРѕСЂРёС‚РµС‚РЅРѕ РІС‹Р±РёСЂР°СЋС‚СЃСЏ Р±РѕР»РµРµ Р±С‹СЃС‚СЂС‹Рµ РјРѕРґРµР»Рё РІ СЂР°РјРєР°С… РґРѕСЃС‚СѓРїРЅРѕРіРѕ СЃРїРёСЃРєР°">
-                <input type="checkbox" data-field="agent-model-speed">
-                <span>РџСЂРёРѕСЂРёС‚РµС‚ СЃРєРѕСЂРѕСЃС‚Рё</span>
-              </label>
-              <div class="popup__tool-row">
-                <label for="agent-model-preference" title="Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ РїСЂРёРѕСЂРёС‚РµС‚ Рє РєР°С‡РµСЃС‚РІСѓ РёР»Рё СЃС‚РѕРёРјРѕСЃС‚Рё РјРѕРґРµР»Рё">
-                  Р”РѕРї. РїСЂРёРѕСЂРёС‚РµС‚
-                </label>
-                <select id="agent-model-preference" data-field="agent-model-preference" title="Р‘Р°Р·РѕРІС‹Р№ РїСЂРµРґРїРѕС‡С‚РёС‚РµР»СЊРЅС‹Р№ СѓРєР»РѕРЅ РІС‹Р±РѕСЂР° РјРѕРґРµР»Рё">
-                  <option value="none">Р‘РµР· РїСЂРёРѕСЂРёС‚РµС‚Р°</option>
-                  <option value="smartest">РќР°РёР±РѕР»РµРµ СѓРјРЅС‹Рµ</option>
-                  <option value="cheapest">РќР°РёР±РѕР»РµРµ РґРµС€С‘РІС‹Рµ</option>
-                </select>
-              </div>
-              <label class="popup__label popup__checkbox-row" title="Р Р°Р·СЂРµС€Р°РµС‚ Р°РіРµРЅС‚Сѓ РІСЂРµРјРµРЅРЅРѕ С„РѕСЂСЃРёСЂРѕРІР°С‚СЊ fast/strong РјР°СЂС€СЂСѓС‚ РґР»СЏ РѕС‚РґРµР»СЊРЅС‹С… Р±Р°С‚С‡РµР№">
-                <input type="checkbox" data-field="agent-model-route-override">
-                <span>Р Р°Р·СЂРµС€РёС‚СЊ РјР°СЂС€СЂСѓС‚РёР·Р°С†РёСЋ Р±Р°С‚С‡РµР№</span>
-              </label>
-            </div>
-          </details>
-
-          <details class="popup__details" data-section="agent-profile-preview" open>
-            <summary title="РџРѕРєР°Р·С‹РІР°РµС‚ РёС‚РѕРіРѕРІС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РїРѕСЃР»Рµ РїСЂРёРјРµРЅРµРЅРёСЏ РїСЂРѕС„РёР»СЏ Рё РІР°С€РёС… РѕРІРµСЂСЂР°Р№РґРѕРІ">
-              Р’Р»РёСЏРЅРёРµ РїСЂРѕС„РёР»СЏ Рё РѕРІРµСЂСЂР°Р№РґРѕРІ
-            </summary>
-            <div class="popup__impact" data-section="agent-profile-impact"></div>
-          </details>
-
-          <details class="popup__details" data-section="agent-autotune" open>
-            <summary title="Job-scoped Р°РІС‚Рѕ-РЅР°СЃС‚СЂРѕР№РєР° reasoning/cache/models/tools С‡РµСЂРµР· РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹ Р°РіРµРЅС‚Р°">
-              РђРІС‚Рѕ-РЅР°СЃС‚СЂРѕР№РєР°
-            </summary>
-            <div class="popup__tool-grid popup__tool-grid--compact">
-              <label class="popup__label popup__checkbox-row" title="Р Р°Р·СЂРµС€РёС‚СЊ Р°РіРµРЅС‚Сѓ РїСЂРµРґР»Р°РіР°С‚СЊ Рё РїСЂРёРјРµРЅСЏС‚СЊ job-scoped run settings">
-                <input type="checkbox" data-field="autotune-enabled">
-                <span>РђРІС‚Рѕ-РЅР°СЃС‚СЂРѕР№РєР° Р°РіРµРЅС‚РѕРј</span>
-              </label>
-              <div class="popup__tool-row">
-                <label for="autotune-mode" title="auto_apply: РїСЂРёРјРµРЅСЏС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё; ask_user: Р¶РґР°С‚СЊ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ">
-                  Р РµР¶РёРј РїСЂРёРјРµРЅРµРЅРёСЏ
-                </label>
-                <select id="autotune-mode" data-field="autotune-mode">
-                  <option value="auto_apply">РџСЂРёРјРµРЅСЏС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё</option>
-                  <option value="ask_user">РЎРїСЂР°С€РёРІР°С‚СЊ РїРµСЂРµРґ РїСЂРёРјРµРЅРµРЅРёРµРј</option>
-                </select>
-              </div>
-              <div class="popup__tool-row">
-                <label>РџРѕСЃР»РµРґРЅРµРµ СЂРµС€РµРЅРёРµ</label>
-                <div class="popup__label popup__label--muted" data-field="autotune-last-decision">вЂ”</div>
-              </div>
-              <div class="popup__tool-row">
-                <label>Pending diff</label>
-                <div class="popup__label popup__label--muted" data-field="autotune-pending-diff">вЂ”</div>
-              </div>
-              <div class="popup__tool-row">
-                <label>РџСЂРёС‡РёРЅР°</label>
-                <div class="popup__label popup__label--muted" data-field="autotune-pending-reason">вЂ”</div>
-              </div>
-              <div class="popup__tool-grid popup__tool-grid--compact">
-                <button class="popup__button" type="button" data-action="autotune-apply">РџСЂРёРЅСЏС‚СЊ</button>
-                <button class="popup__button" type="button" data-action="autotune-reject">РћС‚РєР»РѕРЅРёС‚СЊ</button>
-                <button class="popup__button" type="button" data-action="autotune-reset">РћС‚РєР°С‚РёС‚СЊ</button>
-              </div>
-            </div>
-          </details>
-
-          <details class="popup__details" data-section="agent-expert-settings">
-            <summary title="Р Р°СЃС€РёСЂРµРЅРЅР°СЏ РЅР°СЃС‚СЂРѕР№РєР° РїР»Р°РЅРёСЂРѕРІР°РЅРёСЏ, Р°СѓРґРёС‚Р° Рё Р°РІС‚РѕСЃР¶Р°С‚РёСЏ РєРѕРЅС‚РµРєСЃС‚Р°">
-              Р­РєСЃРїРµСЂС‚РЅС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё
-            </summary>
-
-            <details class="popup__details popup__details--nested" data-section="agent-runtime-settings" open>
-              <summary title="Р‘Р°Р·РѕРІС‹Рµ РїРµСЂРµРєР»СЋС‡Р°С‚РµР»Рё Р·Р°РїСѓСЃРєР° РїР°Р№РїР»Р°Р№РЅР°">Р РµР¶РёРј Р·Р°РїСѓСЃРєР°</summary>
-              <label class="popup__label popup__checkbox-row" title="Р“Р»РѕР±Р°Р»СЊРЅС‹Р№ РїРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ РїР°Р№РїР»Р°Р№РЅР° РїРµСЂРµРІРѕРґР°. РџСЂРё РІС‹РєР»СЋС‡РµРЅРёРё Р·Р°РїСѓСЃРє Р±Р»РѕРєРёСЂСѓРµС‚СЃСЏ">
-                <input type="checkbox" data-field="pipeline-enabled">
-                <span>РџР°Р№РїР»Р°Р№РЅ РїРµСЂРµРІРѕРґР° РІРєР»СЋС‡С‘РЅ</span>
-              </label>
-            </details>
-
-            <details class="popup__details popup__details--nested" data-section="agent-thinking" open>
-              <summary title="РўРѕРЅРєР°СЏ РЅР°СЃС‚СЂРѕР№РєР° РїР»Р°РЅРёСЂРѕРІР°РЅРёСЏ Рё Р±Р°С‚С‡РёРЅРіР°">Р Р°Р·РјС‹С€Р»РµРЅРёРµ Рё РїР»Р°РЅРёСЂРѕРІР°РЅРёРµ</summary>
-              <div class="popup__tool-grid popup__tool-grid--compact">
-                <div class="popup__tool-row">
-                  <label for="reasoning-mode" title="Auto: РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РїСЂРѕС„РёР»СЊРЅС‹Рµ РґРµС„РѕР»С‚С‹ reasoning; Custom: СЂСѓС‡РЅР°СЏ РЅР°СЃС‚СЂРѕР№РєР° effort/summary">
-                    Reasoning СЂРµР¶РёРј
-                  </label>
-                  <select id="reasoning-mode" data-field="reasoning-mode" title="Р РµР¶РёРј РЅР°СЃС‚СЂРѕР№РєРё reasoning">
-                    <option value="auto">AUTO</option>
-                    <option value="custom">CUSTOM</option>
-                  </select>
-                </div>
-                <div class="popup__tool-row">
-                  <label for="reasoning-effort" title="РРЅС‚РµРЅСЃРёРІРЅРѕСЃС‚СЊ reasoning РґР»СЏ Responses API (best-effort)">
-                    Reasoning effort
-                  </label>
-                  <select id="reasoning-effort" data-field="reasoning-effort" title="РЈСЂРѕРІРµРЅСЊ effort">
-                    <option value="minimal">minimal</option>
-                    <option value="low">low</option>
-                    <option value="medium">medium</option>
-                    <option value="high">high</option>
-                    <option value="max">max</option>
-                  </select>
-                </div>
-                <div class="popup__tool-row">
-                  <label for="reasoning-summary" title="Р¤РѕСЂРјР°С‚ summary reasoning РґР»СЏ Responses API (best-effort)">
-                    Reasoning summary
-                  </label>
-                  <select id="reasoning-summary" data-field="reasoning-summary" title="Р¤РѕСЂРјР°С‚ summary">
-                    <option value="auto">auto</option>
-                    <option value="none">none</option>
-                    <option value="short">short</option>
-                    <option value="detailed">detailed</option>
-                  </select>
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-style-override" title="РћРІРµСЂСЂР°Р№Рґ СЃС‚РёР»РёСЃС‚РёРєРё РїРµСЂРµРІРѕРґР° РїРѕРІРµСЂС… РїСЂРѕС„РёР»СЏ">РЎС‚РёР»СЊ</label>
-                  <select id="agent-style-override" data-field="agent-style-override" title="Р•СЃР»Рё AUTO, СЃС‚РёР»СЊ Р±РµСЂС‘С‚СЃСЏ РёР· РїСЂРѕС„РёР»СЏ">
-                    <option value="auto">РђР’РўРћ</option>
-                    <option value="balanced">РЎР‘РђР›РђРќРЎРР .</option>
-                    <option value="literal">Р”РћРЎР›РћР’РќР«Р™</option>
-                    <option value="readable">Р§РРўРђР•РњР«Р™</option>
-                    <option value="technical">РўР•РҐРќРР§Р•РЎРљРР™</option>
-                  </select>
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-batch-size" title="Р Р°Р·РјРµСЂ Р±Р°С‚С‡Р° РґР»СЏ РїРµСЂРµРІРѕРґР°. РџСѓСЃС‚Рѕ = Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ РІС‹Р±РѕСЂ">Р Р°Р·РјРµСЂ Р±Р°С‚С‡Р°</label>
-                  <input id="agent-batch-size" class="popup__input popup__input--narrow" type="number" min="1" placeholder="Р°РІС‚Рѕ" data-field="agent-batch-size" title="РЎРєРѕР»СЊРєРѕ Р±Р»РѕРєРѕРІ РїРµСЂРµРІРѕРґРёС‚СЊ РІ РѕРґРЅРѕРј Р·Р°РїСЂРѕСЃРµ">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-proofread-passes" title="РљРѕР»РёС‡РµСЃС‚РІРѕ РїСЂРѕС…РѕРґРѕРІ РІС‹С‡РёС‚РєРё РїРѕСЃР»Рµ РѕСЃРЅРѕРІРЅРѕРіРѕ РїРµСЂРµРІРѕРґР°">РџСЂРѕС…РѕРґС‹ РІС‹С‡РёС‚РєРё</label>
-                  <input id="agent-proofread-passes" class="popup__input popup__input--narrow" type="number" min="0" placeholder="Р°РІС‚Рѕ" data-field="agent-proofread-passes" title="0 = Р±РµР· РІС‹С‡РёС‚РєРё, РїСѓСЃС‚Рѕ = РїРѕ РїСЂРѕС„РёР»СЋ">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-parallelism" title="РЈСЂРѕРІРµРЅСЊ СЂР°СЃРїР°СЂР°Р»Р»РµР»РёРІР°РЅРёСЏ РѕР±СЂР°Р±РѕС‚РєРё Р±Р»РѕРєРѕРІ">РџР°СЂР°Р»Р»РµР»РёР·Рј</label>
-                  <select id="agent-parallelism" data-field="agent-parallelism" title="AUTO РїРѕРґР±РёСЂР°РµС‚ СѓСЂРѕРІРµРЅСЊ РїРѕ СЃР»РѕР¶РЅРѕСЃС‚Рё СЃС‚СЂР°РЅРёС†С‹">
-                    <option value="auto">РђР’РўРћ</option>
-                    <option value="low">РќРР—РљРР™</option>
-                    <option value="mixed">РЎРњР•РЁРђРќРќР«Р™</option>
-                    <option value="high">Р’Р«РЎРћРљРР™</option>
-                  </select>
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-planner-temperature" title="РўРµРјРїРµСЂР°С‚СѓСЂР° С‚РѕР»СЊРєРѕ РґР»СЏ С€Р°РіР° РїР»Р°РЅРёСЂРѕРІР°РЅРёСЏ Р°РіРµРЅС‚Р°">РўРµРјРїРµСЂР°С‚СѓСЂР° РїР»Р°РЅРёСЂРѕРІС‰РёРєР°</label>
-                  <input id="agent-planner-temperature" class="popup__input popup__input--narrow" type="number" min="0" step="0.05" data-field="agent-planner-temperature" title="РќРёР¶Рµ = СЃС‚Р°Р±РёР»СЊРЅРµРµ, РІС‹С€Рµ = СЂР°Р·РЅРѕРѕР±СЂР°Р·РЅРµРµ">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-planner-tokens" title="РњР°РєСЃРёРјСѓРј С‚РѕРєРµРЅРѕРІ, РґРѕСЃС‚СѓРїРЅС‹С… С€Р°РіСѓ РїР»Р°РЅРёСЂРѕРІР°РЅРёСЏ">Р›РёРјРёС‚ С‚РѕРєРµРЅРѕРІ РїР»Р°РЅРёСЂРѕРІС‰РёРєР°</label>
-                  <input id="agent-planner-tokens" class="popup__input popup__input--narrow" type="number" min="1" step="50" data-field="agent-planner-tokens" title="РћРіСЂР°РЅРёС‡РµРЅРёРµ РґР»РёРЅС‹ РѕС‚РІРµС‚Р° РїР»Р°РЅРёСЂРѕРІС‰РёРєР°">
-                </div>
-              </div>
-            </details>
-
-            <details class="popup__details popup__details--nested" data-section="agent-optimization" open>
-              <summary title="РРЅС‚РµСЂРІР°Р»С‹ Р°СѓРґРёС‚Р° Рё РїР°СЂР°РјРµС‚СЂС‹ Р°РІС‚РѕСЃР¶Р°С‚РёСЏ РєРѕРЅС‚РµРєСЃС‚Р°">РћРїС‚РёРјРёР·Р°С†РёСЏ Рё Р°РІС‚РѕСЃР¶Р°С‚РёРµ</summary>
-              <div class="popup__tool-grid popup__tool-grid--compact">
-                <div class="popup__tool-row">
-                  <label for="agent-audit-interval" title="Р РµРіСѓР»СЏСЂРЅС‹Р№ РёРЅС‚РµСЂРІР°Р» Р°СѓРґРёС‚Р° РІС‹РїРѕР»РЅРµРЅРёСЏ РїР»Р°РЅР° (РјСЃ)">РРЅС‚РµСЂРІР°Р» Р°СѓРґРёС‚Р° (РјСЃ)</label>
-                  <input id="agent-audit-interval" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-audit-interval" title="Р§Р°СЃС‚РѕС‚Р° РѕР±С‹С‡РЅРѕР№ РїСЂРѕРІРµСЂРєРё РїСЂРѕРіСЂРµСЃСЃР°">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-mandatory-audit-interval" title="РњРёРЅРёРјР°Р»СЊРЅР°СЏ С‡Р°СЃС‚РѕС‚Р° РѕР±СЏР·Р°С‚РµР»СЊРЅРѕРіРѕ Р°СѓРґРёС‚Р° (РјСЃ)">РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№ Р°СѓРґРёС‚ (РјСЃ)</label>
-                  <input id="agent-mandatory-audit-interval" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-mandatory-audit-interval" title="РњРёРЅРёРјР°Р»СЊРЅС‹Р№ РёРЅС‚РµСЂРІР°Р» РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРіРѕ Р°СѓРґРёС‚Р°">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-compression-threshold" title="РџРѕСЂРѕРі РґР»СЏ Р·Р°РїСѓСЃРєР° Р°РІС‚РѕСЃР¶Р°С‚РёСЏ РєРѕРЅС‚РµРєСЃС‚Р°">РџРѕСЂРѕРі СЃР¶Р°С‚РёСЏ</label>
-                  <input id="agent-compression-threshold" class="popup__input popup__input--narrow" type="number" min="0" step="1" data-field="agent-compression-threshold" title="Р§РµРј РЅРёР¶Рµ Р·РЅР°С‡РµРЅРёРµ, С‚РµРј С‡Р°С‰Рµ Р±СѓРґРµС‚ Р°РІС‚РѕСЃР¶Р°С‚РёРµ">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-context-limit" title="Р›РёРјРёС‚ СѓСЃР»РѕРІРЅРѕРіРѕ СЂР°Р·РјРµСЂР° РєРѕРЅС‚РµРєСЃС‚Р° РїРµСЂРµРґ СЃР¶Р°С‚РёРµРј">Р›РёРјРёС‚ РєРѕРЅС‚РµРєСЃС‚Р° (СЃРёРјРІ.)</label>
-                  <input id="agent-context-limit" class="popup__input popup__input--narrow" type="number" min="1" step="500" data-field="agent-context-limit" title="Р•СЃР»Рё РєРѕРЅС‚РµРєСЃС‚ СЂР°СЃС‚С‘С‚ РІС‹С€Рµ Р»РёРјРёС‚Р°, Р·Р°РїСѓСЃРєР°РµС‚СЃСЏ СЃР¶Р°С‚РёРµ">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="compare-diff-threshold" title="РџРѕСЂРѕРі РґР»РёРЅС‹ Р±Р»РѕРєР° РґР»СЏ compare mode. Р•СЃР»Рё Р±Р»РѕРє РґР»РёРЅРЅРµРµ, РЅР° СЃС‚СЂР°РЅРёС†Рµ Р±СѓРґРµС‚ С‚РѕР»СЊРєРѕ outline-РїРѕРґСЃРІРµС‚РєР°.">РџРѕСЂРѕРі compare diff (СЃРёРјРІ.)</label>
-                  <input id="compare-diff-threshold" class="popup__input popup__input--narrow" type="number" min="500" step="100" data-field="compare-diff-threshold" title="Р‘РѕР»СЊС€РёРµ Р±Р»РѕРєРё РІС‹С€Рµ РїРѕСЂРѕРіР° РЅРµ РґРёС„С„СЏС‚СЃСЏ inline, СЃРјРѕС‚СЂРёС‚Рµ debug">
-                </div>
-                <div class="popup__tool-row">
-                  <label for="agent-compression-cooldown" title="РњРёРЅРёРјР°Р»СЊРЅР°СЏ РїР°СѓР·Р° РјРµР¶РґСѓ РѕРїРµСЂР°С†РёСЏРјРё СЃР¶Р°С‚РёСЏ (РјСЃ)">РџР°СѓР·Р° РјРµР¶РґСѓ СЃР¶Р°С‚РёСЏРјРё (РјСЃ)</label>
-                  <input id="agent-compression-cooldown" class="popup__input popup__input--narrow" type="number" min="0" step="100" data-field="agent-compression-cooldown" title="Р—Р°С‰РёС‚Р° РѕС‚ СЃР»РёС€РєРѕРј С‡Р°СЃС‚РѕРіРѕ СЃР¶Р°С‚РёСЏ">
-                </div>
-              </div>
-            </details>
-          </details>
-        </section>
-
-        <section
-          class="popup__tab-panel"
-          role="tabpanel"
-          id="popup-tab-models"
-          data-tab-panel="models"
-          aria-labelledby="popup-tab-button-models"
-          hidden
-        >
-          <details class="popup__details popup__details--inline" data-section="credentials" open>
-            <summary title="Р‘РµР·РѕРїР°СЃРЅРѕРµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє API: Proxy (СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ) РёР»Рё BYOK">РљР»СЋС‡Рё Рё РїРѕРґРєР»СЋС‡РµРЅРёРµ</summary>
-            <div class="popup__field popup__field--stack">
-              <label class="popup__label popup__checkbox-row" title="Р РµРєРѕРјРµРЅРґСѓРµРјС‹Р№ СЂРµР¶РёРј: РєР»СЋС‡ OpenAI С…СЂР°РЅРёС‚СЃСЏ РЅР° РІР°С€РµРј СЃРµСЂРІРµСЂРµ">
-                <input type="radio" name="connection-mode" data-field="connection-mode-proxy" value="PROXY">
-                <span>Р§РµСЂРµР· Proxy (СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ)</span>
-              </label>
-              <label class="popup__label popup__checkbox-row" title="BYOK: РёСЃРїРѕР»СЊР·СѓРµС‚Рµ СЃРІРѕР№ OpenAI РєР»СЋС‡ РЅР° СЃРІРѕР№ СЂРёСЃРє">
-                <input type="radio" name="connection-mode" data-field="connection-mode-byok" value="BYOK">
-                <span>РњРѕР№ РєР»СЋС‡ OpenAI (BYOK)</span>
-              </label>
-            </div>
-
-            <div class="popup__tool-grid popup__tool-grid--compact" data-section="proxy-config">
-              <div class="popup__tool-row">
-                <label for="proxy-url">Proxy URL</label>
-                <input id="proxy-url" class="popup__input popup__input--narrow" type="text" data-field="proxy-url" placeholder="https://proxy.example.com" autocomplete="off">
-              </div>
-              <div class="popup__tool-row">
-                <label for="proxy-token">Proxy token (optional)</label>
-                <input id="proxy-token" class="popup__input popup__input--narrow" type="password" data-field="proxy-token" placeholder="token" autocomplete="off">
-              </div>
-              <div class="popup__tool-row">
-                <label for="proxy-project-id">Project ID (optional)</label>
-                <input id="proxy-project-id" class="popup__input popup__input--narrow" type="text" data-field="proxy-project-id" placeholder="project id">
-              </div>
-              <div class="popup__tool-row">
-                <label for="proxy-header-name">Token header</label>
-                <input id="proxy-header-name" class="popup__input popup__input--narrow" type="text" data-field="proxy-header-name" value="X-NT-Token" placeholder="X-NT-Token">
-              </div>
-              <label class="popup__label popup__checkbox-row" title="РЎРѕС…СЂР°РЅСЏС‚СЊ token РїСЂРѕРєСЃРё РїРѕСЃС‚РѕСЏРЅРЅРѕ (СЂРёСЃРє РІС‹С€Рµ)">
-                <input type="checkbox" data-field="proxy-token-persist">
-                <span>РЎРѕС…СЂР°РЅРёС‚СЊ token РїРѕСЃС‚РѕСЏРЅРЅРѕ</span>
-              </label>
-              <div class="popup__tool-row">
-                <label>Proxy РґРµР№СЃС‚РІРёСЏ</label>
-                <div class="popup__buttons-row">
-                  <button class="popup__button" type="button" data-action="save-proxy-config">РЎРѕС…СЂР°РЅРёС‚СЊ Proxy</button>
-                  <button class="popup__button" type="button" data-action="clear-proxy-config">РћС‡РёСЃС‚РёС‚СЊ Proxy</button>
-                  <button class="popup__button" type="button" data-action="test-connection">РџСЂРѕРІРµСЂРёС‚СЊ</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="popup__tool-grid popup__tool-grid--compact" data-section="byok-config">
-              <div class="popup__tool-row">
-                <label for="byok-key">OpenAI key</label>
-                <input id="byok-key" class="popup__input popup__input--narrow" type="password" data-field="byok-key" placeholder="sk-..." autocomplete="off">
-              </div>
-              <label class="popup__label popup__checkbox-row" title="РџРѕСЃС‚РѕСЏРЅРЅРѕРµ С…СЂР°РЅРµРЅРёРµ BYOK РєР»СЋС‡Р° РїРѕРІС‹С€Р°РµС‚ СЂРёСЃРє">
-                <input type="checkbox" data-field="byok-persist">
-                <span>РЎРѕС…СЂР°РЅРёС‚СЊ РїРѕСЃС‚РѕСЏРЅРЅРѕ (РќР• СЂРµРєРѕРјРµРЅРґРѕРІР°РЅРѕ)</span>
-              </label>
-              <label class="popup__label popup__checkbox-row" title="РџРѕРґС‚РІРµСЂРґРёС‚Рµ, С‡С‚Рѕ РїРѕРЅРёРјР°РµС‚Рµ СЂРёСЃРє РїРѕСЃС‚РѕСЏРЅРЅРѕРіРѕ С…СЂР°РЅРµРЅРёСЏ РєР»СЋС‡Р°">
-                <input type="checkbox" data-field="byok-persist-confirm">
-                <span>РџРѕРґС‚РІРµСЂР¶РґР°СЋ СЂРёСЃРє С…СЂР°РЅРµРЅРёСЏ РєР»СЋС‡Р° Р»РѕРєР°Р»СЊРЅРѕ</span>
-              </label>
-              <div class="popup__tool-row">
-                <label>BYOK РґРµР№СЃС‚РІРёСЏ</label>
-                <div class="popup__buttons-row">
-                  <button class="popup__button" type="button" data-action="save-byok-session">РЎРѕС…СЂР°РЅРёС‚СЊ РЅР° СЃРµСЃСЃРёСЋ</button>
-                  <button class="popup__button" type="button" data-action="save-byok">РЎРѕС…СЂР°РЅРёС‚СЊ РєР»СЋС‡</button>
-                  <button class="popup__button" type="button" data-action="clear-byok">РћС‡РёСЃС‚РёС‚СЊ</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="popup__label popup__label--warning" data-field="credentials-warning">Р’РЅРёРјР°РЅРёРµ: BYOK РІ Р±СЂР°СѓР·РµСЂРµ РјРµРЅРµРµ Р±РµР·РѕРїР°СЃРµРЅ, С‡РµРј Proxy СЂРµР¶РёРј.</div>
-            <div class="popup__label popup__label--muted" data-field="credentials-status">РџРѕРґРєР»СЋС‡РµРЅРёРµ: вЂ”</div>
-            <div class="popup__label popup__label--muted" data-field="connection-test-status">РџСЂРѕРІРµСЂРєР°: вЂ”</div>
-          </details>
-
-          <details class="popup__details popup__details--models" data-section="models-details" open>
-            <summary title="Р’С‹Р±РµСЂРёС‚Рµ СЃРїРёСЃРѕРє РјРѕРґРµР»РµР№, РєРѕС‚РѕСЂС‹Рµ Р°РіРµРЅС‚Сѓ СЂР°Р·СЂРµС€РµРЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ">
-              Р Р°Р·СЂРµС€С‘РЅРЅС‹Рµ РјРѕРґРµР»Рё
-            </summary>
-            <p class="popup__block-hint">
-              РђРіРµРЅС‚ РёСЃРїРѕР»СЊР·СѓРµС‚ С‚РѕР»СЊРєРѕ РјРѕРґРµР»Рё РёР· СЃРїРёСЃРєР° РЅРёР¶Рµ. Р’ РєР°Р¶РґРѕР№ СЃС‚СЂРѕРєРµ РїРѕРєР°Р·Р°РЅР°
-              СЃСѓРјРјР°СЂРЅР°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ Р·Р° 1M С‚РѕРєРµРЅРѕРІ.
-            </p>
-            <div class="popup__models" data-section="models"></div>
-          </details>
-
-          <details class="popup__details" data-section="agent-tools" open>
-            <summary title="Р РµР¶РёРјС‹ РѕС‚РґРµР»СЊРЅС‹С… РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ Р°РіРµРЅС‚Р°">РРЅСЃС‚СЂСѓРјРµРЅС‚С‹ Р°РіРµРЅС‚Р°</summary>
-            <div class="popup__tool-grid" data-section="agent-tools-grid"></div>
-          </details>
-
-          <details class="popup__details" data-section="agent-cache" open>
-            <summary title="РќР°СЃС‚СЂРѕР№РєРё РєСЌС€РёСЂРѕРІР°РЅРёСЏ РїРµСЂРµРІРѕРґР° Рё API">РљСЌС€РёСЂРѕРІР°РЅРёРµ</summary>
-            <div class="popup__tool-grid popup__tool-grid--compact">
-              <div class="popup__tool-row">
-                <label for="prompt-cache-retention" title="Retention РґР»СЏ prompt cache РІ Responses API (best-effort)">
-                  Prompt cache retention
-                </label>
-                <select id="prompt-cache-retention" data-field="prompt-cache-retention" title="Р РµР¶РёРј retention РґР»СЏ prompt cache">
-                  <option value="auto">auto</option>
-                  <option value="in_memory">in_memory</option>
-                  <option value="extended">extended</option>
-                  <option value="disabled">disabled</option>
-                </select>
-              </div>
-              <div class="popup__tool-row">
-                <label for="prompt-cache-key" title="РћРїС†РёРѕРЅР°Р»СЊРЅС‹Р№ cache key РґР»СЏ prompt cache (РµСЃР»Рё РїСЂРѕРІР°Р№РґРµСЂ РїРѕРґРґРµСЂР¶РёРІР°РµС‚)">
-                  Prompt cache key
-                </label>
-                <input id="prompt-cache-key" class="popup__input popup__input--narrow" type="text" data-field="prompt-cache-key" placeholder="РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ" title="РљР»СЋС‡ prompt cache">
-              </div>
-            </div>
-            <label class="popup__label popup__checkbox-row" title="РџСЂРё РїРѕРІС‚РѕСЂРЅРѕРј РѕС‚РєСЂС‹С‚РёРё С‚РѕР№ Р¶Рµ СЃС‚СЂР°РЅРёС†С‹ Р°РіРµРЅС‚ СЃРјРѕР¶РµС‚ РІРѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РіРѕС‚РѕРІС‹Р№ РїРµСЂРµРІРѕРґ РёР· РєСЌС€Р°">
-              <input type="checkbox" data-field="cache-enabled">
-              <span>Р—Р°РїРѕРјРёРЅР°С‚СЊ РїРµСЂРµРІРµРґС‘РЅРЅС‹Рµ СЃС‚СЂР°РЅРёС†С‹</span>
-            </label>
-            <label class="popup__label popup__checkbox-row" title="РџРѕРІС‚РѕСЂРЅС‹Рµ РёРґРµРЅС‚РёС‡РЅС‹Рµ Р·Р°РїСЂРѕСЃС‹ Рє API РјРѕРіСѓС‚ Р±СЂР°С‚СЊСЃСЏ РёР· РєСЌС€Р°, РµСЃР»Рё СЌС‚Рѕ Р±РµР·РѕРїР°СЃРЅРѕ РґР»СЏ С‚РµРєСѓС‰РµРіРѕ С€Р°РіР°">
-              <input type="checkbox" data-field="api-cache-enabled">
-              <span>РљСЌС€РёСЂРѕРІР°С‚СЊ РѕС‚РІРµС‚С‹ API</span>
-            </label>
-            <label class="popup__label popup__checkbox-row" title="РЎРѕС…СЂР°РЅСЏС‚СЊ РїРµСЂРµРІРѕРґ РІ РґРѕР»РіРѕРІСЂРµРјРµРЅРЅСѓСЋ РїР°РјСЏС‚СЊ РїРѕ URL + DOM hash Рё block hash">
-              <input type="checkbox" data-field="memory-enabled">
-              <span>РџР°РјСЏС‚СЊ РїРµСЂРµРІРѕРґР° (СЃС‚СЂР°РЅРёС†С‹ Рё Р±Р»РѕРєРё)</span>
-            </label>
-            <div class="popup__tool-grid popup__tool-grid--compact">
-              <div class="popup__tool-row">
-                <label title="РЈРґР°Р»СЏРµС‚ Р·Р°РїРёСЃРё РїР°РјСЏС‚Рё С‚РѕР»СЊРєРѕ РґР»СЏ С‚РµРєСѓС‰РµР№ СЃС‚СЂР°РЅРёС†С‹ Рё СЏР·С‹РєР°">
-                  РћС‡РёСЃС‚РєР° РїР°РјСЏС‚Рё СЃС‚СЂР°РЅРёС†С‹
-                </label>
-                <button class="popup__button" type="button" data-action="erase-page-memory" title="РЎС‚РµСЂРµС‚СЊ РїР°РјСЏС‚СЊ С‚РѕР»СЊРєРѕ СЌС‚РѕР№ СЃС‚СЂР°РЅРёС†С‹">
-                  РЎС‚РµСЂРµС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ
+        <article class="popup__section" data-acc-section="categories" data-open="false">
+          <button class="popup__section-head" type="button" data-acc-toggle="categories" aria-expanded="false">
+            <span>Категории</span>
+            <span class="popup__chevron">▾</span>
+          </button>
+          <div class="popup__section-body" data-acc-body="categories" hidden>
+            <section data-section="category-chooser" hidden>
+              <div class="popup__hint" data-field="category-question">Категории появятся после этапа планирования.</div>
+              <div class="popup__category-list" data-section="category-chooser-list"></div>
+              <div class="popup__actions popup__actions--stack">
+                <button type="button" class="popup__btn popup__btn--primary" data-action="start-selected-categories">
+                  Начать перевод выбранного
+                </button>
+                <button type="button" class="popup__btn" data-action="add-categories-later">
+                  Добавить категории позже
                 </button>
               </div>
-              <div class="popup__tool-row">
-                <label title="РџРѕР»РЅРѕСЃС‚СЊСЋ РѕС‡РёС‰Р°РµС‚ IndexedDB РїР°РјСЏС‚СЊ РїРµСЂРµРІРѕРґР°">
-                  РџРѕР»РЅР°СЏ РѕС‡РёСЃС‚РєР° РїР°РјСЏС‚Рё
-                </label>
-                <button class="popup__button" type="button" data-action="erase-all-memory" title="РЎС‚РµСЂРµС‚СЊ РІСЃСЋ РїР°РјСЏС‚СЊ РїРµСЂРµРІРѕРґР°">
-                  РЎС‚РµСЂРµС‚СЊ РІСЃС‘
-                </button>
-              </div>
+            </section>
+            <p class="popup__hint" data-field="categories-hidden-hint">Категории появятся после этапа планирования.</p>
+          </div>
+        </article>
+
+        <article class="popup__section" data-acc-section="profile" data-open="false">
+          <button class="popup__section-head" type="button" data-acc-toggle="profile" aria-expanded="false">
+            <span>Профиль и настройки</span>
+            <span class="popup__chevron">▾</span>
+          </button>
+          <div class="popup__section-body" data-acc-body="profile" hidden>
+            <label class="popup__label" for="profile-select" title="Профиль влияет на баланс скорости и качества">
+              Профиль
+            </label>
+            <select id="profile-select" class="popup__input" data-field="profile-select">
+              <option value="auto">auto</option>
+              <option value="fast">fast</option>
+              <option value="balanced">balanced</option>
+              <option value="accurate">accurate</option>
+              <option value="custom">custom</option>
+            </select>
+
+            <div class="popup__label">Эффект профиля</div>
+            <pre class="popup__pre" data-field="profile-effect">Нет данных</pre>
+
+            <button type="button" class="popup__btn" data-action="open-advanced">Расширенные настройки</button>
+          </div>
+        </article>
+
+        <article class="popup__section" data-acc-section="advanced" data-open="false">
+          <button class="popup__section-head" type="button" data-acc-toggle="advanced" aria-expanded="false">
+            <span>Расширенные</span>
+            <span class="popup__chevron">▾</span>
+          </button>
+          <div class="popup__section-body" data-acc-body="advanced" hidden>
+            <label class="popup__label" for="reasoning-select" title="Глубина рассуждения модели для планирования и перевода">
+              Reasoning
+            </label>
+            <select id="reasoning-select" class="popup__input" data-field="reasoning-select">
+              <option value="auto">auto</option>
+              <option value="low">низкий</option>
+              <option value="medium">средний</option>
+              <option value="high">высокий</option>
+              <option value="max">очень высокий</option>
+            </select>
+
+            <label class="popup__label" for="cache-retention-select" title="Срок хранения prompt-cache в API">
+              Prompt cache retention
+            </label>
+            <select id="cache-retention-select" class="popup__input" data-field="cache-retention-select">
+              <option value="auto">auto</option>
+              <option value="extended">extended</option>
+              <option value="disabled">disabled</option>
+            </select>
+
+            <label class="popup__label" for="routing-mode-select" title="Стратегия выбора модели из allowlist">
+              Роутинг моделей
+            </label>
+            <select id="routing-mode-select" class="popup__input" data-field="routing-mode-select">
+              <option value="auto">auto</option>
+              <option value="user_priority">user_priority</option>
+              <option value="profile_priority">profile_priority</option>
+            </select>
+
+            <label class="popup__label" for="model-allowlist" title="Список моделей, разрешенных для агента">
+              Разрешенные модели
+            </label>
+            <select id="model-allowlist" class="popup__input popup__input--multi" data-field="model-allowlist" multiple></select>
+
+            <div class="popup__label" title="Режим инструмента: on/off/auto">Инструменты</div>
+            <div class="popup__tool-list" data-field="tools-list"></div>
+
+            <div class="popup__label" title="Последние ограничения API по RPM/TPM">Rate limits</div>
+            <div class="popup__rate-limits" data-field="rate-limits">Нет данных</div>
+          </div>
+        </article>
+
+        <article class="popup__section" data-acc-section="errors" data-open="false">
+          <button class="popup__section-head" type="button" data-acc-toggle="errors" aria-expanded="false">
+            <span>Ошибки</span>
+            <span class="popup__chevron">▾</span>
+          </button>
+          <div class="popup__section-body" data-acc-body="errors" hidden>
+            <div class="popup__error" data-field="error-box" hidden>
+              <div><strong>Код:</strong> <span data-field="error-code">-</span></div>
+              <div><strong>Сообщение:</strong> <span data-field="error-message">-</span></div>
+              <button type="button" class="popup__btn" data-action="open-debug-from-error">Открыть отладку</button>
             </div>
-            <div class="popup__label popup__label--muted" data-field="memory-restore-stats">РџР°РјСЏС‚СЊ: вЂ”</div>
-          </details>
-        </section>
+            <p class="popup__hint" data-field="error-empty">Нет ошибок.</p>
+          </div>
+        </article>
       </section>
+
+      <div class="nt-toast-host" data-field="toast-host" aria-live="polite"></div>
     </main>
 
     <script src="../core/nt-namespace.js"></script>
-    <script src="../core/time.js"></script>
-    <script src="../core/html.js"></script>
-    <script src="../core/retry-loop.js"></script>
-    <script src="../core/chrome-local-store-base.js"></script>
-    <script src="../core/event-types.js"></script>
-    <script src="../core/agent-settings-policy.js"></script>
-    <script src="../core/settings-store.js"></script>
     <script src="../core/message-envelope.js"></script>
     <script src="../core/ui-protocol.js"></script>
-    <script src="../core/ui-port-client.js"></script>
-    <script src="../core/runtime-paths.js"></script>
-    <script src="../ai/capability-rank.js"></script>
-    <script src="../ai/ai-common.js"></script>
-    <script src="../ai/translation-agent.js"></script>
-    <script src="./ui-module.js"></script>
+    <script src="./ui-i18n-ru.js"></script>
+    <script src="./ui-kit.js"></script>
+    <script src="./ui-protocol-client.js"></script>
+    <script src="./popup-view-model.js"></script>
     <script src="./popup.js"></script>
   </body>
 </html>
-

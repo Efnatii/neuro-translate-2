@@ -102,6 +102,29 @@ async function sendUiCommand(page, { command, payload = {}, tabId = null } = {})
   });
 }
 
+async function sendBgRuntimeMessage(page, { type, payload = {} } = {}) {
+  return page.evaluate(async ({ messageType, messagePayload }) => {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        type: messageType,
+        payload: messagePayload && typeof messagePayload === 'object' ? messagePayload : {}
+      }, (response) => {
+        const runtimeError = chrome.runtime && chrome.runtime.lastError
+          ? chrome.runtime.lastError.message
+          : null;
+        if (runtimeError) {
+          resolve({ ok: false, error: { code: 'RUNTIME_MESSAGE_FAILED', message: runtimeError } });
+          return;
+        }
+        resolve(response || null);
+      });
+    });
+  }, {
+    messageType: type,
+    messagePayload: payload
+  });
+}
+
 async function readTabRuntimeState(page, tabId) {
   return page.evaluate(async ({ targetTabId }) => {
     const tabKey = String(targetTabId);
@@ -162,9 +185,11 @@ const test = base.extend({
     await fs.rm(userDataDir, { recursive: true, force: true });
     await fs.mkdir(userDataDir, { recursive: true });
     servers.mockServer.resetStats();
+    const headless = testInfo && testInfo.project && testInfo.project.use
+      ? testInfo.project.use.headless !== false
+      : true;
     const context = await chromium.launchPersistentContext(userDataDir, {
-      channel: 'chromium',
-      headless: false,
+      headless,
       viewport: { width: 1440, height: 900 },
       args: [
         `--disable-extensions-except=${REPO_ROOT}`,
@@ -179,9 +204,24 @@ const test = base.extend({
   extensionId: async ({ context }, use) => {
     let sw = context.serviceWorkers()[0] || null;
     if (!sw) {
-      sw = await context.waitForEvent('serviceworker', { timeout: 15000 });
+      sw = await context.waitForEvent('serviceworker', { timeout: 15000 }).catch(() => null);
     }
-    const extensionId = new URL(sw.url()).host;
+    let extensionId = null;
+    if (sw && sw.url()) {
+      extensionId = new URL(sw.url()).host;
+    }
+    if (!extensionId) {
+      const extensionPage = context.pages().find((page) => {
+        const url = page && typeof page.url === 'function' ? page.url() : '';
+        return /^chrome-extension:\/\//i.test(url);
+      });
+      if (extensionPage) {
+        extensionId = new URL(extensionPage.url()).host;
+      }
+    }
+    if (!extensionId) {
+      throw new Error('Failed to resolve extension id: service worker not detected');
+    }
     await use(extensionId);
   },
 
@@ -303,10 +343,21 @@ const test = base.extend({
       openPopupPage: async (tabId) => {
         await refreshExtensionId({ allowWait: true });
         const page = await context.newPage();
-        const url = `${popupBaseUrl()}?tabId=${encodeURIComponent(String(tabId))}`;
+        const suffix = Number.isFinite(Number(tabId))
+          ? `?tabId=${encodeURIComponent(String(Number(tabId)))}`
+          : '';
+        const url = `${popupBaseUrl()}${suffix}`;
         await page.goto(url, { waitUntil: 'domcontentloaded' });
         await page.waitForSelector('[data-action="start-translation"]', { timeout: 12000 });
         return page;
+      },
+
+      openPopup: async (extensionIdOrTabId = null, maybeTabId = null) => {
+        const tabCandidate = typeof extensionIdOrTabId === 'string'
+          ? maybeTabId
+          : extensionIdOrTabId;
+        const resolvedTabId = Number.isFinite(Number(tabCandidate)) ? Number(tabCandidate) : null;
+        return app.openPopupPage(resolvedTabId);
       },
 
       openDebugPage: async (tabId, section = null) => {
@@ -318,6 +369,55 @@ const test = base.extend({
         const suffix = params.toString();
         await page.goto(`${debugBaseUrl()}${suffix ? `?${suffix}` : ''}`, { waitUntil: 'domcontentloaded' });
         return page;
+      },
+
+      openDebug: async (extensionIdOrTabId = null, tabIdOrSection = null, maybeSection = null) => {
+        const tabCandidate = typeof extensionIdOrTabId === 'string'
+          ? tabIdOrSection
+          : extensionIdOrTabId;
+        const section = typeof extensionIdOrTabId === 'string'
+          ? maybeSection
+          : tabIdOrSection;
+        const resolvedTabId = Number.isFinite(Number(tabCandidate)) ? Number(tabCandidate) : null;
+        return app.openDebugPage(resolvedTabId, section);
+      },
+
+      sendBgMessage: async (type, payload = {}) => {
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            const helper = await ensureHelperPage();
+            const result = await sendBgRuntimeMessage(helper, {
+              type: typeof type === 'string' ? type : '',
+              payload: payload && typeof payload === 'object' ? payload : {}
+            });
+            const code = result && result.error && result.error.code ? result.error.code : '';
+            if (code === 'RUNTIME_MESSAGE_FAILED' && attempt < 3) {
+              if (helperPage && !helperPage.isClosed()) {
+                await helperPage.close().catch(() => {});
+              }
+              helperPage = null;
+              await sleep(250 * attempt);
+              continue;
+            }
+            return result;
+          } catch (error) {
+            if (helperPage && !helperPage.isClosed()) {
+              await helperPage.close().catch(() => {});
+            }
+            helperPage = null;
+            if (attempt >= 3) {
+              return {
+                ok: false,
+                error: {
+                  code: 'BG_MESSAGE_FAILED',
+                  message: error && error.message ? error.message : String(error || 'sendBgMessage failed')
+                }
+              };
+            }
+            await sleep(250 * attempt);
+          }
+        }
+        return { ok: false, error: { code: 'BG_MESSAGE_RETRY_EXHAUSTED', message: String(type || 'unknown') } };
       },
 
       sendCommand: async (command, payload = {}, tabId = null) => {
@@ -363,12 +463,12 @@ const test = base.extend({
 
       configureTestBackend: async ({ mode = TEST_MODE } = {}) => {
         const normalizedMode = String(mode || TEST_MODE).trim().toLowerCase() === 'real' ? 'real' : 'mock';
+        const enableRes = await app.sendBgMessage('BG_TEST_ENABLE_COMMANDS', { enable: true });
+        if (!enableRes || enableRes.ok !== true) {
+          throw new Error(`Failed to enable BG test commands: ${JSON.stringify(enableRes || null)}`);
+        }
         const settingsRes = await app.sendCommand('SET_SETTINGS', {
           patch: {
-            debugAllowTestCommands: true,
-            debug: {
-              allowTestCommands: true
-            },
             translationAgentTuning: {
               proofreadingPassesOverride: 0,
               plannerMaxOutputTokens: 700
@@ -414,10 +514,7 @@ const test = base.extend({
           if (!resolvedRealOpenAiKey) {
             throw new Error('REAL mode requires TEST_REAL_OPENAI_KEY/OPENAI_API_KEY or TEST_REAL_PROXY_BASE_URL');
           }
-          const keyRes = await app.sendCommand('BG_TEST_SET_CREDENTIALS_BYOK', {
-            apiKey: resolvedRealOpenAiKey,
-            persist: false
-          });
+          const keyRes = await app.sendBgMessage('BG_TEST_SET_BYOK_KEY_SESSION', { apiKey: resolvedRealOpenAiKey });
           if (!keyRes || keyRes.ok !== true) {
             throw new Error(`Failed to configure BYOK key for real mode: ${JSON.stringify(keyRes || null)}`);
           }
@@ -457,14 +554,23 @@ const test = base.extend({
       },
 
       setByokForTests: async ({ apiKey, persist = false } = {}) => {
-        return app.sendCommand('BG_TEST_SET_CREDENTIALS_BYOK', {
-          apiKey: typeof apiKey === 'string' ? apiKey : '',
-          persist: persist === true
+        if (persist === true) {
+          return app.sendCommand('BG_TEST_SET_CREDENTIALS_BYOK', {
+            apiKey: typeof apiKey === 'string' ? apiKey : '',
+            persist: true
+          });
+        }
+        return app.sendBgMessage('BG_TEST_SET_BYOK_KEY_SESSION', {
+          apiKey: typeof apiKey === 'string' ? apiKey : ''
         });
       },
 
       setTargetLangForTests: async (lang = 'ru') => {
         return app.sendCommand('BG_TEST_SET_TARGET_LANG', { lang: typeof lang === 'string' ? lang : 'ru' });
+      },
+
+      enableTestCommands: async (enable = true) => {
+        return app.sendBgMessage('BG_TEST_ENABLE_COMMANDS', { enable: enable === true });
       },
 
       getActiveJob: async (tabId = null) => {

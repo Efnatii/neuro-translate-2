@@ -53,29 +53,45 @@
       this.uiCapsByPort = {};
     }
 
+    resolvePortChannel(portName) {
+      const raw = typeof portName === 'string' ? portName.trim().toLowerCase() : '';
+      if (raw === 'popup' || raw === 'debug') {
+        return raw;
+      }
+      if (raw.indexOf('ui:') === 0) {
+        const channel = raw.slice(3);
+        if (channel === 'popup' || channel === 'debug') {
+          return channel;
+        }
+      }
+      return null;
+    }
+
     attachToRuntime() {
       if (!global.chrome || !global.chrome.runtime || !global.chrome.runtime.onConnect) {
         return;
       }
       global.chrome.runtime.onConnect.addListener((port) => {
-        if (!port || (port.name !== 'popup' && port.name !== 'debug')) {
+        const channel = this.resolvePortChannel(port && port.name);
+        if (!port || !channel) {
           return;
         }
-        this.logEvent('info', 'ui', 'Port connected', { source: port.name });
-        port.onMessage.addListener((message) => this.handleMessage(port, message));
+        this.logEvent('info', 'ui', 'Port connected', { source: channel });
+        port.onMessage.addListener((message) => this.handleMessage(port, message, channel));
         port.onDisconnect.addListener(() => {
           this.subscribers.delete(port);
-          this.logEvent('warn', 'ui', 'Port disconnected', { source: port.name });
+          this.logEvent('warn', 'ui', 'Port disconnected', { source: channel });
         });
       });
     }
 
-    async handleMessage(port, message) {
+    async handleMessage(port, message, resolvedChannel = null) {
       const envelope = this.unwrapEnvelope(message);
       if (!envelope) {
         return;
       }
       const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : {};
+      const channel = resolvedChannel || this.resolvePortChannel(port && port.name) || null;
 
       if (envelope.type === UiProtocol.UI_HELLO) {
         const payload = envelope && envelope.payload && typeof envelope.payload === 'object'
@@ -89,23 +105,23 @@
           : (meta.clientCaps && meta.clientCaps.ui && typeof meta.clientCaps.ui === 'object'
             ? meta.clientCaps.ui
             : null);
-        if (uiCaps && port && port.name) {
-          this.uiCapsByPort[port.name] = { ...(this.uiCapsByPort[port.name] || {}), ...uiCaps };
+        if (uiCaps && channel) {
+          this.uiCapsByPort[channel] = { ...(this.uiCapsByPort[channel] || {}), ...uiCaps };
         }
         if (this.onHello) {
           this.onHello({
-            portName: port.name,
+            portName: channel,
             uiCaps: uiCaps || null,
             toolsetWanted: payload.toolsetWanted || meta.toolsetWanted || null
           });
         }
-        this.logEvent('info', 'ui', 'UI hello', { source: port.name, stage: 'hello' });
+        this.logEvent('info', 'ui', 'UI hello', { source: channel || 'unknown', stage: 'hello' });
         await this.sendSnapshot(port, envelope);
         return;
       }
       if (envelope.type === UiProtocol.UI_SUBSCRIBE) {
         this.subscribers.add(port);
-        this.logEvent('info', 'ui', 'UI subscribed', { source: port.name, stage: 'subscribe' });
+        this.logEvent('info', 'ui', 'UI subscribed', { source: channel || 'unknown', stage: 'subscribe' });
         return;
       }
       if (envelope.type === UiProtocol.UI_COMMAND) {

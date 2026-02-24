@@ -1,0 +1,18 @@
+{
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "playwright.env": {
+    "NODE_OPTIONS": "--dns-result-order=ipv4first"
+  },
+  "terminal.integrated.defaultProfile.windows": "Command Prompt",
+  "terminal.integrated.profiles.windows": {
+    "Command Prompt": {
+      "path": "C:\\Windows\\System32\\cmd.exe",
+      "args": ["/d", "/k"]
+    }
+  },
+  "terminal.integrated.env.windows": {
+    "ComSpec": "C:\\Windows\\System32\\cmd.exe",
+    "PATH": "C:\\Program Files\\nodejs;C:\\Windows\\System32;${env:PATH}"
+  }
+}

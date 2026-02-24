@@ -326,12 +326,27 @@
           this._broadcastRuntimeToolingPatch().catch(() => {});
         },
         onCommand: ({ port, envelope }) => {
-          this._handleUiCommand(envelope, { port }).catch((error) => {
-            this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Команда UI завершилась ошибкой', {
-              source: 'ui',
-              message: error && error.message ? error.message : 'неизвестно'
-            }));
-          });
+          this._handleUiCommand(envelope, { port })
+            .then((result) => {
+              this._sendUiCommandResultPatch({ port, envelope, result });
+            })
+            .catch((error) => {
+              this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Команда UI завершилась ошибкой', {
+                source: 'ui',
+                message: error && error.message ? error.message : 'неизвестно'
+              }));
+              this._sendUiCommandResultPatch({
+                port,
+                envelope,
+                result: {
+                  ok: false,
+                  error: {
+                    code: 'UI_COMMAND_FAILED',
+                    message: error && error.message ? error.message : 'unknown'
+                  }
+                }
+              });
+            });
         },
         onEvent: (event) => this._logEvent(event)
       });
@@ -2246,6 +2261,32 @@
       return this.ai.normalizeSelection(out, null);
     }
 
+    _sendUiCommandResultPatch({ port, envelope, result } = {}) {
+      if (!this.uiHub || !port || typeof this.uiHub.sendPatchToPort !== 'function') {
+        return;
+      }
+      const UiProtocol = NT && NT.UiProtocol ? NT.UiProtocol : null;
+      const payload = envelope && envelope.payload && typeof envelope.payload === 'object'
+        ? envelope.payload
+        : {};
+      const command = typeof payload.name === 'string' ? payload.name : null;
+      const response = result && typeof result === 'object' ? result : {};
+      const requestId = envelope && envelope.meta && typeof envelope.meta.requestId === 'string'
+        ? envelope.meta.requestId
+        : null;
+      this.uiHub.sendPatchToPort(port, {
+        type: UiProtocol && UiProtocol.UI_COMMAND_RESULT ? UiProtocol.UI_COMMAND_RESULT : 'ui:command:result',
+        requestId,
+        command,
+        ok: response.ok === true,
+        error: response && response.error ? this._safeClone(response.error, response.error) : null,
+        result: this._safeClone(response, response)
+      }, {
+        stage: 'command-result',
+        requestId
+      });
+    }
+
     async _handleUiCommand(envelope, { port } = {}) {
       if (!envelope || !envelope.payload) {
         return { ok: false, error: { code: 'INVALID_UI_COMMAND', message: 'Отсутствует payload конверта' } };
@@ -2368,6 +2409,10 @@
         return result;
       }
 
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_ENABLE_COMMANDS : 'BG_TEST_ENABLE_COMMANDS')) {
+        return this._testEnableCommands(commandPayload || {});
+      }
+
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_SET_PROXY_CONFIG : 'BG_TEST_SET_PROXY_CONFIG')) {
         if (!(await this._isTestCommandsEnabled())) {
           return this._denyTestCommandResult(commandName);
@@ -2382,6 +2427,19 @@
           return this._denyTestCommandResult(commandName);
         }
         const result = await this._testSetCredentialsByok(commandPayload || {});
+        await this._broadcastSecurityPatch().catch(() => {});
+        return result;
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_SET_BYOK_KEY_SESSION : 'BG_TEST_SET_BYOK_KEY_SESSION')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        const source = commandPayload && typeof commandPayload === 'object' ? commandPayload : {};
+        const result = await this._testSetCredentialsByok({
+          apiKey: source.apiKey,
+          persist: false
+        });
         await this._broadcastSecurityPatch().catch(() => {});
         return result;
       }
@@ -2454,7 +2512,7 @@
           return this._denyTestCommandResult(commandName);
         }
         const source = commandPayload && typeof commandPayload === 'object' ? commandPayload : {};
-        const mode = typeof source.mode === 'string' ? source.mode.trim().toLowerCase() : 'soft';
+        const mode = typeof source.mode === 'string' ? source.mode.trim().toLowerCase() : 'hard';
         if (mode === 'hard') {
           global.setTimeout(() => {
             try {
@@ -2499,6 +2557,15 @@
 
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.EXPORT_PERF_SNAPSHOT : 'EXPORT_PERF_SNAPSHOT')) {
         return this._exportPerfSnapshot();
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_BUILD_DIAGNOSTICS : 'BG_BUILD_DIAGNOSTICS')) {
+        return this._buildDiagnostics(commandPayload || {}, tabId);
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_KICK_NOW : 'BG_KICK_NOW')) {
+        this._kickScheduler('ui:bg_kick_now');
+        return { ok: true, kicked: true, ts: Date.now() };
       }
 
       if (!this.translationOrchestrator) {
@@ -2721,7 +2788,17 @@
       };
     }
 
+    _isBuildTestCommandsEnabled() {
+      const buildFlags = NT && NT.BuildFlags && typeof NT.BuildFlags === 'object'
+        ? NT.BuildFlags
+        : null;
+      return !(buildFlags && buildFlags.allowTestCommandsInBuild === false);
+    }
+
     async _isTestCommandsEnabled() {
+      if (!this._isBuildTestCommandsEnabled()) {
+        return false;
+      }
       if (!this.settingsStore || typeof this.settingsStore.get !== 'function') {
         return false;
       }
@@ -2729,7 +2806,46 @@
       return Boolean(state && state.debugAllowTestCommands === true);
     }
 
+    async _testEnableCommands(payload) {
+      if (!this._isBuildTestCommandsEnabled()) {
+        return {
+          ok: false,
+          error: {
+            code: 'TEST_COMMANDS_UNAVAILABLE',
+            message: 'BG_TEST_* commands are disabled in this build'
+          }
+        };
+      }
+      if (!this.settingsStore || typeof this.settingsStore.set !== 'function') {
+        return {
+          ok: false,
+          error: {
+            code: 'SETTINGS_STORE_UNAVAILABLE',
+            message: 'SettingsStore is unavailable'
+          }
+        };
+      }
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const enable = source.enable === true;
+      await this.settingsStore.set({
+        debugAllowTestCommands: enable
+      });
+      return {
+        ok: true,
+        enabled: enable
+      };
+    }
+
     _denyTestCommandResult(commandName) {
+      if (!this._isBuildTestCommandsEnabled()) {
+        return {
+          ok: false,
+          error: {
+            code: 'TEST_COMMANDS_UNAVAILABLE',
+            message: `Команда ${String(commandName || 'unknown')} отключена в release-сборке`
+          }
+        };
+      }
       return {
         ok: false,
         error: {
@@ -2978,6 +3094,7 @@
       const doneCount = Number.isFinite(Number(safeJob.completedBlocks))
         ? Number(safeJob.completedBlocks)
         : 0;
+      const failedCount = Array.isArray(safeJob.failedBlockIds) ? safeJob.failedBlockIds.length : 0;
       const leaseUntilTs = safeJob.runtime
         && safeJob.runtime.lease
         && Number.isFinite(Number(safeJob.runtime.lease.leaseUntilTs))
@@ -3002,8 +3119,12 @@
           ? this._safeClone(safeJob.lastError, safeJob.lastError)
           : null,
         leaseUntilTs,
+        pending: pendingCount,
+        done: doneCount,
+        failed: failedCount,
         pendingCount,
         doneCount,
+        failedCount,
         userQuestion
       };
     }
@@ -3030,11 +3151,13 @@
           }
         };
       }
+      const stateSummary = this._testStateSummaryFromJob(job);
       return this._redactTestPayload({
         ok: true,
         jobId: job.id || null,
         tabId: Number.isFinite(Number(context.tabId)) ? Number(context.tabId) : null,
-        state: this._testStateSummaryFromJob(job)
+        ...stateSummary,
+        state: stateSummary
       });
     }
 
@@ -3105,6 +3228,137 @@
         ok: true,
         tabId: context.tabId,
         report: this._redactTestPayload(report)
+      };
+    }
+
+    async _buildDiagnostics(payload, fallbackTabId = null) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const includeTextModeRaw = typeof source.includeTextMode === 'string'
+        ? source.includeTextMode.trim().toLowerCase()
+        : 'snippets';
+      const includeTextMode = includeTextModeRaw === 'none' || includeTextModeRaw === 'full'
+        ? includeTextModeRaw
+        : 'snippets';
+
+      const context = await this._resolveTestJobContext({ payload: source, fallbackTabId });
+      const job = context.job && typeof context.job === 'object' ? context.job : null;
+      const state = job && job.agentState && typeof job.agentState === 'object'
+        ? job.agentState
+        : {};
+
+      const toolTrace = Array.isArray(state.toolExecutionTrace) ? state.toolExecutionTrace.slice(-50) : [];
+      const patchHistory = Array.isArray(state.patchHistory) ? state.patchHistory.slice(-50) : [];
+      const stateSummary = job ? this._testStateSummaryFromJob(job) : {
+        status: null,
+        stage: 'unknown',
+        pending: 0,
+        done: 0,
+        failed: 0,
+        leaseUntilTs: null,
+        lastError: null
+      };
+
+      const runtime = await this._buildUiRuntimeSnapshot({
+        tabId: Number.isFinite(Number(context.tabId)) ? Number(context.tabId) : null,
+        portName: 'debug',
+        uiCaps: null,
+        toolsetWanted: null
+      }).catch(() => null);
+
+      const settings = this.settingsStore && typeof this.settingsStore.getPublicSnapshot === 'function'
+        ? await this.settingsStore.getPublicSnapshot().catch(() => ({}))
+        : {};
+      const logs = await this._testGetLogs({ limit: 50 }).catch(() => ({ ok: true, logs: [] }));
+
+      const clip = (value, limit = 240) => {
+        const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+        if (!text) {
+          return '';
+        }
+        if (text.length <= limit) {
+          return text;
+        }
+        return `${text.slice(0, Math.max(1, limit - 1))}...`;
+      };
+
+      const compactTrace = toolTrace.map((row) => {
+        const src = row && typeof row === 'object' ? row : {};
+        const out = {
+          ts: Number.isFinite(Number(src.ts)) ? Number(src.ts) : null,
+          toolName: src.toolName || src.tool || null,
+          status: src.status || null,
+          message: clip(src.message || ''),
+          argsPreview: clip(JSON.stringify(src.args || (src.meta && src.meta.args) || {}), 320),
+          resultPreview: clip(JSON.stringify(src.result || src.output || (src.meta && src.meta.output) || {}), 320)
+        };
+        if (includeTextMode === 'full') {
+          out.args = src.args || (src.meta && src.meta.args) || null;
+          out.result = src.result || src.output || (src.meta && src.meta.output) || null;
+        }
+        return out;
+      });
+
+      const compactPatches = patchHistory.map((row) => {
+        const src = row && typeof row === 'object' ? row : {};
+        const out = {
+          seq: Number.isFinite(Number(src.seq)) ? Number(src.seq) : null,
+          ts: Number.isFinite(Number(src.ts)) ? Number(src.ts) : null,
+          kind: src.kind || src.type || null,
+          phase: src.phase || null,
+          blockId: src.blockId || null,
+          preview: clip(src.preview || src.text || ''),
+          prevHash: src.prevHash || null,
+          nextHash: src.nextHash || null
+        };
+        if (includeTextMode === 'full') {
+          out.text = src.text || null;
+          out.originalText = src.originalText || null;
+          out.translatedText = src.translatedText || null;
+        }
+        return out;
+      });
+
+      const diagnostics = {
+        kind: 'nt_diagnostics',
+        exportedAt: Date.now(),
+        includeTextMode,
+        tabId: Number.isFinite(Number(context.tabId)) ? Number(context.tabId) : null,
+        activeJobId: context.activeJobId || null,
+        lastJobId: context.lastJobId || null,
+        jobRuntimeSummary: stateSummary,
+        toolTraceLast50: compactTrace,
+        patchEventsLast50: compactPatches,
+        lastError: stateSummary.lastError || null,
+        logsLast50: logs && Array.isArray(logs.logs) ? logs.logs.slice(-50) : [],
+        effectiveSettingsSummary: {
+          schemaVersion: settings && settings.schemaVersion ? settings.schemaVersion : null,
+          profile: settings && settings.translationAgentProfile ? settings.translationAgentProfile : null,
+          modelRouting: settings
+            && settings.userSettings
+            && settings.userSettings.models
+            && settings.userSettings.models.modelRoutingMode
+            ? settings.userSettings.models.modelRoutingMode
+            : null,
+          allowedModelsCount: settings
+            && settings.userSettings
+            && settings.userSettings.models
+            && Array.isArray(settings.userSettings.models.agentAllowedModels)
+            ? settings.userSettings.models.agentAllowedModels.length
+            : 0
+        },
+        capsAndRuntime: runtime ? {
+          toolset: runtime.toolset || null,
+          offscreen: runtime.serverCaps && runtime.serverCaps.offscreen ? runtime.serverCaps.offscreen : null,
+          schedulerRuntime: runtime.serverCaps && runtime.serverCaps.schedulerRuntime
+            ? runtime.serverCaps.schedulerRuntime
+            : null,
+          security: runtime.security || null
+        } : null
+      };
+
+      return {
+        ok: true,
+        diagnostics: this._redactTestPayload(diagnostics)
       };
     }
 
@@ -3543,6 +3797,48 @@
 
       const MessageEnvelope = NT && NT.MessageEnvelope ? NT.MessageEnvelope : null;
       const UiProtocol = NT && NT.UiProtocol ? NT.UiProtocol : null;
+      const rawType = message && typeof message.type === 'string'
+        ? String(message.type).trim()
+        : '';
+      if (rawType && rawType.startsWith('BG_TEST_') && UiProtocol && (!MessageEnvelope || !MessageEnvelope.isEnvelope(message))) {
+        const rawPayload = message && message.payload && typeof message.payload === 'object'
+          ? message.payload
+          : {};
+        const tabId = sender && sender.tab && Number.isFinite(Number(sender.tab.id))
+          ? Number(sender.tab.id)
+          : null;
+        const requestId = message && typeof message.requestId === 'string' && message.requestId
+          ? message.requestId
+          : `raw-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const envelope = MessageEnvelope && typeof MessageEnvelope.wrap === 'function'
+          ? MessageEnvelope.wrap(UiProtocol.UI_COMMAND, { name: rawType, payload: rawPayload }, {
+            source: 'runtime:raw',
+            requestId,
+            ...(Number.isFinite(Number(tabId)) ? { tabId } : {})
+          })
+          : {
+            v: 1,
+            id: requestId,
+            type: UiProtocol.UI_COMMAND || 'ui:command',
+            ts: Date.now(),
+            meta: {
+              source: 'runtime:raw',
+              requestId,
+              ...(Number.isFinite(Number(tabId)) ? { tabId } : {})
+            },
+            payload: {
+              name: rawType,
+              payload: rawPayload
+            }
+          };
+        this._handleUiCommand(envelope)
+          .then((result) => this._respondWithTimeout(sendResponse, result || { ok: true }))
+          .catch((error) => this._respondWithTimeout(sendResponse, {
+            ok: false,
+            error: { code: 'UI_COMMAND_FAILED', message: error && error.message ? error.message : 'unknown' }
+          }));
+        return true;
+      }
       if (!MessageEnvelope || !UiProtocol || !MessageEnvelope.isEnvelope(message)) {
         return false;
       }

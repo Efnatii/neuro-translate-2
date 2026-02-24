@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "test:e2e:real",
+      "type": "shell",
+      "command": "npm run test:e2e:real",
+      "options": {
+        "shell": {
+          "executable": "C:\\Windows\\System32\\cmd.exe",
+          "args": ["/d", "/c"]
+        },
+        "env": {
+          "ComSpec": "C:\\Windows\\System32\\cmd.exe",
+          "PATH": "C:\\Program Files\\nodejs;C:\\Windows\\System32;${env:PATH}"
+        }
+      }
+    },
+    {
+      "label": "autofix:real",
+      "type": "shell",
+      "command": "npm run autofix:real",
+      "options": {
+        "shell": {
+          "executable": "C:\\Windows\\System32\\cmd.exe",
+          "args": ["/d", "/c"]
+        },
+        "env": {
+          "ComSpec": "C:\\Windows\\System32\\cmd.exe",
+          "PATH": "C:\\Program Files\\nodejs;C:\\Windows\\System32;${env:PATH}"
+        }
+      }
+    }
+  ]
+}
