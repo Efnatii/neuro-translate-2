@@ -22,6 +22,7 @@ importScripts(
   '../core/time.js',
   '../core/duration.js',
   '../core/chrome-local-store-base.js',
+  '../core/perf-profiler.js',
   '../core/redaction.js',
   '../core/safe-logger.js',
   '../core/json-schema-validator.js',
@@ -45,6 +46,7 @@ importScripts(
   './translation-page-cache-store.js',
   './translation-memory-store.js',
   './inflight-request-store.js',
+  './migration-manager.js',
   './tab-session-manager.js',
   './job-queue.js',
   './credentials-store.js',
@@ -89,6 +91,7 @@ importScripts(
     'TabStateStore',
     'TranslationJobStore',
     'InflightRequestStore',
+    'MigrationManager',
     'UiPortHub',
     'TranslationOrchestrator',
     'BackgroundApp'

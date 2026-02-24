@@ -12,6 +12,7 @@
       chromeApi,
       jobStore,
       translationOrchestrator,
+      perfProfiler,
       offscreenExecutor,
       retryPolicy,
       ownerInstanceId,
@@ -23,6 +24,7 @@
       this.chromeApi = chromeApi || null;
       this.jobStore = jobStore || null;
       this.translationOrchestrator = translationOrchestrator || null;
+      this.perfProfiler = perfProfiler || null;
       this.offscreenExecutor = offscreenExecutor || null;
       this.retryPolicy = retryPolicy || (NT.RetryPolicy || null);
       this.ownerInstanceId = ownerInstanceId || `sw-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -46,6 +48,7 @@
       if (status === 'failed') return 'FAILED';
       if (status === 'cancelled') return 'CANCELLED';
       if (status === 'awaiting_categories') return 'IDLE';
+      if (status === 'planning') return 'RUNNING';
       if (status === 'preparing') return 'QUEUED';
       if (status === 'running' || status === 'completing') return 'RUNNING';
       return 'IDLE';
@@ -55,6 +58,9 @@
       const status = String(job && job.status ? job.status : '').toLowerCase();
       if (status === 'preparing') {
         return 'scanning';
+      }
+      if (status === 'planning') {
+        return 'planning';
       }
       if (status === 'awaiting_categories') {
         return 'awaiting_categories';
@@ -356,14 +362,41 @@
       return { ok: false, terminal: true };
     }
 
+    _recordStepDuration(job, stage, startedAt) {
+      if (!this.perfProfiler || typeof this.perfProfiler.recordJobMetric !== 'function' || !job || !job.id) {
+        return;
+      }
+      const started = Number(startedAt);
+      if (!Number.isFinite(started)) {
+        return;
+      }
+      const durationMs = Math.max(0, Date.now() - started);
+      if (typeof this.perfProfiler.attachJobContext === 'function') {
+        this.perfProfiler.attachJobContext(job.id, {
+          tabId: Number.isFinite(Number(job.tabId)) ? Number(job.tabId) : null,
+          status: typeof job.status === 'string' ? job.status : null
+        });
+      }
+      const stepStage = typeof stage === 'string' && stage ? stage : 'execution';
+      this.perfProfiler.recordJobMetric(job.id, `step:${stepStage}`, durationMs);
+    }
+
     async step(jobInput, { reason = 'scheduler' } = {}) {
       if (!jobInput || !jobInput.id || !this.jobStore || typeof this.jobStore.getJob !== 'function') {
         return { ok: false, error: 'INVALID_JOB' };
       }
+      const startedAt = Date.now();
       const job = await this.jobStore.getJob(jobInput.id).catch(() => null);
       if (!job) {
         return { ok: false, error: 'JOB_NOT_FOUND' };
       }
+      const finalize = (result, stageOverride = null) => {
+        const stage = typeof stageOverride === 'string' && stageOverride
+          ? stageOverride
+          : (job.runtime && typeof job.runtime.stage === 'string' ? job.runtime.stage : null);
+        this._recordStepDuration(job, stage, startedAt);
+        return result;
+      };
       const now = Date.now();
       const runtime = this._normalizeRuntime(job);
       runtime.ownerInstanceId = this.ownerInstanceId;
@@ -378,7 +411,7 @@
           opId: null
         };
         await this._persist(job, { setActive: false, clearActive: true });
-        return { ok: true, terminal: true };
+        return finalize({ ok: true, terminal: true }, runtime.stage);
       }
 
       if (job.status === 'awaiting_categories') {
@@ -391,7 +424,7 @@
           opId: null
         };
         await this._persist(job, { setActive: true });
-        return { ok: true, hasMoreWork: false };
+        return finalize({ ok: true, hasMoreWork: false }, 'awaiting_categories');
       }
 
       const progressKey = this._progressKey(job, runtime.stage);
@@ -399,10 +432,11 @@
         runtime.watchdog.lastProgressKey = progressKey;
         runtime.watchdog.lastProgressTs = now;
       } else if ((now - (Number(runtime.watchdog.lastProgressTs) || now)) > this.watchdogNoProgressMs) {
-        return this._handleRecovery(job, runtime, {
+        const recovered = await this._handleRecovery(job, runtime, {
           code: 'NO_PROGRESS_WATCHDOG',
           message: 'Прогресс задачи не изменяется слишком долго'
         });
+        return finalize(recovered, runtime.stage);
       }
 
       if (runtime.retry && Number.isFinite(Number(runtime.retry.nextRetryAtTs)) && Number(runtime.retry.nextRetryAtTs) > now) {
@@ -414,15 +448,16 @@
           opId: job.id
         };
         await this._persist(job, { setActive: true });
-        return { ok: true, hasMoreWork: false };
+        return finalize({ ok: true, hasMoreWork: false }, runtime.stage);
       }
 
       const leaseUntil = Number(runtime.lease && runtime.lease.leaseUntilTs);
       if (Number.isFinite(leaseUntil) && leaseUntil > 0 && leaseUntil < now) {
-        return this._handleRecovery(job, runtime, {
+        const recovered = await this._handleRecovery(job, runtime, {
           code: 'LEASE_EXPIRED',
           message: 'Lease выполнения истёк'
         });
+        return finalize(recovered, runtime.stage);
       }
 
       const tabReady = await this._isTabAvailable(job.tabId);
@@ -431,7 +466,7 @@
           code: 'TAB_GONE',
           message: 'Вкладка закрыта или недоступна'
         });
-        return { ok: false, terminal: true };
+        return finalize({ ok: false, terminal: true }, runtime.stage);
       }
 
       if (!runtime.retry.firstAttemptTs) {
@@ -453,7 +488,7 @@
         if (!processing && this.translationOrchestrator && typeof this.translationOrchestrator._processJob === 'function') {
           this.translationOrchestrator._processJob(job.id).catch(() => {});
         }
-        return { ok: true, hasMoreWork: true, reason };
+        return finalize({ ok: true, hasMoreWork: true, reason }, runtime.stage);
       }
 
       if (job.status === 'preparing') {
@@ -468,17 +503,18 @@
         if (!job.scanReceived && idleForMs > 8000 && (now - lastNudgeTs) >= nudgeCooldownMs) {
           const nudged = await this._nudgePreparingJob(job, runtime);
           if (!nudged || nudged.ok !== true) {
-            return this._handleRecovery(job, runtime, nudged && nudged.error ? nudged.error : {
+            const recovered = await this._handleRecovery(job, runtime, nudged && nudged.error ? nudged.error : {
               code: 'CS_NO_ACK',
               message: 'Не удалось переподключить content runtime'
             });
+            return finalize(recovered, 'scanning');
           }
           await this._persist(job, { setActive: true });
         }
-        return { ok: true, hasMoreWork: true, reason };
+        return finalize({ ok: true, hasMoreWork: true, reason }, 'scanning');
       }
 
-      return { ok: true, hasMoreWork: false };
+      return finalize({ ok: true, hasMoreWork: false }, runtime.stage);
     }
   }
 

@@ -9,10 +9,41 @@
   const NT = global.NT || (global.NT = {});
 
   const DOM_SIG_VERSION = 'v1';
+  const LEGACY_CATEGORY_MAP = Object.freeze({
+    heading: 'headings',
+    paragraph: 'main_content',
+    list: 'main_content',
+    quote: 'main_content',
+    button: 'ui_controls',
+    label: 'ui_controls',
+    table: 'tables',
+    code: 'code',
+    meta: 'footer',
+    other: 'unknown'
+  });
+  const KNOWN_CATEGORIES = Object.freeze([
+    'main_content',
+    'headings',
+    'navigation',
+    'ui_controls',
+    'tables',
+    'code',
+    'captions',
+    'footer',
+    'legal',
+    'ads',
+    'unknown'
+  ]);
 
   function normalizeCategory(value) {
     const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    return raw || 'other';
+    if (!raw) {
+      return 'unknown';
+    }
+    if (KNOWN_CATEGORIES.includes(raw)) {
+      return raw;
+    }
+    return LEGACY_CATEGORY_MAP[raw] || 'unknown';
   }
 
   function bucketCharCount(length) {

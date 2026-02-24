@@ -144,6 +144,167 @@
         stages: ['planning', 'execution']
       },
       {
+        name: 'page.get_preanalysis',
+        toolVersion: '1.0.0',
+        description: 'Return scan pre-analysis snapshot (stats, ranges, samples).',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {}
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { cacheTtlMs: 250, queueDepthLimit: 200 },
+        idempotency: { mode: 'by_args_hash' },
+        sideEffects: { category: 'none' },
+        stages: ['planning']
+      },
+      {
+        name: 'page.get_ranges',
+        toolVersion: '1.0.0',
+        description: 'Return pre-analysis ranges with optional filtering.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            preCategory: { type: 'string', maxLength: 80 },
+            limit: { type: 'integer', minimum: 1, maximum: 200 },
+            offset: { type: 'integer', minimum: 0 }
+          }
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { cacheTtlMs: 250, queueDepthLimit: 200 },
+        idempotency: { mode: 'by_args_hash' },
+        sideEffects: { category: 'none' },
+        stages: ['planning']
+      },
+      {
+        name: 'page.get_range_text',
+        toolVersion: '1.0.0',
+        description: 'Return joined text and block ids for one pre-analysis range.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            rangeId: { type: 'string', minLength: 1, maxLength: 240 }
+          },
+          required: ['rangeId']
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { cacheTtlMs: 250, queueDepthLimit: 200 },
+        idempotency: { mode: 'by_args_hash' },
+        sideEffects: { category: 'none' },
+        stages: ['planning']
+      },
+      {
+        name: 'agent.plan.set_taxonomy',
+        toolVersion: '1.0.0',
+        description: 'Persist planning taxonomy and block/range mapping.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            categories: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  id: { type: 'string', minLength: 1, maxLength: 64 },
+                  titleRu: { type: 'string', maxLength: 220 },
+                  descriptionRu: { type: 'string', maxLength: 500 },
+                  criteriaRu: { type: 'string', maxLength: 1000 },
+                  defaultTranslate: { type: 'boolean' }
+                },
+                required: ['id']
+              },
+              minItems: 1,
+              maxItems: 120
+            },
+            mapping: { type: 'object', additionalProperties: true }
+          },
+          required: ['categories', 'mapping']
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { queueDepthLimit: 120 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'storage_write' },
+        stages: ['planning']
+      },
+      {
+        name: 'agent.plan.set_pipeline',
+        toolVersion: '1.0.0',
+        description: 'Persist execution pipeline routing/batching/context/qc.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            modelRouting: { type: 'object', additionalProperties: true },
+            batching: { type: 'object', additionalProperties: true },
+            context: { type: 'object', additionalProperties: true },
+            qc: { type: 'object', additionalProperties: true }
+          },
+          required: ['modelRouting', 'batching', 'context', 'qc']
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { queueDepthLimit: 120 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'storage_write' },
+        stages: ['planning']
+      },
+      {
+        name: 'agent.plan.request_finish_analysis',
+        toolVersion: '1.0.0',
+        description: 'Validate planning completeness before asking user.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            reason: { type: 'string', minLength: 1, maxLength: 400 }
+          },
+          required: ['reason']
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { queueDepthLimit: 120 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'none' },
+        stages: ['planning']
+      },
+      {
+        name: 'agent.ui.ask_user_categories',
+        toolVersion: '1.0.0',
+        description: 'Publish user-facing category question/options and switch to awaiting_categories.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            questionRu: { type: 'string', minLength: 1, maxLength: 500 },
+            categories: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  id: { type: 'string', minLength: 1, maxLength: 64 },
+                  titleRu: { type: 'string', maxLength: 220 },
+                  descriptionRu: { type: 'string', maxLength: 500 },
+                  countUnits: { type: 'number' }
+                },
+                required: ['id']
+              },
+              minItems: 1,
+              maxItems: 160
+            },
+            defaults: { type: 'array', items: { type: 'string', maxLength: 64 }, maxItems: 160 }
+          },
+          required: ['questionRu', 'categories', 'defaults']
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { queueDepthLimit: 120 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'storage_write' },
+        stages: ['planning']
+      },
+      {
         name: 'agent.set_tool_config',
         toolVersion: '1.0.0',
         description: 'Set requested tool modes and resolve effective configuration.',
@@ -370,7 +531,7 @@
       {
         name: 'agent.set_plan',
         toolVersion: '1.1.0',
-        description: 'Set planning result and recommended categories.',
+        description: 'Set planning result.',
         parametersJsonSchema: {
           type: 'object',
           additionalProperties: false,
@@ -395,7 +556,6 @@
                 }
               }
             },
-            recommendedCategories: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 60 },
             summary: { type: 'string', maxLength: 2000 },
             style: { type: 'string', enum: ['balanced', 'literal', 'readable', 'technical', 'auto'] },
             batchSize: { type: 'integer', minimum: 1, maximum: 120 },
@@ -411,17 +571,77 @@
         stages: ['planning']
       },
       {
-        name: 'agent.set_recommended_categories',
+        name: 'page.classify_blocks',
         toolVersion: '1.0.0',
-        description: 'Set categories recommendation for user confirmation.',
+        description: 'Run deterministic classifier on scanned blocks and persist category/confidence map.',
         parametersJsonSchema: {
           type: 'object',
           additionalProperties: false,
           properties: {
-            categories: { type: 'array', items: { type: 'string' } },
-            reason: { type: 'string' }
+            force: { type: 'boolean' }
+          }
+        },
+        capabilitiesRequired: { content: ['scan'], offscreen: [], permissions: [] },
+        qos: { queueDepthLimit: 120 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'storage_write' },
+        stages: ['planning', 'execution']
+      },
+      {
+        name: 'page.get_category_summary',
+        toolVersion: '1.0.0',
+        description: 'Get per-category counts/confidence and examples from latest classifier result.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {}
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { cacheTtlMs: 250, queueDepthLimit: 200 },
+        idempotency: { mode: 'by_args_hash' },
+        sideEffects: { category: 'none' },
+        stages: ['planning', 'execution']
+      },
+      {
+        name: 'job.set_selected_categories',
+        toolVersion: '1.0.0',
+        description: 'Set effective category selection and recompute pending blocks.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            categories: { type: 'array', items: { type: 'string' }, maxItems: 80 },
+            ids: { type: 'array', items: { type: 'string' }, maxItems: 80 },
+            mode: { type: 'string', enum: ['replace', 'add', 'remove'] },
+            reason: { type: 'string', maxLength: 320 }
           },
-          required: ['categories']
+          required: ['mode'],
+          anyOf: [
+            { required: ['categories', 'mode'] },
+            { required: ['ids', 'mode'] }
+          ]
+        },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { queueDepthLimit: 120 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'storage_write' },
+        stages: ['planning', 'execution']
+      },
+      {
+        name: 'agent.recommend_categories',
+        toolVersion: '1.0.0',
+        description: 'Save recommended/optional/excluded category groups for UI.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            recommended: { type: 'array', items: { type: 'string' }, maxItems: 80 },
+            optional: { type: 'array', items: { type: 'string' }, maxItems: 80 },
+            excluded: { type: 'array', items: { type: 'string' }, maxItems: 80 },
+            reasonShort: { type: 'string', maxLength: 320 },
+            reasonDetailed: { type: 'string', maxLength: 2000 }
+          },
+          required: ['recommended', 'optional', 'excluded', 'reasonShort']
         },
         capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
         qos: { queueDepthLimit: 120 },
@@ -520,6 +740,25 @@
         toolVersion: '1.0.0',
         description: 'Return next pending blocks for execution loop.',
         parametersJsonSchema: { type: 'object', additionalProperties: false, properties: { limit: { type: 'integer' }, prefer: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } } } },
+        capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
+        qos: { cacheTtlMs: 250, queueDepthLimit: 200 },
+        idempotency: { mode: 'by_args_hash' },
+        sideEffects: { category: 'none' },
+        stages: ['execution']
+      },
+      {
+        name: 'job.get_next_units',
+        toolVersion: '1.0.0',
+        description: 'Return next pending translation units (block/range) for execution loop.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            categoryId: { type: 'string', minLength: 1, maxLength: 64 },
+            limit: { type: 'integer', minimum: 1, maximum: 80 },
+            prefer: { type: 'string', enum: ['auto', 'block', 'range', 'mixed'] }
+          }
+        },
         capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
         qos: { cacheTtlMs: 250, queueDepthLimit: 200 },
         idempotency: { mode: 'by_args_hash' },
@@ -708,6 +947,34 @@
         toolVersion: '1.0.0',
         description: 'Translate one block and optionally stream deltas.',
         parametersJsonSchema: { type: 'object', additionalProperties: false, properties: { blockId: { type: 'string' }, targetLang: { type: 'string' }, model: { type: 'string' }, route: { type: 'string' }, style: { type: 'string' }, glossary: { type: 'array' }, contextSummary: { type: 'string' }, batchGuidance: { type: 'string' } }, required: ['blockId'] },
+        capabilitiesRequired: { content: [], offscreen: ['stream'], permissions: [] },
+        qos: { queueDepthLimit: 80 },
+        idempotency: { mode: 'by_call_id' },
+        sideEffects: { category: 'network' },
+        stages: ['execution']
+      },
+      {
+        name: 'translator.translate_unit_stream',
+        toolVersion: '1.0.0',
+        description: 'Translate one execution unit (block or range) and stream deltas.',
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            unitType: { type: 'string', enum: ['block', 'range'] },
+            id: { type: 'string', minLength: 1, maxLength: 240 },
+            blockIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 400 },
+            categoryId: { type: 'string', minLength: 1, maxLength: 64 },
+            targetLang: { type: 'string', minLength: 1, maxLength: 40 },
+            model: { type: 'string', maxLength: 120 },
+            style: { type: 'string', enum: ['auto', 'literal', 'readable', 'technical', 'balanced'] },
+            contextStrategy: { type: 'object', additionalProperties: true },
+            glossary: { type: 'array' },
+            contextSummary: { type: 'string', maxLength: 4000 },
+            keepHistory: { type: 'string', enum: ['auto', 'on', 'off'] }
+          },
+          required: ['unitType', 'id']
+        },
         capabilitiesRequired: { content: [], offscreen: ['stream'], permissions: [] },
         qos: { queueDepthLimit: 80 },
         idempotency: { mode: 'by_call_id' },

@@ -10,7 +10,7 @@
   const TOOL_KEYS = defaults.TOOL_KEYS || {};
   const KNOWN_CATEGORIES = Array.isArray(defaults.KNOWN_CATEGORIES)
     ? defaults.KNOWN_CATEGORIES.slice()
-    : ['heading', 'paragraph', 'list', 'button', 'label', 'navigation', 'meta', 'code', 'quote', 'table', 'other'];
+    : ['main_content', 'headings', 'navigation', 'ui_controls', 'tables', 'code', 'captions', 'footer', 'legal', 'ads', 'unknown'];
 
   class AgentToolRegistry {
     constructor({
@@ -26,7 +26,11 @@
       runSettingsValidator,
       capabilities,
       translationMemoryStore,
-      memorySettings
+      memorySettings,
+      classifyBlocksForJob,
+      getCategorySummaryForJob,
+      setSelectedCategories,
+      setAgentCategoryRecommendations
     } = {}) {
       this.translationAgent = translationAgent || null;
       this.persistJobState = typeof persistJobState === 'function' ? persistJobState : null;
@@ -48,6 +52,12 @@
       this.capabilities = capabilities && typeof capabilities === 'object' ? capabilities : {};
       this.translationMemoryStore = translationMemoryStore || null;
       this.memorySettings = memorySettings && typeof memorySettings === 'object' ? memorySettings : null;
+      this.classifyBlocksForJob = typeof classifyBlocksForJob === 'function' ? classifyBlocksForJob : null;
+      this.getCategorySummaryForJob = typeof getCategorySummaryForJob === 'function' ? getCategorySummaryForJob : null;
+      this.setSelectedCategories = typeof setSelectedCategories === 'function' ? setSelectedCategories : null;
+      this.setAgentCategoryRecommendations = typeof setAgentCategoryRecommendations === 'function'
+        ? setAgentCategoryRecommendations
+        : null;
       this._deltaDebounceByBlock = new Map();
       this.STREAM_DELTA_MIN_INTERVAL_MS = 150;
       this.STREAM_DELTA_MIN_CHARS = 32;
@@ -80,6 +90,131 @@
               offset: { type: 'integer', minimum: 0 },
               order: { type: 'string', enum: ['by_length_desc', 'by_dom'] }
             }
+          }
+        },
+        {
+          type: 'function',
+          name: 'page.get_preanalysis',
+          description: 'Read pre-analysis snapshot from scan: blocks, ranges, and stats.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {}
+          }
+        },
+        {
+          type: 'function',
+          name: 'page.get_ranges',
+          description: 'Read pre-analysis ranges with optional preCategory filter.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              preCategory: { type: 'string' },
+              limit: { type: 'integer', minimum: 1, maximum: 200 },
+              offset: { type: 'integer', minimum: 0 }
+            }
+          }
+        },
+        {
+          type: 'function',
+          name: 'page.get_range_text',
+          description: 'Return joined text and block ids for one pre-analysis range.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              rangeId: { type: 'string' }
+            },
+            required: ['rangeId']
+          }
+        },
+        {
+          type: 'function',
+          name: 'agent.plan.set_taxonomy',
+          description: 'Set planning taxonomy and mapping for categories.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              categories: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: 'string' },
+                    titleRu: { type: 'string' },
+                    descriptionRu: { type: 'string' },
+                    criteriaRu: { type: 'string' },
+                    defaultTranslate: { type: 'boolean' }
+                  },
+                  required: ['id']
+                }
+              },
+              mapping: {
+                type: 'object',
+                additionalProperties: true
+              }
+            },
+            required: ['categories', 'mapping']
+          }
+        },
+        {
+          type: 'function',
+          name: 'agent.plan.set_pipeline',
+          description: 'Set execution pipeline config built by planning agent.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              modelRouting: { type: 'object', additionalProperties: true },
+              batching: { type: 'object', additionalProperties: true },
+              context: { type: 'object', additionalProperties: true },
+              qc: { type: 'object', additionalProperties: true }
+            },
+            required: ['modelRouting', 'batching', 'context', 'qc']
+          }
+        },
+        {
+          type: 'function',
+          name: 'agent.plan.request_finish_analysis',
+          description: 'Validate planning completeness before asking user for categories.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              reason: { type: 'string' }
+            },
+            required: ['reason']
+          }
+        },
+        {
+          type: 'function',
+          name: 'agent.ui.ask_user_categories',
+          description: 'Publish category options/question for user and switch job to awaiting_categories.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              questionRu: { type: 'string' },
+              categories: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: 'string' },
+                    titleRu: { type: 'string' },
+                    descriptionRu: { type: 'string' },
+                    countUnits: { type: 'number' }
+                  },
+                  required: ['id']
+                }
+              },
+              defaults: { type: 'array', items: { type: 'string' } }
+            },
+            required: ['questionRu', 'categories', 'defaults']
           }
         },
         {
@@ -192,29 +327,68 @@
         {
           type: 'function',
           name: 'agent.set_plan',
-          description: 'Set planning result and recommended categories.',
+          description: 'Set planning result.',
           parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
               plan: { type: 'object', additionalProperties: false, properties: {} },
-              recommendedCategories: { type: 'array', items: { type: 'string' } },
               reason: { type: 'string' }
             }
           }
         },
         {
           type: 'function',
-          name: 'agent.set_recommended_categories',
-          description: 'Set categories recommendation for user confirmation.',
+          name: 'page.classify_blocks',
+          description: 'Run deterministic classification for scanned page blocks.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              force: { type: 'boolean' }
+            }
+          }
+        },
+        {
+          type: 'function',
+          name: 'page.get_category_summary',
+          description: 'Read category distribution with confidence and examples.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {}
+          }
+        },
+        {
+          type: 'function',
+          name: 'job.set_selected_categories',
+          description: 'Set effective selected categories and recompute pending blocks.',
           parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
               categories: { type: 'array', items: { type: 'string' } },
+              mode: { type: 'string', enum: ['replace', 'add', 'remove'] },
               reason: { type: 'string' }
             },
-            required: ['categories']
+            required: ['categories', 'mode']
+          }
+        },
+        {
+          type: 'function',
+          name: 'agent.recommend_categories',
+          description: 'Save recommended/optional/excluded categories for UI.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              recommended: { type: 'array', items: { type: 'string' } },
+              optional: { type: 'array', items: { type: 'string' } },
+              excluded: { type: 'array', items: { type: 'string' } },
+              reasonShort: { type: 'string' },
+              reasonDetailed: { type: 'string' }
+            },
+            required: ['recommended', 'optional', 'excluded', 'reasonShort']
           }
         },
         {
@@ -306,6 +480,20 @@
         },
         {
           type: 'function',
+          name: 'job.get_next_units',
+          description: 'Return next pending execution units (block/range).',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              categoryId: { type: 'string' },
+              limit: { type: 'integer', minimum: 1, maximum: 80 },
+              prefer: { type: 'string', enum: ['auto', 'block', 'range', 'mixed'] }
+            }
+          }
+        },
+        {
+          type: 'function',
           name: 'translator.translate_block_stream',
           description: 'Translate a single block with streaming deltas and return final text.',
           parameters: {
@@ -333,6 +521,29 @@
               batchGuidance: { type: 'string' }
             },
             required: ['blockId']
+          }
+        },
+        {
+          type: 'function',
+          name: 'translator.translate_unit_stream',
+          description: 'Translate one unit (block/range) with streaming updates.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              unitType: { type: 'string', enum: ['block', 'range'] },
+              id: { type: 'string' },
+              blockIds: { type: 'array', items: { type: 'string' } },
+              categoryId: { type: 'string' },
+              targetLang: { type: 'string' },
+              model: { type: 'string' },
+              style: { type: 'string', enum: ['auto', 'literal', 'readable', 'technical', 'balanced'] },
+              contextStrategy: { type: 'object', additionalProperties: true },
+              glossary: { type: 'array' },
+              contextSummary: { type: 'string' },
+              keepHistory: { type: 'string', enum: ['auto', 'on', 'off'] }
+            },
+            required: ['unitType', 'id']
           }
         },
         {
@@ -551,6 +762,11 @@
       const planningNames = new Set([
         'page.get_stats',
         'page.get_blocks',
+        'page.get_preanalysis',
+        'page.get_ranges',
+        'page.get_range_text',
+        'page.classify_blocks',
+        'page.get_category_summary',
         'agent.set_tool_config',
         'agent.propose_tool_policy',
         'agent.get_tool_context',
@@ -559,8 +775,13 @@
         'agent.apply_run_settings_proposal',
         'agent.reject_run_settings_proposal',
         'agent.explain_current_run_settings',
+        'agent.plan.set_taxonomy',
+        'agent.plan.set_pipeline',
+        'agent.plan.request_finish_analysis',
+        'agent.ui.ask_user_categories',
         'agent.set_plan',
-        'agent.set_recommended_categories',
+        'job.set_selected_categories',
+        'agent.recommend_categories',
         'agent.append_report',
         'agent.update_checklist',
         'agent.compress_context'
@@ -679,6 +900,15 @@
       if (name === 'page.get_blocks') {
         return this._toolGetBlocks(args, blocks);
       }
+      if (name === 'page.get_preanalysis') {
+        return this._toolGetPreanalysis(args, job);
+      }
+      if (name === 'page.get_ranges') {
+        return this._toolGetRanges(args, job);
+      }
+      if (name === 'page.get_range_text') {
+        return this._toolGetRangeText(args, job);
+      }
       if (name === 'agent.set_tool_config') {
         return this._toolSetToolConfig(args, job, blocks, settings);
       }
@@ -703,8 +933,32 @@
       if (name === 'agent.explain_current_run_settings') {
         return this._toolExplainCurrentRunSettings(args, job, settings);
       }
+      if (name === 'page.classify_blocks') {
+        return this._toolClassifyBlocks(args, job);
+      }
+      if (name === 'page.get_category_summary') {
+        return this._toolGetCategorySummary(args, job);
+      }
+      if (name === 'agent.plan.set_taxonomy') {
+        return this._toolPlanSetTaxonomy(args, job);
+      }
+      if (name === 'agent.plan.set_pipeline') {
+        return this._toolPlanSetPipeline(args, job);
+      }
+      if (name === 'agent.plan.request_finish_analysis') {
+        return this._toolPlanRequestFinishAnalysis(args, job);
+      }
+      if (name === 'agent.ui.ask_user_categories') {
+        return this._toolUiAskUserCategories(args, job);
+      }
       if (name === 'agent.set_plan') {
         return this._toolSetPlan(args, job, blocks);
+      }
+      if (name === 'job.set_selected_categories') {
+        return this._toolSetSelectedCategories(args, job);
+      }
+      if (name === 'agent.recommend_categories') {
+        return this._toolRecommendCategories(args, job);
       }
       if (name === 'agent.set_recommended_categories') {
         return this._toolSetRecommendedCategories(args, job);
@@ -726,6 +980,9 @@
       }
       if (name === 'job.get_next_blocks') {
         return this._toolGetNextBlocks(args, job);
+      }
+      if (name === 'job.get_next_units') {
+        return this._toolGetNextUnits(args, job);
       }
       if (name === 'proof.plan_proofreading') {
         return this._toolPlanProofreading(args, job);
@@ -753,6 +1010,9 @@
       }
       if (name === 'translator.translate_block_stream') {
         return this._toolTranslateBlockStream(args, job, settings, { callId, source });
+      }
+      if (name === 'translator.translate_unit_stream') {
+        return this._toolTranslateUnitStream(args, job, settings, { callId, source });
       }
       if (name === 'page.apply_delta') {
         return this._toolPageApplyDelta(args, job);
@@ -920,7 +1180,7 @@
         .map((block, index) => ({
           index,
           blockId: block && block.blockId ? String(block.blockId) : '',
-          category: this._normalizeCategory(block && (block.category || block.pathHint)) || 'other',
+          category: this._normalizeCategory(block && (block.category || block.pathHint)) || 'unknown',
           originalText: block && typeof block.originalText === 'string' ? block.originalText : '',
           content: {
             originalText: block && typeof block.originalText === 'string' ? block.originalText : '',
@@ -1529,11 +1789,634 @@
       return cursor;
     }
 
+    _preanalysisSource(job) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const pageAnalysis = safeJob.pageAnalysis && typeof safeJob.pageAnalysis === 'object'
+        ? safeJob.pageAnalysis
+        : {};
+      const blocksById = pageAnalysis.blocksById && typeof pageAnalysis.blocksById === 'object'
+        ? pageAnalysis.blocksById
+        : (safeJob.blocksById && typeof safeJob.blocksById === 'object' ? safeJob.blocksById : {});
+      const preRangesById = pageAnalysis.preRangesById && typeof pageAnalysis.preRangesById === 'object'
+        ? pageAnalysis.preRangesById
+        : {};
+      const stats = pageAnalysis.stats && typeof pageAnalysis.stats === 'object'
+        ? pageAnalysis.stats
+        : {};
+      return {
+        pageAnalysis,
+        blocksById,
+        preRangesById,
+        stats
+      };
+    }
+
+    _toolGetPreanalysis(_args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      const src = this._preanalysisSource(job);
+      const blockIds = Object.keys(src.blocksById);
+      const rangeIds = Object.keys(src.preRangesById);
+      const preCategoryCounts = src.stats.byPreCategory && typeof src.stats.byPreCategory === 'object'
+        ? src.stats.byPreCategory
+        : {};
+      const preCategories = Object.keys(preCategoryCounts).map((key) => ({
+        key,
+        count: Number.isFinite(Number(preCategoryCounts[key])) ? Math.max(0, Math.round(Number(preCategoryCounts[key]))) : 0
+      })).sort((left, right) => right.count - left.count || String(left.key).localeCompare(String(right.key)));
+      const sampleBlocks = blockIds
+        .slice(0, 20)
+        .map((blockId) => {
+          const block = src.blocksById[blockId] || {};
+          const text = typeof block.originalText === 'string' ? block.originalText : '';
+          return {
+            blockId,
+            preCategory: typeof block.preCategory === 'string' ? block.preCategory : 'unknown',
+            domOrder: Number.isFinite(Number(block.domOrder)) ? Number(block.domOrder) : 0,
+            preview: text.slice(0, 220)
+          };
+        });
+      const preRangesSummary = {
+        total: rangeIds.length,
+        byPreCategory: rangeIds.reduce((acc, rangeId) => {
+          const range = src.preRangesById[rangeId] || {};
+          const key = typeof range.preCategory === 'string' && range.preCategory ? range.preCategory : 'unknown';
+          acc[key] = Number.isFinite(Number(acc[key])) ? Number(acc[key]) + 1 : 1;
+          return acc;
+        }, {})
+      };
+      state.planningMarkers.preanalysisReadByTool = true;
+      state.updatedAt = Date.now();
+      this._upsertChecklist(state, 'analyze_page', 'done', `blocks=${blockIds.length};ranges=${rangeIds.length}`);
+      this._upsertChecklist(state, 'preanalysis_ready', 'done', `blocks=${blockIds.length};ranges=${rangeIds.length}`);
+      return {
+        ok: true,
+        stats: {
+          blockCount: Number.isFinite(Number(src.stats.blockCount)) ? Number(src.stats.blockCount) : blockIds.length,
+          totalChars: Number.isFinite(Number(src.stats.totalChars)) ? Number(src.stats.totalChars) : 0,
+          byPreCategory: preCategoryCounts,
+          rangeCount: Number.isFinite(Number(src.stats.rangeCount)) ? Number(src.stats.rangeCount) : rangeIds.length
+        },
+        preCategories,
+        preRangesSummary,
+        sampleBlocks,
+        domHash: src.pageAnalysis && src.pageAnalysis.domHash ? src.pageAnalysis.domHash : (job.domHash || null),
+        preanalysisVersion: src.pageAnalysis && src.pageAnalysis.preanalysisVersion
+          ? src.pageAnalysis.preanalysisVersion
+          : null
+      };
+    }
+
+    _toolGetRanges(args, job) {
+      const src = this._preanalysisSource(job);
+      const list = Object.keys(src.preRangesById)
+        .map((rangeId) => {
+          const row = src.preRangesById[rangeId];
+          return row && typeof row === 'object'
+            ? { ...row, rangeId }
+            : null;
+        })
+        .filter(Boolean)
+        .sort((left, right) => Number(left.domOrderFrom || 0) - Number(right.domOrderFrom || 0));
+      const preCategory = typeof args.preCategory === 'string' ? args.preCategory.trim().toLowerCase() : '';
+      const filtered = preCategory
+        ? list.filter((item) => String(item.preCategory || '').trim().toLowerCase() === preCategory)
+        : list;
+      const offset = Number.isFinite(Number(args.offset)) ? Math.max(0, Math.round(Number(args.offset))) : 0;
+      const limit = Number.isFinite(Number(args.limit)) ? Math.max(1, Math.min(200, Math.round(Number(args.limit)))) : 30;
+      const items = filtered.slice(offset, offset + limit).map((range) => {
+        const blockIds = Array.isArray(range.blockIds) ? range.blockIds.slice() : [];
+        const preview = blockIds
+          .slice(0, 6)
+          .map((blockId) => {
+            const block = src.blocksById[blockId] || {};
+            const text = typeof block.originalText === 'string' ? block.originalText : '';
+            return text.slice(0, 120);
+          })
+          .filter(Boolean)
+          .join(' ')
+          .slice(0, 260);
+        return {
+          rangeId: range.rangeId,
+          preCategory: typeof range.preCategory === 'string' ? range.preCategory : 'unknown',
+          blockIds,
+          domOrderFrom: Number.isFinite(Number(range.domOrderFrom)) ? Number(range.domOrderFrom) : 0,
+          domOrderTo: Number.isFinite(Number(range.domOrderTo)) ? Number(range.domOrderTo) : 0,
+          anchorHint: typeof range.anchorHint === 'string' ? range.anchorHint : '',
+          preview
+        };
+      });
+      return {
+        ok: true,
+        total: filtered.length,
+        offset,
+        limit,
+        items
+      };
+    }
+
+    _toolGetRangeText(args, job) {
+      const rangeId = typeof args.rangeId === 'string' ? args.rangeId.trim() : '';
+      if (!rangeId) {
+        throw this._toolError('BAD_TOOL_ARGS', 'rangeId is required');
+      }
+      const src = this._preanalysisSource(job);
+      const range = src.preRangesById[rangeId] && typeof src.preRangesById[rangeId] === 'object'
+        ? src.preRangesById[rangeId]
+        : null;
+      if (!range) {
+        throw this._toolError('RANGE_NOT_FOUND', `Unknown rangeId: ${rangeId}`);
+      }
+      const blockIds = Array.isArray(range.blockIds) ? range.blockIds.slice() : [];
+      const fullText = blockIds
+        .map((blockId) => {
+          const block = src.blocksById[blockId] || {};
+          return typeof block.originalText === 'string' ? block.originalText : '';
+        })
+        .filter(Boolean)
+        .join('\n');
+      const cap = 16000;
+      const truncated = fullText.length > cap;
+      return {
+        ok: true,
+        rangeId,
+        joinedText: truncated ? fullText.slice(0, cap) : fullText,
+        blockIds,
+        preCategory: typeof range.preCategory === 'string' ? range.preCategory : 'unknown',
+        truncated
+      };
+    }
+
+    _toolPlanSetTaxonomy(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      const rawCategories = Array.isArray(args.categories) ? args.categories : [];
+      const categories = [];
+      rawCategories.forEach((item) => {
+        if (!item || typeof item !== 'object') {
+          return;
+        }
+        const id = this._normalizeCategory(item.id);
+        if (!id || categories.some((row) => row.id === id)) {
+          return;
+        }
+        categories.push({
+          id,
+          titleRu: typeof item.titleRu === 'string' ? item.titleRu.slice(0, 220) : id,
+          descriptionRu: typeof item.descriptionRu === 'string' ? item.descriptionRu.slice(0, 400) : '',
+          criteriaRu: typeof item.criteriaRu === 'string' ? item.criteriaRu.slice(0, 800) : '',
+          defaultTranslate: item.defaultTranslate === true
+        });
+      });
+      if (!categories.length) {
+        throw this._toolError('BAD_TOOL_ARGS', 'categories must contain at least one valid id');
+      }
+      const mapping = args.mapping && typeof args.mapping === 'object' ? args.mapping : {};
+      const blockToCategory = {};
+      const rangeToCategory = {};
+      const mapFromObject = (obj, target, idPrefix) => {
+        if (!obj || typeof obj !== 'object') {
+          return;
+        }
+        Object.keys(obj).forEach((key) => {
+          const normalizedId = this._normalizeCategory(obj[key]);
+          if (!normalizedId || !categories.some((row) => row.id === normalizedId)) {
+            return;
+          }
+          const safeKey = String(key || '').trim();
+          if (!safeKey) {
+            return;
+          }
+          if (idPrefix && safeKey.indexOf(idPrefix) !== 0) {
+            return;
+          }
+          target[safeKey] = normalizedId;
+        });
+      };
+      mapFromObject(mapping.blockToCategory, blockToCategory, '');
+      mapFromObject(mapping.rangeToCategory, rangeToCategory, '');
+      if (!Object.keys(blockToCategory).length && !Object.keys(rangeToCategory).length) {
+        Object.keys(mapping).forEach((key) => {
+          const normalizedId = this._normalizeCategory(mapping[key]);
+          if (!normalizedId || !categories.some((row) => row.id === normalizedId)) {
+            return;
+          }
+          const safeKey = String(key || '').trim();
+          if (!safeKey) {
+            return;
+          }
+          if (safeKey.startsWith('r')) {
+            rangeToCategory[safeKey] = normalizedId;
+          } else {
+            blockToCategory[safeKey] = normalizedId;
+          }
+        });
+      }
+      state.taxonomy = {
+        categories,
+        blockToCategory,
+        rangeToCategory,
+        updatedAt: Date.now()
+      };
+      state.planningMarkers.taxonomySetByTool = true;
+      state.updatedAt = Date.now();
+      this._upsertChecklist(state, 'plan_pipeline', 'running', `taxonomy categories=${categories.length}`);
+      job.availableCategories = categories.map((row) => row.id);
+      return {
+        ok: true,
+        categoriesCount: categories.length,
+        mappedBlocks: Object.keys(blockToCategory).length,
+        mappedRanges: Object.keys(rangeToCategory).length
+      };
+    }
+
+    _toolPlanSetPipeline(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      const pipeline = {
+        modelRouting: args && args.modelRouting && typeof args.modelRouting === 'object' ? args.modelRouting : {},
+        batching: args && args.batching && typeof args.batching === 'object' ? args.batching : {},
+        context: args && args.context && typeof args.context === 'object' ? args.context : {},
+        qc: args && args.qc && typeof args.qc === 'object' ? args.qc : {}
+      };
+      state.pipeline = pipeline;
+      state.planningMarkers.pipelineSetByTool = true;
+      state.updatedAt = Date.now();
+      this._upsertChecklist(state, 'plan_pipeline', 'done', 'pipeline configured');
+      return {
+        ok: true,
+        configuredCategories: Object.keys(pipeline.modelRouting || {}).length
+      };
+    }
+
+    _toolPlanRequestFinishAnalysis(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      const missing = [];
+      const taxonomy = state.taxonomy && typeof state.taxonomy === 'object'
+        ? state.taxonomy
+        : null;
+      const pipeline = state.pipeline && typeof state.pipeline === 'object'
+        ? state.pipeline
+        : null;
+      const source = this._preanalysisSource(job);
+      const knownBlocksById = source.blocksById && typeof source.blocksById === 'object'
+        ? source.blocksById
+        : {};
+      const knownRangesById = source.preRangesById && typeof source.preRangesById === 'object'
+        ? source.preRangesById
+        : {};
+      let mappedBlocks = 0;
+      let mappedRanges = 0;
+      if (!taxonomy || !Array.isArray(taxonomy.categories) || !taxonomy.categories.length) {
+        missing.push('taxonomy.categories');
+      } else {
+        const categoryIds = new Set(
+          taxonomy.categories
+            .map((item) => this._normalizeCategory(item && item.id ? item.id : ''))
+            .filter(Boolean)
+        );
+        const blockMap = taxonomy.blockToCategory && typeof taxonomy.blockToCategory === 'object'
+          ? taxonomy.blockToCategory
+          : {};
+        const rangeMap = taxonomy.rangeToCategory && typeof taxonomy.rangeToCategory === 'object'
+          ? taxonomy.rangeToCategory
+          : {};
+        if (!Object.keys(blockMap).length && !Object.keys(rangeMap).length) {
+          missing.push('taxonomy.mapping');
+        } else {
+          Object.keys(blockMap).forEach((blockId) => {
+            const categoryId = this._normalizeCategory(blockMap[blockId] || '');
+            if (!categoryId || !categoryIds.has(categoryId) || !knownBlocksById[blockId]) {
+              return;
+            }
+            mappedBlocks += 1;
+          });
+          Object.keys(rangeMap).forEach((rangeId) => {
+            const categoryId = this._normalizeCategory(rangeMap[rangeId] || '');
+            if (!categoryId || !categoryIds.has(categoryId) || !knownRangesById[rangeId]) {
+              return;
+            }
+            mappedRanges += 1;
+          });
+          if ((mappedBlocks + mappedRanges) <= 0) {
+            missing.push('taxonomy.mapping.targets');
+          }
+        }
+      }
+      if (!pipeline || !pipeline.modelRouting || !Object.keys(pipeline.modelRouting).length) {
+        missing.push('pipeline.modelRouting');
+      }
+      if (!pipeline || !pipeline.batching || !Object.keys(pipeline.batching).length) {
+        missing.push('pipeline.batching');
+      }
+      if (!pipeline || !pipeline.context || !Object.keys(pipeline.context).length) {
+        missing.push('pipeline.context');
+      }
+      if (!pipeline || !pipeline.qc || !Object.keys(pipeline.qc).length) {
+        missing.push('pipeline.qc');
+      }
+      const ok = missing.length === 0;
+      state.planningMarkers.finishAnalysisRequestedByTool = true;
+      state.planningMarkers.finishAnalysisOk = ok;
+      state.updatedAt = Date.now();
+      this._appendReport(state, {
+        type: ok ? 'plan_ready' : 'plan_missing',
+        title: ok ? 'Planning validation passed' : 'Planning validation requires more work',
+        body: ok
+          ? (typeof args.reason === 'string' ? args.reason.slice(0, 320) : 'analysis complete')
+          : `missing: ${missing.join(', ')}`,
+        meta: {
+          missing,
+          mappedBlocks,
+          mappedRanges
+        }
+      });
+      return {
+        ok,
+        missing,
+        mappedBlocks,
+        mappedRanges
+      };
+    }
+
+    _toolUiAskUserCategories(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      if (state.planningMarkers.finishAnalysisRequestedByTool !== true || state.planningMarkers.finishAnalysisOk !== true) {
+        throw this._toolError(
+          'BAD_TOOL_SEQUENCE',
+          'agent.ui.ask_user_categories requires successful agent.plan.request_finish_analysis first'
+        );
+      }
+      const taxonomy = state.taxonomy && typeof state.taxonomy === 'object'
+        ? state.taxonomy
+        : { categories: [] };
+      const pipeline = state.pipeline && typeof state.pipeline === 'object'
+        ? state.pipeline
+        : {};
+      const batching = pipeline.batching && typeof pipeline.batching === 'object'
+        ? pipeline.batching
+        : {};
+      const preanalysis = this._preanalysisSource(job);
+      const knownBlocksById = preanalysis.blocksById && typeof preanalysis.blocksById === 'object'
+        ? preanalysis.blocksById
+        : {};
+      const knownRangesById = preanalysis.preRangesById && typeof preanalysis.preRangesById === 'object'
+        ? preanalysis.preRangesById
+        : {};
+      const blockSetByCategory = {};
+      const rangeSetByCategory = {};
+      const pushBlockForCategory = (categoryId, blockId) => {
+        const key = this._normalizeCategory(categoryId || '');
+        const id = typeof blockId === 'string' ? blockId.trim() : '';
+        if (!key || !id || !knownBlocksById[id]) {
+          return;
+        }
+        if (!blockSetByCategory[key]) {
+          blockSetByCategory[key] = new Set();
+        }
+        blockSetByCategory[key].add(id);
+      };
+      const pushRangeForCategory = (categoryId, rangeId) => {
+        const key = this._normalizeCategory(categoryId || '');
+        const id = typeof rangeId === 'string' ? rangeId.trim() : '';
+        if (!key || !id || !knownRangesById[id]) {
+          return;
+        }
+        if (!rangeSetByCategory[key]) {
+          rangeSetByCategory[key] = new Set();
+        }
+        rangeSetByCategory[key].add(id);
+      };
+      const blockMap = taxonomy.blockToCategory && typeof taxonomy.blockToCategory === 'object'
+        ? taxonomy.blockToCategory
+        : {};
+      Object.keys(blockMap).forEach((blockId) => {
+        pushBlockForCategory(blockMap[blockId], blockId);
+      });
+      const rangeMap = taxonomy.rangeToCategory && typeof taxonomy.rangeToCategory === 'object'
+        ? taxonomy.rangeToCategory
+        : {};
+      Object.keys(rangeMap).forEach((rangeId) => {
+        const categoryId = rangeMap[rangeId];
+        pushRangeForCategory(categoryId, rangeId);
+        const range = knownRangesById[rangeId] && typeof knownRangesById[rangeId] === 'object'
+          ? knownRangesById[rangeId]
+          : null;
+        const blockIds = range && Array.isArray(range.blockIds) ? range.blockIds : [];
+        blockIds.forEach((blockId) => pushBlockForCategory(categoryId, blockId));
+      });
+      const resolveUnitKind = (categoryId) => {
+        const key = this._normalizeCategory(categoryId || '');
+        if (!key) {
+          return 'block';
+        }
+        const cfg = batching[key] && typeof batching[key] === 'object'
+          ? batching[key]
+          : {};
+        return cfg.unit === 'range' ? 'range' : 'block';
+      };
+      const resolveCountUnits = (categoryId) => {
+        const key = this._normalizeCategory(categoryId || '');
+        if (!key) {
+          return 0;
+        }
+        const rangeCount = rangeSetByCategory[key] ? rangeSetByCategory[key].size : 0;
+        const blockCount = blockSetByCategory[key] ? blockSetByCategory[key].size : 0;
+        if (resolveUnitKind(key) === 'range') {
+          return rangeCount > 0 ? rangeCount : blockCount;
+        }
+        return blockCount > 0 ? blockCount : rangeCount;
+      };
+      const requested = Array.isArray(args.categories) ? args.categories : [];
+      const options = [];
+      const optionById = {};
+      requested.forEach((item) => {
+        if (!item || typeof item !== 'object') {
+          return;
+        }
+        const id = this._normalizeCategory(item.id);
+        if (!id || optionById[id]) {
+          return;
+        }
+        const row = {
+          id,
+          titleRu: typeof item.titleRu === 'string' && item.titleRu ? item.titleRu.slice(0, 220) : id,
+          descriptionRu: typeof item.descriptionRu === 'string' ? item.descriptionRu.slice(0, 500) : '',
+          countUnits: Number.isFinite(Number(item.countUnits))
+            ? Math.max(0, Math.round(Number(item.countUnits)))
+            : resolveCountUnits(id)
+        };
+        optionById[id] = row;
+        options.push(row);
+      });
+      if (!options.length && Array.isArray(taxonomy.categories)) {
+        taxonomy.categories.forEach((item) => {
+          if (!item || typeof item !== 'object') {
+            return;
+          }
+          const id = this._normalizeCategory(item.id);
+          if (!id || optionById[id]) {
+            return;
+          }
+          const row = {
+            id,
+            titleRu: typeof item.titleRu === 'string' && item.titleRu ? item.titleRu.slice(0, 220) : id,
+            descriptionRu: typeof item.descriptionRu === 'string' ? item.descriptionRu.slice(0, 500) : '',
+            countUnits: resolveCountUnits(id)
+          };
+          optionById[id] = row;
+          options.push(row);
+        });
+      }
+      if (!options.length) {
+        throw this._toolError('BAD_TOOL_ARGS', 'categories list cannot be empty');
+      }
+      const defaults = this._extractCategories(Array.isArray(args.defaults) ? args.defaults : [])
+        .filter((id) => optionById[id]);
+      const questionRu = typeof args.questionRu === 'string' && args.questionRu.trim()
+        ? args.questionRu.trim().slice(0, 500)
+        : 'Какие категории перевести сейчас?';
+      state.userQuestion = {
+        questionRu,
+        options,
+        defaults,
+        updatedAt: Date.now()
+      };
+      state.categoryOptions = options.slice();
+      state.categoryRecommendations = {
+        recommended: defaults.slice(),
+        optional: options.map((item) => item.id).filter((id) => !defaults.includes(id)),
+        excluded: [],
+        reasonShort: 'agent_planning',
+        reasonDetailed: '',
+        updatedAt: Date.now()
+      };
+      state.planningMarkers.askUserCategoriesByTool = true;
+      state.updatedAt = Date.now();
+      job.availableCategories = options.map((item) => item.id);
+      job.selectedCategories = [];
+      job.categorySelectionConfirmed = false;
+      job.status = 'awaiting_categories';
+      job.message = questionRu;
+      this._upsertChecklist(state, 'select_categories', 'running', 'awaiting user choice');
+      this._upsertChecklist(state, 'categories_selected', 'running', 'awaiting user choice');
+      this._upsertChecklist(state, 'planned', 'done', 'planning complete, awaiting category selection');
+      return {
+        ok: true,
+        questionRu,
+        categories: options,
+        defaults
+      };
+    }
+
+    async _toolClassifyBlocks(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      if (!this.classifyBlocksForJob) {
+        throw this._toolError('CLASSIFIER_UNAVAILABLE', 'classifyBlocksForJob callback is required');
+      }
+      const result = await this.classifyBlocksForJob({
+        job,
+        force: args && args.force === true
+      });
+      if (!result || result.ok === false) {
+        throw this._toolError(
+          result && result.error && result.error.code ? result.error.code : 'CLASSIFY_FAILED',
+          result && result.error && result.error.message ? result.error.message : 'Classification failed'
+        );
+      }
+      this._upsertChecklist(state, 'classify_blocks', 'done', `domHash=${result.domHash || 'n/a'}`);
+      state.planningMarkers.classificationSetByTool = true;
+      state.updatedAt = Date.now();
+      const byBlockId = result && result.byBlockId && typeof result.byBlockId === 'object'
+        ? result.byBlockId
+        : {};
+      const reasonBuckets = {};
+      Object.keys(byBlockId).forEach((blockId) => {
+        const row = byBlockId[blockId] && typeof byBlockId[blockId] === 'object' ? byBlockId[blockId] : {};
+        const category = this._normalizeCategory(row.category || 'unknown') || 'unknown';
+        const reasons = Array.isArray(row.reasons) ? row.reasons.slice(0, 6) : [];
+        if (!reasonBuckets[category]) {
+          reasonBuckets[category] = {};
+        }
+        reasons.forEach((reason) => {
+          const key = String(reason || '').trim();
+          if (!key) {
+            return;
+          }
+          reasonBuckets[category][key] = Number(reasonBuckets[category][key] || 0) + 1;
+        });
+      });
+      const topReasonsByCategory = {};
+      Object.keys(reasonBuckets).forEach((category) => {
+        const entries = Object.keys(reasonBuckets[category] || {})
+          .map((reason) => ({ reason, count: Number(reasonBuckets[category][reason] || 0) }))
+          .sort((left, right) => right.count - left.count)
+          .slice(0, 3);
+        topReasonsByCategory[category] = entries;
+      });
+      return {
+        ok: true,
+        domHash: result.domHash || null,
+        classifierVersion: result.classifierVersion || null,
+        summary: result.summary || {},
+        topReasonsByCategory,
+        classificationStale: result.classificationStale === true
+      };
+    }
+
+    _toolGetCategorySummary(_args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      if (!this.getCategorySummaryForJob) {
+        throw this._toolError('CLASSIFIER_UNAVAILABLE', 'getCategorySummaryForJob callback is required');
+      }
+      const result = this.getCategorySummaryForJob(job);
+      if (!result || result.ok === false) {
+        throw this._toolError(
+          result && result.error && result.error.code ? result.error.code : 'CATEGORY_SUMMARY_FAILED',
+          result && result.error && result.error.message ? result.error.message : 'Category summary failed'
+        );
+      }
+      this._upsertChecklist(state, 'category_summary', 'done', `categories=${Array.isArray(result.categories) ? result.categories.length : 0}`);
+      state.planningMarkers.categorySummarySetByTool = true;
+      state.updatedAt = Date.now();
+      return result;
+    }
+
     _toolSetPlan(args, job, blocks) {
       const state = job.agentState || {};
       state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
         ? state.planningMarkers
         : {};
+      if (!state.planningMarkers.classificationSetByTool || !state.planningMarkers.categorySummarySetByTool) {
+        throw this._toolError(
+          'BAD_TOOL_SEQUENCE',
+          'agent.set_plan requires page.classify_blocks and page.get_category_summary first'
+        );
+      }
+      if (!state.planningMarkers.recommendedCategoriesSetByTool) {
+        throw this._toolError(
+          'BAD_TOOL_SEQUENCE',
+          'agent.set_plan requires agent.recommend_categories first'
+        );
+      }
       const srcPlan = args.plan && typeof args.plan === 'object' ? args.plan : args;
       const selected = this._extractCategories(args.recommendedCategories);
       if (selected.length) {
@@ -1579,6 +2462,92 @@
       state.planningMarkers.recommendedCategoriesSetByTool = true;
       state.updatedAt = Date.now();
       return { ok: true, categories: state.selectedCategories || [], reason: typeof args.reason === 'string' ? args.reason.slice(0, 240) : '' };
+    }
+
+    async _toolSetSelectedCategories(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      if (!this.setSelectedCategories) {
+        throw this._toolError('CATEGORY_SELECTOR_UNAVAILABLE', 'setSelectedCategories callback is required');
+      }
+      const mode = args && (args.mode === 'add' || args.mode === 'remove' || args.mode === 'replace')
+        ? args.mode
+        : 'replace';
+      const categories = this._extractCategories(
+        Array.isArray(args && args.categories)
+          ? args.categories
+          : (Array.isArray(args && args.ids) ? args.ids : [])
+      );
+      const result = await this.setSelectedCategories({
+        job,
+        categories,
+        mode,
+        reason: typeof args.reason === 'string' ? args.reason : ''
+      });
+      if (!result || result.ok === false) {
+        throw this._toolError(
+          result && result.error && result.error.code ? result.error.code : 'SET_SELECTED_CATEGORIES_FAILED',
+          result && result.error && result.error.message ? result.error.message : 'Failed to set selected categories'
+        );
+      }
+      state.selectedCategories = Array.isArray(job.selectedCategories)
+        ? job.selectedCategories.slice()
+        : categories.slice();
+      this._upsertChecklist(state, 'select_categories', 'done', `mode=${mode};selected=${(state.selectedCategories || []).join(',')}`);
+      state.updatedAt = Date.now();
+      return {
+        ok: true,
+        mode,
+        categories: state.selectedCategories || [],
+        pendingCount: Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0
+      };
+    }
+
+    _toolRecommendCategories(args, job) {
+      const state = job.agentState || {};
+      state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      if (!state.planningMarkers.classificationSetByTool || !state.planningMarkers.categorySummarySetByTool) {
+        throw this._toolError(
+          'BAD_TOOL_SEQUENCE',
+          'agent.recommend_categories requires page.classify_blocks and page.get_category_summary first'
+        );
+      }
+      const recommended = this._extractCategories(args.recommended);
+      const optional = this._extractCategories(args.optional);
+      const excluded = this._extractCategories(args.excluded);
+      let result = {
+        ok: true,
+        recommended,
+        optional,
+        excluded
+      };
+      if (this.setAgentCategoryRecommendations) {
+        result = this.setAgentCategoryRecommendations({
+          job,
+          recommended,
+          optional,
+          excluded,
+          reasonShort: typeof args.reasonShort === 'string' ? args.reasonShort : '',
+          reasonDetailed: typeof args.reasonDetailed === 'string' ? args.reasonDetailed : ''
+        }) || result;
+      }
+      state.selectedCategories = Array.isArray(job.selectedCategories)
+        ? job.selectedCategories.slice()
+        : recommended.slice();
+      this._upsertChecklist(state, 'recommend_categories', 'done', `recommended=${recommended.join(',')}`);
+      state.planningMarkers.recommendedCategoriesSetByTool = true;
+      state.updatedAt = Date.now();
+      return {
+        ok: true,
+        recommended: Array.isArray(result.recommended) ? result.recommended : recommended,
+        optional: Array.isArray(result.optional) ? result.optional : optional,
+        excluded: Array.isArray(result.excluded) ? result.excluded : excluded,
+        reasonShort: typeof args.reasonShort === 'string' ? args.reasonShort.slice(0, 240) : ''
+      };
     }
 
     _toolAppendReport(args, job) {
@@ -1644,7 +2613,7 @@
           if (!block || typeof block.originalText !== 'string' || !block.originalText.trim()) {
             return false;
           }
-          const category = this._normalizeCategory(block.category || block.pathHint) || 'other';
+          const category = this._normalizeCategory(block.category || block.pathHint) || 'unknown';
           if (categorySet && !categorySet.has(category)) {
             return false;
           }
@@ -1740,7 +2709,7 @@
           if (!block) {
             return null;
           }
-          const category = this._normalizeCategory(block.category || block.pathHint) || 'other';
+          const category = this._normalizeCategory(block.category || block.pathHint) || 'unknown';
           if (categorySet && !categorySet.has(category)) {
             return null;
           }
@@ -1775,6 +2744,238 @@
         pendingCount: pending.length,
         completedCount: completed,
         failedCount: failed
+      };
+    }
+
+    _toolGetNextUnits(args, job) {
+      const byId = job && job.blocksById && typeof job.blocksById === 'object' ? job.blocksById : {};
+      const pendingIds = Array.isArray(job && job.pendingBlockIds) ? job.pendingBlockIds.slice() : [];
+      const pendingSet = new Set(pendingIds);
+      const pipeline = job && job.agentState && job.agentState.pipeline && typeof job.agentState.pipeline === 'object'
+        ? job.agentState.pipeline
+        : {};
+      const batching = pipeline && pipeline.batching && typeof pipeline.batching === 'object'
+        ? pipeline.batching
+        : {};
+      const resolveUnitKind = (categoryId) => {
+        const key = this._normalizeCategory(categoryId || '');
+        if (!key) {
+          return 'block';
+        }
+        const cfg = batching[key] && typeof batching[key] === 'object'
+          ? batching[key]
+          : {};
+        return cfg.unit === 'range' ? 'range' : 'block';
+      };
+      const limit = Number.isFinite(Number(args && args.limit))
+        ? Math.max(1, Math.min(80, Math.round(Number(args.limit))))
+        : 8;
+      const prefer = args && (args.prefer === 'block' || args.prefer === 'range' || args.prefer === 'mixed')
+        ? args.prefer
+        : 'auto';
+      const categoryId = args && typeof args.categoryId === 'string'
+        ? this._normalizeCategory(args.categoryId)
+        : null;
+      const categorySet = categoryId ? new Set([categoryId]) : null;
+      const units = [];
+      const consumedBlocks = new Set();
+      const rangeCoveredBlocks = new Set();
+
+      if (prefer !== 'block') {
+        const taxonomy = job && job.agentState && job.agentState.taxonomy && typeof job.agentState.taxonomy === 'object'
+          ? job.agentState.taxonomy
+          : null;
+        const rangeToCategory = taxonomy && taxonomy.rangeToCategory && typeof taxonomy.rangeToCategory === 'object'
+          ? taxonomy.rangeToCategory
+          : {};
+        const preRangesById = job && job.pageAnalysis && job.pageAnalysis.preRangesById && typeof job.pageAnalysis.preRangesById === 'object'
+          ? job.pageAnalysis.preRangesById
+          : {};
+        Object.keys(rangeToCategory).forEach((rangeId) => {
+          if (units.length >= limit) {
+            return;
+          }
+          const mappedCategory = this._normalizeCategory(rangeToCategory[rangeId] || '');
+          if (categorySet && !categorySet.has(mappedCategory)) {
+            return;
+          }
+          const expectedUnit = resolveUnitKind(mappedCategory);
+          if (prefer !== 'range' && expectedUnit !== 'range') {
+            return;
+          }
+          const range = preRangesById[rangeId] && typeof preRangesById[rangeId] === 'object'
+            ? preRangesById[rangeId]
+            : null;
+          if (!range) {
+            return;
+          }
+          const rangeBlockIds = Array.isArray(range.blockIds) ? range.blockIds : [];
+          if (expectedUnit === 'range') {
+            rangeBlockIds.forEach((blockId) => {
+              if (typeof blockId === 'string' && blockId) {
+                rangeCoveredBlocks.add(blockId);
+              }
+            });
+          }
+          const pendingRangeBlockIds = rangeBlockIds.filter((blockId) => pendingSet.has(blockId));
+          if (!pendingRangeBlockIds.length) {
+            return;
+          }
+          pendingRangeBlockIds.forEach((blockId) => consumedBlocks.add(blockId));
+          const joinedPreview = pendingRangeBlockIds
+            .map((blockId) => {
+              const block = byId[blockId];
+              return block && typeof block.originalText === 'string' ? block.originalText : '';
+            })
+            .filter(Boolean)
+            .join('\n')
+            .slice(0, 1800);
+          units.push({
+            unitType: 'range',
+            id: String(rangeId),
+            blockIds: pendingRangeBlockIds,
+            joinedTextPreview: joinedPreview,
+            categoryId: mappedCategory || (typeof range.preCategory === 'string' ? range.preCategory : 'unknown'),
+            hasTranslation: pendingRangeBlockIds.every((blockId) => {
+              const block = byId[blockId];
+              return block && typeof block.translatedText === 'string' && block.translatedText.trim();
+            })
+          });
+        });
+      }
+
+      if (prefer !== 'range') {
+        const nextBlocks = this._toolGetNextBlocks({
+          limit: Math.max(limit * 2, limit),
+          prefer: 'dom_order',
+          categories: categorySet ? Array.from(categorySet) : []
+        }, job);
+        const blockRows = nextBlocks && Array.isArray(nextBlocks.blocks) ? nextBlocks.blocks : [];
+        for (let i = 0; i < blockRows.length && units.length < limit; i += 1) {
+          const row = blockRows[i];
+          if (!row || !row.blockId || consumedBlocks.has(row.blockId)) {
+            continue;
+          }
+          const rowCategoryId = this._normalizeCategory(row.category || 'unknown') || 'unknown';
+          if (prefer !== 'block' && resolveUnitKind(rowCategoryId) === 'range' && rangeCoveredBlocks.has(row.blockId)) {
+            continue;
+          }
+          units.push({
+            unitType: 'block',
+            id: row.blockId,
+            blockIds: [row.blockId],
+            originalText: row.originalText,
+            categoryId: rowCategoryId,
+            hasTranslation: row.hasTranslation === true
+          });
+        }
+      }
+
+      return {
+        ok: true,
+        units: units.slice(0, limit),
+        pendingCount: pendingIds.length,
+        completedCount: Number.isFinite(Number(job && job.completedBlocks)) ? Number(job.completedBlocks) : 0,
+        failedCount: Array.isArray(job && job.failedBlockIds) ? job.failedBlockIds.length : 0
+      };
+    }
+
+    async _toolTranslateUnitStream(args, job, settings, { callId = null, source = 'model' } = {}) {
+      const unitType = args && args.unitType === 'range' ? 'range' : 'block';
+      const id = typeof args.id === 'string' ? args.id.trim() : '';
+      if (!id) {
+        throw this._toolError('BAD_TOOL_ARGS', 'id is required');
+      }
+
+      let blockIds = [];
+      if (unitType === 'block') {
+        blockIds = [id];
+      } else if (Array.isArray(args.blockIds) && args.blockIds.length) {
+        blockIds = args.blockIds
+          .map((value) => String(value || '').trim())
+          .filter(Boolean);
+      } else {
+        const preRangesById = job && job.pageAnalysis && job.pageAnalysis.preRangesById && typeof job.pageAnalysis.preRangesById === 'object'
+          ? job.pageAnalysis.preRangesById
+          : {};
+        const range = preRangesById[id] && typeof preRangesById[id] === 'object'
+          ? preRangesById[id]
+          : null;
+        blockIds = range && Array.isArray(range.blockIds)
+          ? range.blockIds.map((value) => String(value || '').trim()).filter(Boolean)
+          : [];
+      }
+      if (!blockIds.length) {
+        throw this._toolError('BAD_TOOL_ARGS', 'No blockIds resolved for unit');
+      }
+
+      const contextStrategy = args && args.contextStrategy && typeof args.contextStrategy === 'object'
+        ? args.contextStrategy
+        : {};
+      const keepHistory = args && (args.keepHistory === 'on' || args.keepHistory === 'off')
+        ? args.keepHistory
+        : 'auto';
+      const contextGuidanceParts = [];
+      const strategyKeys = Object.keys(contextStrategy);
+      if (strategyKeys.length) {
+        contextGuidanceParts.push(`contextStrategy=${JSON.stringify(contextStrategy)}`);
+      }
+      if (keepHistory !== 'auto') {
+        contextGuidanceParts.push(`keepHistory=${keepHistory}`);
+      }
+      const batchGuidance = contextGuidanceParts.join(' | ');
+      const results = [];
+      const errors = [];
+
+      for (let i = 0; i < blockIds.length; i += 1) {
+        const blockId = blockIds[i];
+        try {
+          const translated = await this._toolTranslateBlockStream({
+            blockId,
+            targetLang: args && typeof args.targetLang === 'string' ? args.targetLang : undefined,
+            model: args && typeof args.model === 'string' ? args.model : undefined,
+            style: args && typeof args.style === 'string' ? args.style : undefined,
+            glossary: Array.isArray(args && args.glossary) ? args.glossary : undefined,
+            contextSummary: args && typeof args.contextSummary === 'string' ? args.contextSummary : undefined,
+            batchGuidance
+          }, job, settings, {
+            callId: `${callId || 'unit'}:${id}:${blockId}`,
+            source
+          });
+          if (translated && translated.ok === false) {
+            errors.push({
+              blockId,
+              code: translated.code || 'TRANSLATE_FAILED',
+              message: translated.message || 'translate failed'
+            });
+            continue;
+          }
+          results.push({
+            blockId,
+            text: translated && typeof translated.text === 'string' ? translated.text : '',
+            modelUsed: translated && translated.modelUsed ? translated.modelUsed : null,
+            routeUsed: translated && translated.routeUsed ? translated.routeUsed : null,
+            skipped: translated && translated.skipped === true
+          });
+        } catch (error) {
+          errors.push({
+            blockId,
+            code: error && error.code ? error.code : 'TRANSLATE_FAILED',
+            message: error && error.message ? error.message : 'translate failed'
+          });
+        }
+      }
+
+      const text = results.map((row) => row.text).filter(Boolean).join('\n');
+      return {
+        ok: errors.length === 0,
+        unitType,
+        id,
+        categoryId: this._normalizeCategory(args && args.categoryId ? args.categoryId : '') || null,
+        blockIds: blockIds.slice(),
+        results,
+        text,
+        errors
       };
     }
 
@@ -1907,7 +3108,7 @@
           : [];
       } else {
         const categorySet = effectiveScope === 'category'
-          ? new Set([this._normalizeCategory(category || 'other') || 'other'])
+          ? new Set([this._normalizeCategory(category || 'unknown') || 'unknown'])
           : (selectedCategories.length ? new Set(selectedCategories) : null);
         candidateIds = Object.keys(byId).filter((blockId) => {
           const block = byId[blockId];
@@ -1920,7 +3121,7 @@
           if (!categorySet) {
             return true;
           }
-          const normalizedCategory = this._normalizeCategory(block.category || block.pathHint || 'other') || 'other';
+          const normalizedCategory = this._normalizeCategory(block.category || block.pathHint || 'unknown') || 'unknown';
           return categorySet.has(normalizedCategory);
         });
       }
@@ -2050,7 +3251,7 @@
         return {
           idx,
           blockId,
-          category: this._normalizeCategory(block.category || block.pathHint || 'other') || 'other',
+          category: this._normalizeCategory(block.category || block.pathHint || 'unknown') || 'unknown',
           originalText: originalText.slice(0, 2400),
           translatedText: translatedText.slice(0, 2400),
           qualityTag: quality.tag,
@@ -2769,7 +3970,7 @@
         if (text && text !== before) {
           const nextDiff = {
             blockId,
-            category: this._normalizeCategory(block.category || block.pathHint) || 'other',
+            category: this._normalizeCategory(block.category || block.pathHint) || 'unknown',
             before: before.slice(0, 220),
             after: text.slice(0, 220)
           };
@@ -3401,7 +4602,7 @@
         routeUsed: block.routeUsed || null,
         updatedAt: now
       };
-      const category = this._normalizeCategory(block.category || block.pathHint || 'other');
+      const category = this._normalizeCategory(block.category || block.pathHint || 'unknown');
       if (!pageRecord.categories[category] || typeof pageRecord.categories[category] !== 'object') {
         pageRecord.categories[category] = {
           translatedBlockIds: [],
@@ -3486,7 +4687,7 @@
         }
         out.push(category);
       });
-      return out.length ? out : ['other'];
+      return out;
     }
 
     _normalizeCategory(value) {
@@ -3496,7 +4697,16 @@
       if (!normalized) {
         return null;
       }
-      return KNOWN_CATEGORIES.includes(normalized) ? normalized : 'other';
+      if (KNOWN_CATEGORIES.includes(normalized)) {
+        return normalized;
+      }
+      if (normalized === 'other') {
+        return 'unknown';
+      }
+      if (/^[a-z0-9_.-]{1,64}$/.test(normalized)) {
+        return normalized;
+      }
+      return null;
     }
 
     _sanitizeMeta(meta) {

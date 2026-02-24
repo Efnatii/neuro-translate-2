@@ -11,10 +11,12 @@
     CS_READY: 'translation:cs:ready',
     CS_HELLO_CAPS: 'translation:cs:hello-caps',
     CS_SCAN_RESULT: 'translation:cs:scan-result',
+    CS_SCAN_PROGRESS: 'translation:cs:scan-progress',
     CS_APPLY_ACK: 'translation:cs:apply-ack',
     CS_APPLY_DELTA_ACK: 'translation:cs:apply-delta-ack',
 
     BG_START_JOB: 'translation:bg:start-job',
+    BG_CLASSIFY_BLOCKS: 'translation:bg:classify-blocks',
     BG_APPLY_BATCH: 'translation:bg:apply-batch',
     BG_APPLY_DELTA: 'translation:bg:apply-delta',
     BG_CANCEL_JOB: 'translation:bg:cancel-job',
@@ -54,12 +56,14 @@
       return type === TranslationProtocol.CS_READY
         || type === TranslationProtocol.CS_HELLO_CAPS
         || type === TranslationProtocol.CS_SCAN_RESULT
+        || type === TranslationProtocol.CS_SCAN_PROGRESS
         || type === TranslationProtocol.CS_APPLY_ACK
         || type === TranslationProtocol.CS_APPLY_DELTA_ACK;
     },
 
     isBackgroundToContent(type) {
       return type === TranslationProtocol.BG_START_JOB
+        || type === TranslationProtocol.BG_CLASSIFY_BLOCKS
         || type === TranslationProtocol.BG_APPLY_BATCH
         || type === TranslationProtocol.BG_APPLY_DELTA
         || type === TranslationProtocol.BG_CANCEL_JOB

@@ -60,7 +60,9 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
     streamRequests: 0,
     nonStreamRequests: 0,
     toolRequests: 0,
-    status429: 0
+    status429: 0,
+    status5xx: 0,
+    streamAborts: 0
   };
   const recentRequests = [];
   const MAX_RECENT_REQUESTS = 200;
@@ -69,6 +71,10 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
   let callSeq = 0;
   let fail429Remaining = 0;
   let fail429RetryAfterMs = 1200;
+  let fail5xxRemaining = 0;
+  let fail5xxStatus = 503;
+  let failStreamAbortRemaining = 0;
+  let streamFirstByteDelayMs = 0;
 
   const nextResponseId = () => {
     responseSeq += 1;
@@ -152,44 +158,223 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
       }))
   });
 
+  const buildPlanningCategories = (preanalysis) => {
+    const byKey = {};
+    const preCategories = preanalysis && Array.isArray(preanalysis.preCategories)
+      ? preanalysis.preCategories
+      : [];
+    preCategories.forEach((row) => {
+      const key = row && typeof row.key === 'string' ? row.key.trim().toLowerCase() : '';
+      const count = Number.isFinite(Number(row && row.count)) ? Math.max(0, Math.round(Number(row.count))) : 0;
+      if (key) {
+        byKey[key] = count;
+      }
+    });
+    const inferred = [];
+    const pushUnique = (id, titleRu, descriptionRu, countUnits = 0) => {
+      if (!id || inferred.some((row) => row.id === id)) {
+        return;
+      }
+      inferred.push({ id, titleRu, descriptionRu, countUnits });
+    };
+    const addByMatch = (test, id, titleRu, descriptionRu) => {
+      const keys = Object.keys(byKey);
+      const matchedCount = keys
+        .filter((key) => test(key))
+        .reduce((sum, key) => sum + Number(byKey[key] || 0), 0);
+      if (matchedCount > 0) {
+        pushUnique(id, titleRu, descriptionRu, matchedCount);
+      }
+    };
+    addByMatch((key) => key.indexOf('head') >= 0 || key === 'h1' || key === 'h2' || key === 'h3', 'headings', 'Заголовки', 'Заголовки и подзаголовки');
+    addByMatch((key) => key.indexOf('button') >= 0 || key.indexOf('input') >= 0 || key.indexOf('label') >= 0 || key.indexOf('form') >= 0, 'ui_controls', 'Элементы интерфейса', 'Кнопки, поля, подписи');
+    addByMatch((key) => key.indexOf('nav') >= 0 || key.indexOf('menu') >= 0 || key.indexOf('breadcrumb') >= 0, 'navigation', 'Навигация', 'Меню и навигационные элементы');
+    addByMatch((key) => key.indexOf('table') >= 0 || key.indexOf('cell') >= 0 || key.indexOf('tr') >= 0 || key.indexOf('td') >= 0, 'tables', 'Таблицы', 'Табличные данные');
+    addByMatch((key) => key.indexOf('code') >= 0 || key.indexOf('pre') >= 0 || key.indexOf('kbd') >= 0, 'code', 'Код', 'Технические фрагменты и код');
+
+    const totalBlocks = Number.isFinite(Number(preanalysis && preanalysis.stats && preanalysis.stats.blockCount))
+      ? Math.max(0, Math.round(Number(preanalysis.stats.blockCount)))
+      : 0;
+    const knownTotal = inferred.reduce((sum, row) => sum + Number(row.countUnits || 0), 0);
+    const mainCount = Math.max(1, totalBlocks > knownTotal ? totalBlocks - knownTotal : Math.max(1, totalBlocks));
+    pushUnique('main_content', 'Основной текст', 'Основной контент страницы', mainCount);
+    return inferred.slice(0, 6);
+  };
+
   const planningResponse = (outputs) => {
-    const donePlan = outputs.some((row) => row.toolName === 'agent.set_plan');
-    const doneCats = outputs.some((row) => row.toolName === 'agent.set_recommended_categories');
-    if (!donePlan || !doneCats) {
+    const hasTool = (name) => outputs.some((row) => row.toolName === name);
+    const lastToolOutput = (name) => {
+      for (let i = outputs.length - 1; i >= 0; i -= 1) {
+        const row = outputs[i];
+        if (row && row.toolName === name) {
+          return row.output || null;
+        }
+      }
+      return null;
+    };
+    if (!hasTool('page.get_preanalysis')) {
       return functionCallOutput({
         calls: [
           {
-            name: 'agent.set_plan',
+            name: 'page.get_preanalysis',
+            arguments: {}
+          }
+        ]
+      });
+    }
+
+    const preanalysis = lastToolOutput('page.get_preanalysis');
+    const categories = buildPlanningCategories(preanalysis);
+    const categoryIds = categories.map((row) => row.id);
+    const modelRouting = {};
+    const batching = {};
+    const context = {};
+    const qc = {};
+    categoryIds.forEach((id) => {
+      modelRouting[id] = {
+        route: id === 'code' ? 'strong' : 'auto',
+        model: 'auto',
+        style: id === 'code' ? 'technical' : 'balanced'
+      };
+      batching[id] = {
+        unit: 'block',
+        mode: 'mixed',
+        maxUnitsPerBatch: 'auto',
+        keepHistory: 'auto'
+      };
+      context[id] = {
+        buildGlobalContext: 'auto',
+        buildGlossary: 'auto',
+        useCategoryJoinedContext: 'auto'
+      };
+      qc[id] = {
+        proofreadingPasses: 'auto',
+        qualityBar: 'medium'
+      };
+    });
+
+    if (!hasTool('agent.plan.set_taxonomy') || !hasTool('agent.plan.set_pipeline')) {
+      return functionCallOutput({
+        calls: [
+          {
+            name: 'agent.plan.set_taxonomy',
             arguments: {
-              plan: {
-                summary: 'Mock planning completed',
-                style: 'balanced',
-                batchSize: 4,
-                proofreadingPasses: 1,
-                instructions: 'Translate accurately and preserve intent.'
+              categories: categories.map((row) => ({
+                id: row.id,
+                titleRu: row.titleRu,
+                descriptionRu: row.descriptionRu,
+                criteriaRu: `Контент типа ${row.id}`,
+                defaultTranslate: row.id === 'main_content' || row.id === 'headings'
+              })),
+              mapping: {
+                blockToCategory: {},
+                rangeToCategory: {}
               }
             }
           },
           {
-            name: 'agent.set_recommended_categories',
+            name: 'agent.plan.set_pipeline',
             arguments: {
-              categories: ['heading', 'paragraph', 'button', 'label'],
-              reason: 'mock_default_categories'
+              modelRouting,
+              batching,
+              context,
+              qc
+            }
+          },
+          {
+            name: 'agent.plan.request_finish_analysis',
+            arguments: {
+              reason: 'taxonomy and pipeline prepared'
             }
           }
         ]
       });
     }
+
+    const finish = lastToolOutput('agent.plan.request_finish_analysis');
+    if (!finish || finish.ok !== true) {
+      return functionCallOutput({
+        calls: [
+          {
+            name: 'agent.plan.request_finish_analysis',
+            arguments: {
+              reason: 'retry validation'
+            }
+          }
+        ]
+      });
+    }
+
+    if (!hasTool('agent.ui.ask_user_categories')) {
+      const defaults = categories
+        .filter((row) => row.id === 'main_content' || row.id === 'headings')
+        .map((row) => row.id);
+      return functionCallOutput({
+        calls: [
+          {
+            name: 'agent.ui.ask_user_categories',
+            arguments: {
+              questionRu: 'Какие категории переводить сейчас?',
+              categories: categories.map((row) => ({
+                id: row.id,
+                titleRu: row.titleRu,
+                descriptionRu: row.descriptionRu,
+                countUnits: row.countUnits
+              })),
+              defaults: defaults.length ? defaults : categoryIds.slice(0, 1)
+            }
+          }
+        ]
+      });
+    }
+
     return assistantOutput({ outputText: 'planning_done' });
   };
 
   const executionResponse = (outputs) => {
     if (!outputs.length) {
       return functionCallOutput({
-        calls: [{ name: 'job.get_next_blocks', arguments: { limit: 1, prefer: 'dom_order' } }]
+        calls: [{ name: 'job.get_next_units', arguments: { limit: 1, prefer: 'auto' } }]
       });
     }
     const last = outputs[outputs.length - 1];
+    if (last.toolName === 'job.get_next_units') {
+      const rows = last.output && Array.isArray(last.output.units) ? last.output.units : [];
+      const first = rows.length ? rows[0] : null;
+      if (!first || !first.id) {
+        return assistantOutput({ outputText: 'execution_idle' });
+      }
+      return functionCallOutput({
+        calls: [{
+          name: 'translator.translate_unit_stream',
+          arguments: {
+            unitType: first.unitType || 'block',
+            id: first.id,
+            blockIds: Array.isArray(first.blockIds) ? first.blockIds : [],
+            categoryId: first.categoryId || null,
+            style: 'balanced'
+          }
+        }]
+      });
+    }
+    if (last.toolName === 'translator.translate_unit_stream') {
+      const rows = last.output && Array.isArray(last.output.results) ? last.output.results : [];
+      const first = rows.length ? rows[0] : null;
+      if (!first || !first.blockId) {
+        return functionCallOutput({
+          calls: [{ name: 'job.get_next_units', arguments: { limit: 1, prefer: 'auto' } }]
+        });
+      }
+      return functionCallOutput({
+        calls: [{
+          name: 'job.mark_block_done',
+          arguments: {
+            blockId: first.blockId,
+            text: typeof first.text === 'string' && first.text ? first.text : `[RU] ${first.blockId}`
+          }
+        }]
+      });
+    }
     if (last.toolName === 'job.get_next_blocks') {
       const rows = last.output && Array.isArray(last.output.blocks) ? last.output.blocks : [];
       const first = rows.length ? rows[0] : null;
@@ -208,15 +393,20 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
       const text = last.output && typeof last.output.text === 'string' ? last.output.text : '';
       if (!blockId) {
         return functionCallOutput({
-          calls: [{ name: 'job.get_next_blocks', arguments: { limit: 1, prefer: 'dom_order' } }]
+          calls: [{ name: 'job.get_next_units', arguments: { limit: 1, prefer: 'auto' } }]
         });
       }
       return functionCallOutput({
         calls: [{ name: 'job.mark_block_done', arguments: { blockId, text: text || `[RU] ${blockId}` } }]
       });
     }
+    if (last.toolName === 'job.mark_block_done' || last.toolName === 'job.mark_block_failed') {
+      return functionCallOutput({
+        calls: [{ name: 'job.get_next_units', arguments: { limit: 1, prefer: 'auto' } }]
+      });
+    }
     return functionCallOutput({
-      calls: [{ name: 'job.get_next_blocks', arguments: { limit: 1, prefer: 'dom_order' } }]
+      calls: [{ name: 'job.get_next_units', arguments: { limit: 1, prefer: 'auto' } }]
     });
   };
 
@@ -282,19 +472,27 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
   const pickToolModeResponse = (body, outputs) => {
     const toolNames = new Set((Array.isArray(body.tools) ? body.tools : [])
       .map((row) => (row && typeof row.name === 'string' ? row.name : '')));
-    if (toolNames.has('agent.set_plan') && toolNames.has('agent.set_recommended_categories')) {
-      return planningResponse(outputs);
+    if (toolNames.has('proof.get_next_blocks') && toolNames.has('proof.proofread_block_stream')) {
+      return proofreadingResponse(outputs);
+    }
+    if (toolNames.has('job.get_next_units') && toolNames.has('translator.translate_unit_stream')) {
+      return executionResponse(outputs);
     }
     if (toolNames.has('job.get_next_blocks') && toolNames.has('translator.translate_block_stream')) {
       return executionResponse(outputs);
     }
-    if (toolNames.has('proof.get_next_blocks') && toolNames.has('proof.proofread_block_stream')) {
-      return proofreadingResponse(outputs);
+    if (
+      toolNames.has('agent.plan.set_taxonomy')
+      && toolNames.has('agent.plan.set_pipeline')
+      && toolNames.has('agent.plan.request_finish_analysis')
+      && toolNames.has('agent.ui.ask_user_categories')
+    ) {
+      return planningResponse(outputs);
     }
     return assistantOutput({ outputText: 'mock_tool_ack' });
   };
 
-  const streamTranslation = async (res, body) => {
+  const streamTranslation = async (res, body, { abortAfterFirstChunk = false, firstByteDelayMs = 0 } = {}) => {
     const sourceText = collectUserText(body.input) || '';
     const compact = sourceText.replace(/\s+/g, ' ').trim();
     const translated = `RU: ${compact || 'ok'}`;
@@ -311,8 +509,21 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
       connection: 'keep-alive',
       'cache-control': 'no-cache, no-transform'
     });
+    if (Number.isFinite(Number(firstByteDelayMs)) && Number(firstByteDelayMs) > 0) {
+      await delay(Math.max(0, Math.round(Number(firstByteDelayMs))));
+    }
     for (let i = 0; i < chunks.length; i += 1) {
       res.write(`data: ${JSON.stringify({ type: 'response.output_text.delta', delta: chunks[i] })}\n\n`);
+      if (abortAfterFirstChunk && i === 0) {
+        stats.streamAborts += 1;
+        await delay(60);
+        try {
+          res.destroy(new Error('mock_stream_abort'));
+        } catch (_) {
+          // noop
+        }
+        return;
+      }
       await delay(220);
     }
     res.write(`data: ${JSON.stringify({
@@ -354,6 +565,7 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
       req.on('error', () => resolve(''));
     });
     const body = safeJsonParse(bodyText, {});
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
     if (fail429Remaining > 0) {
       fail429Remaining -= 1;
       stats.status429 += 1;
@@ -371,23 +583,51 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
       });
       return;
     }
-    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+    if (fail5xxRemaining > 0) {
+      fail5xxRemaining -= 1;
+      stats.status5xx += 1;
+      const statusCode = Number.isFinite(Number(fail5xxStatus))
+        ? Math.max(500, Math.min(599, Math.round(Number(fail5xxStatus))))
+        : 503;
+      pushRecent({
+        method: req.method,
+        url,
+        status: statusCode,
+        kind: 'forced_5xx',
+        stream: body.stream === true,
+        hasTools
+      });
+      json(res, statusCode, { error: { code: 'mock_5xx', message: `mock_${statusCode}` } });
+      return;
+    }
     if (hasTools) {
       stats.toolRequests += 1;
     }
     if (body.stream === true) {
       stats.streamRequests += 1;
+      const shouldAbortStream = failStreamAbortRemaining > 0;
+      if (shouldAbortStream) {
+        failStreamAbortRemaining -= 1;
+      }
+      const delayFirstByteMs = Number.isFinite(Number(streamFirstByteDelayMs))
+        ? Math.max(0, Math.round(Number(streamFirstByteDelayMs)))
+        : 0;
       pushRecent({
         method: req.method,
         url,
         status: 200,
         kind: 'responses_stream',
         stream: true,
+        abortAfterFirstChunk: shouldAbortStream,
+        firstByteDelayMs: delayFirstByteMs,
         hasTools,
         previousResponseId: typeof body.previous_response_id === 'string' ? body.previous_response_id : null,
         inputItems: Array.isArray(body.input) ? body.input.length : 0
       });
-      await streamTranslation(res, body);
+      await streamTranslation(res, body, {
+        abortAfterFirstChunk: shouldAbortStream,
+        firstByteDelayMs: delayFirstByteMs
+      });
       return;
     }
     stats.nonStreamRequests += 1;
@@ -450,6 +690,10 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
       callSeq = 0;
       fail429Remaining = 0;
       fail429RetryAfterMs = 1200;
+      fail5xxRemaining = 0;
+      fail5xxStatus = 503;
+      failStreamAbortRemaining = 0;
+      streamFirstByteDelayMs = 0;
     },
 
     getStats() {
@@ -464,6 +708,33 @@ function createMockOpenAiServer({ host = '127.0.0.1', port = 0 } = {}) {
     set429Sequence({ count = 1, retryAfterMs = 1200 } = {}) {
       fail429Remaining = Math.max(0, Math.round(Number(count) || 0));
       fail429RetryAfterMs = Math.max(200, Math.round(Number(retryAfterMs) || 1200));
+    },
+
+    set5xxSequence({ count = 1, status = 503 } = {}) {
+      fail5xxRemaining = Math.max(0, Math.round(Number(count) || 0));
+      fail5xxStatus = Number.isFinite(Number(status))
+        ? Math.max(500, Math.min(599, Math.round(Number(status))))
+        : 503;
+    },
+
+    setStreamFaults({ abortCount = 0, firstByteDelayMs = 0 } = {}) {
+      failStreamAbortRemaining = Math.max(0, Math.round(Number(abortCount) || 0));
+      streamFirstByteDelayMs = Number.isFinite(Number(firstByteDelayMs))
+        ? Math.max(0, Math.min(120000, Math.round(Number(firstByteDelayMs))))
+        : 0;
+    },
+
+    setFaultInjection({
+      status429Count = 0,
+      retryAfterMs = 1200,
+      status5xxCount = 0,
+      status5xxCode = 503,
+      streamAbortCount = 0,
+      streamFirstByteDelayMs = 0
+    } = {}) {
+      this.set429Sequence({ count: status429Count, retryAfterMs });
+      this.set5xxSequence({ count: status5xxCount, status: status5xxCode });
+      this.setStreamFaults({ abortCount: streamAbortCount, firstByteDelayMs: streamFirstByteDelayMs });
     },
 
     get origin() {

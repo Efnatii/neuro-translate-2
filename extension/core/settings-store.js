@@ -11,6 +11,7 @@
   class SettingsStore extends NT.ChromeLocalStoreBase {
     constructor({ chromeApi, defaults = {}, sanitize = null, debounceMs = 400 } = {}) {
       super({ chromeApi });
+      this.ROOT_KEY = 'nt.settings.v2';
       this.defaults = {
         settingsSchemaVersion: Policy ? Policy.SCHEMA_VERSION : 2,
         translationAgentSettingsV2: Policy && Policy.DEFAULT_USER_SETTINGS
@@ -18,6 +19,16 @@
           : null,
         ...defaults
       };
+      this.knownSettingKeys = new Set(
+        Object.keys(this.defaults || {}).concat([
+          'translationVisibilityByTab',
+          'translationDisplayModeByTab',
+          'activeTabId',
+          'modelBenchmarks',
+          'modelBenchmarkStatus',
+          'modelLimitsBySpec'
+        ])
+      );
       this.sanitize = typeof sanitize === 'function' ? sanitize : null;
       this.debounceMs = debounceMs;
       this.pendingPatch = {};
@@ -33,6 +44,69 @@
 
     set(payload) {
       return this.storageSet(payload);
+    }
+
+    async storageGet(defaults) {
+      const root = await this._readCanonicalRoot();
+      if (defaults === null || defaults === undefined) {
+        return { ...root };
+      }
+      if (Array.isArray(defaults)) {
+        const out = {};
+        defaults.forEach((key) => {
+          if (typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(root, key)) {
+            return;
+          }
+          out[key] = root[key];
+        });
+        return out;
+      }
+      if (defaults && typeof defaults === 'object') {
+        const out = { ...defaults };
+        Object.keys(defaults).forEach((key) => {
+          if (key === this.ROOT_KEY) {
+            out[key] = { ...root };
+            return;
+          }
+          if (Object.prototype.hasOwnProperty.call(root, key)) {
+            out[key] = root[key];
+          }
+        });
+        return out;
+      }
+      return { ...root };
+    }
+
+    async storageSet(payload) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return super.storageSet(payload);
+      }
+      const current = await this._readCanonicalRoot();
+      const src = { ...payload };
+      const rootPatch = src[this.ROOT_KEY] && typeof src[this.ROOT_KEY] === 'object' && !Array.isArray(src[this.ROOT_KEY])
+        ? src[this.ROOT_KEY]
+        : null;
+      if (Object.prototype.hasOwnProperty.call(src, this.ROOT_KEY)) {
+        delete src[this.ROOT_KEY];
+      }
+      const nextRoot = {
+        ...current,
+        ...(rootPatch || {}),
+        ...src
+      };
+      const mirrorLegacy = {};
+      Object.keys(src).forEach((key) => {
+        mirrorLegacy[key] = src[key];
+      });
+      if (rootPatch) {
+        Object.keys(rootPatch).forEach((key) => {
+          mirrorLegacy[key] = rootPatch[key];
+        });
+      }
+      await super.storageSet({
+        [this.ROOT_KEY]: nextRoot,
+        ...mirrorLegacy
+      });
     }
 
     async ensureMigrated({ legacySettings } = {}) {
@@ -89,7 +163,10 @@
           : ['utm_*', 'fbclid', 'gclid'],
         translationApiCacheEnabled: resolved.effective && resolved.effective.legacyProjection
           ? resolved.effective.legacyProjection.translationApiCacheEnabled !== false
-          : true
+          : true,
+        translationCompareRendering: resolved.effective && resolved.effective.legacyProjection
+          ? (resolved.effective.legacyProjection.translationCompareRendering || 'auto')
+          : 'auto'
       };
       await this.storageSet(payload);
       return { schemaVersion: Policy.SCHEMA_VERSION, migrated: true };
@@ -215,6 +292,9 @@
         translationApiCacheEnabled: recalculated.effective && recalculated.effective.legacyProjection
           ? recalculated.effective.legacyProjection.translationApiCacheEnabled !== false
           : true,
+        translationCompareRendering: recalculated.effective && recalculated.effective.legacyProjection
+          ? (recalculated.effective.legacyProjection.translationCompareRendering || 'auto')
+          : 'auto',
         ...topLevelPatch
       };
       await this.storageSet(payload);
@@ -251,16 +331,30 @@
         'translationMemoryIgnoredQueryParams',
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
+        'translationClassifierObserveDomChanges',
+        'translationPerfMaxTextNodesPerScan',
+        'translationPerfYieldEveryNNodes',
+        'translationPerfAbortScanIfOverMs',
+        'translationPerfDegradedScanOnHeavy',
         'translationPopupActiveTab',
         'translationVisibilityByTab',
         'translationDisplayModeByTab',
         'translationCompareDiffThreshold',
+        'translationCompareRendering',
         'debugAllowTestCommands'
       ]);
       const apiKey = typeof data.apiKey === 'string' ? data.apiKey : '';
       const compareDiffThreshold = Number.isFinite(Number(data.translationCompareDiffThreshold))
         ? Math.max(500, Math.min(50000, Math.round(Number(data.translationCompareDiffThreshold))))
         : 8000;
+      const compareRenderingRaw = typeof data.translationCompareRendering === 'string'
+        ? data.translationCompareRendering.trim().toLowerCase()
+        : '';
+      const compareRendering = (compareRenderingRaw === 'auto'
+        || compareRenderingRaw === 'highlights'
+        || compareRenderingRaw === 'wrappers')
+        ? compareRenderingRaw
+        : 'auto';
       return {
         hasApiKey: Boolean(apiKey),
         apiKeyLength: apiKey.length,
@@ -302,6 +396,17 @@
           : ['utm_*', 'fbclid', 'gclid'],
         translationPageCacheEnabled: data.translationPageCacheEnabled !== false,
         translationApiCacheEnabled: data.translationApiCacheEnabled !== false,
+        translationClassifierObserveDomChanges: data.translationClassifierObserveDomChanges === true,
+        translationPerfMaxTextNodesPerScan: Number.isFinite(Number(data.translationPerfMaxTextNodesPerScan))
+          ? Math.max(200, Math.min(30000, Math.round(Number(data.translationPerfMaxTextNodesPerScan))))
+          : 5000,
+        translationPerfYieldEveryNNodes: Number.isFinite(Number(data.translationPerfYieldEveryNNodes))
+          ? Math.max(80, Math.min(2500, Math.round(Number(data.translationPerfYieldEveryNNodes))))
+          : 260,
+        translationPerfAbortScanIfOverMs: Number.isFinite(Number(data.translationPerfAbortScanIfOverMs))
+          ? Math.max(0, Math.min(120000, Math.round(Number(data.translationPerfAbortScanIfOverMs))))
+          : 0,
+        translationPerfDegradedScanOnHeavy: data.translationPerfDegradedScanOnHeavy !== false,
         translationPopupActiveTab: data.translationPopupActiveTab || 'control',
         translationVisibilityByTab: data.translationVisibilityByTab && typeof data.translationVisibilityByTab === 'object'
           ? data.translationVisibilityByTab
@@ -310,6 +415,7 @@
           ? data.translationDisplayModeByTab
           : {},
         translationCompareDiffThreshold: compareDiffThreshold,
+        translationCompareRendering: compareRendering,
         debugAllowTestCommands: data.debugAllowTestCommands === true
       };
     }
@@ -373,10 +479,16 @@
         'translationMemoryIgnoredQueryParams',
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
+        'translationClassifierObserveDomChanges',
+        'translationPerfMaxTextNodesPerScan',
+        'translationPerfYieldEveryNNodes',
+        'translationPerfAbortScanIfOverMs',
+        'translationPerfDegradedScanOnHeavy',
         'translationPopupActiveTab',
         'translationVisibilityByTab',
         'translationDisplayModeByTab',
         'translationCompareDiffThreshold',
+        'translationCompareRendering',
         'debugAllowTestCommands'
       ];
       allow.forEach((key) => {
@@ -391,6 +503,35 @@
           ? Math.max(500, Math.min(50000, Math.round(value)))
           : 8000;
       }
+      if (Object.prototype.hasOwnProperty.call(out, 'translationCompareRendering')) {
+        const raw = typeof out.translationCompareRendering === 'string'
+          ? out.translationCompareRendering.trim().toLowerCase()
+          : '';
+        out.translationCompareRendering = (raw === 'auto' || raw === 'highlights' || raw === 'wrappers')
+          ? raw
+          : 'auto';
+      }
+      if (Object.prototype.hasOwnProperty.call(out, 'translationPerfMaxTextNodesPerScan')) {
+        const value = Number(out.translationPerfMaxTextNodesPerScan);
+        out.translationPerfMaxTextNodesPerScan = Number.isFinite(value)
+          ? Math.max(200, Math.min(30000, Math.round(value)))
+          : 5000;
+      }
+      if (Object.prototype.hasOwnProperty.call(out, 'translationPerfYieldEveryNNodes')) {
+        const value = Number(out.translationPerfYieldEveryNNodes);
+        out.translationPerfYieldEveryNNodes = Number.isFinite(value)
+          ? Math.max(80, Math.min(2500, Math.round(value)))
+          : 260;
+      }
+      if (Object.prototype.hasOwnProperty.call(out, 'translationPerfAbortScanIfOverMs')) {
+        const value = Number(out.translationPerfAbortScanIfOverMs);
+        out.translationPerfAbortScanIfOverMs = Number.isFinite(value)
+          ? Math.max(0, Math.min(120000, Math.round(value)))
+          : 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(out, 'translationPerfDegradedScanOnHeavy')) {
+        out.translationPerfDegradedScanOnHeavy = out.translationPerfDegradedScanOnHeavy !== false;
+      }
       return out;
     }
 
@@ -399,7 +540,7 @@
       const out = {};
       const legacyToolMap = {
         pageAnalyzer: ['page.get_stats', 'page.get_blocks'],
-        categorySelector: ['agent.set_recommended_categories'],
+        categorySelector: ['page.classify_blocks', 'page.get_category_summary', 'agent.recommend_categories', 'job.set_selected_categories'],
         glossaryBuilder: ['translator.translate_block_stream'],
         batchPlanner: ['agent.set_plan'],
         modelRouter: ['translator.translate_block_stream'],
@@ -472,6 +613,10 @@
       if (Object.prototype.hasOwnProperty.call(src, 'translationMemoryIgnoredQueryParams')) {
         out.memory.ignoredQueryParams = src.translationMemoryIgnoredQueryParams;
       }
+      if (Object.prototype.hasOwnProperty.call(src, 'translationCompareRendering')) {
+        out.ui = out.ui || {};
+        out.ui.compareRendering = src.translationCompareRendering;
+      }
       if (src.translationAgentTools && typeof src.translationAgentTools === 'object') {
         out.agent = out.agent || {};
         out.agent.toolConfigUser = out.agent.toolConfigUser && typeof out.agent.toolConfigUser === 'object'
@@ -500,6 +645,39 @@
       } catch (_) {
         return fallback;
       }
+    }
+
+    async _readCanonicalRoot() {
+      const data = await super.storageGet({ [this.ROOT_KEY]: null });
+      const root = data && data[this.ROOT_KEY] && typeof data[this.ROOT_KEY] === 'object' && !Array.isArray(data[this.ROOT_KEY])
+        ? data[this.ROOT_KEY]
+        : null;
+      if (root) {
+        return { ...root };
+      }
+      const legacy = await super.storageGet(null);
+      const promoted = this._extractKnownSettings(legacy);
+      await super.storageSet({ [this.ROOT_KEY]: promoted });
+      return promoted;
+    }
+
+    _extractKnownSettings(raw) {
+      const src = raw && typeof raw === 'object' ? raw : {};
+      const out = {};
+      this.knownSettingKeys.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(src, key)) {
+          return;
+        }
+        out[key] = src[key];
+      });
+      const defaults = this.defaults && typeof this.defaults === 'object' ? this.defaults : {};
+      Object.keys(defaults).forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(out, key)) {
+          return;
+        }
+        out[key] = this._cloneJson(defaults[key], defaults[key]);
+      });
+      return out;
     }
   }
 

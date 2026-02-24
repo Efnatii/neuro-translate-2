@@ -12,17 +12,19 @@
     constructor({
       chromeApi,
       dbName = 'nt_translation_memory',
-      dbVersion = 1,
-      indexKey = 'translationMemoryIndex',
+      dbVersion = 2,
+      indexKey = 'nt.memoryIndex.v1',
       pageIndexCap = 5,
       sourcePageCap = 10
     } = {}) {
       super({ chromeApi });
       this.DB_NAME = dbName;
-      this.DB_VERSION = Number.isFinite(Number(dbVersion)) ? Number(dbVersion) : 1;
+      this.DB_VERSION = Number.isFinite(Number(dbVersion)) ? Number(dbVersion) : 2;
       this.PAGES_STORE = 'pages';
       this.BLOCKS_STORE = 'blocks';
+      this.QUARANTINE_STORE = 'quarantine';
       this.INDEX_KEY = indexKey;
+      this.LEGACY_INDEX_KEY = 'translationMemoryIndex';
       this.PAGE_INDEX_CAP = Number.isFinite(Number(pageIndexCap)) ? Math.max(1, Number(pageIndexCap)) : 5;
       this.SOURCE_PAGE_CAP = Number.isFinite(Number(sourcePageCap)) ? Math.max(1, Number(sourcePageCap)) : 10;
       this.db = null;
@@ -64,6 +66,11 @@
             blocks.createIndex('byOriginalHash', 'originalHash', { unique: false });
             blocks.createIndex('byTargetLang', 'targetLang', { unique: false });
             blocks.createIndex('byLastUsedAt', 'lastUsedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(this.QUARANTINE_STORE)) {
+            const quarantine = db.createObjectStore(this.QUARANTINE_STORE, { keyPath: 'id', autoIncrement: true });
+            quarantine.createIndex('byStore', 'storeName', { unique: false });
+            quarantine.createIndex('byTs', 'ts', { unique: false });
           }
         };
         request.onsuccess = () => resolve(request.result);
@@ -181,15 +188,25 @@
     }
 
     async _ensureIndex() {
-      const data = await this.storageGet({ [this.INDEX_KEY]: null });
-      const normalized = this._normalizeIndex(data && data[this.INDEX_KEY]);
+      const data = await this.storageGet({ [this.INDEX_KEY]: null, [this.LEGACY_INDEX_KEY]: null });
+      const rawIndex = data && data[this.INDEX_KEY] && typeof data[this.INDEX_KEY] === 'object'
+        ? data[this.INDEX_KEY]
+        : (data && data[this.LEGACY_INDEX_KEY] && typeof data[this.LEGACY_INDEX_KEY] === 'object'
+          ? data[this.LEGACY_INDEX_KEY]
+          : null);
+      const normalized = this._normalizeIndex(rawIndex);
       await this.storageSet({ [this.INDEX_KEY]: normalized });
       return normalized;
     }
 
     async getIndex() {
-      const data = await this.storageGet({ [this.INDEX_KEY]: null });
-      return this._normalizeIndex(data && data[this.INDEX_KEY]);
+      const data = await this.storageGet({ [this.INDEX_KEY]: null, [this.LEGACY_INDEX_KEY]: null });
+      const rawIndex = data && data[this.INDEX_KEY] && typeof data[this.INDEX_KEY] === 'object'
+        ? data[this.INDEX_KEY]
+        : (data && data[this.LEGACY_INDEX_KEY] && typeof data[this.LEGACY_INDEX_KEY] === 'object'
+          ? data[this.LEGACY_INDEX_KEY]
+          : null);
+      return this._normalizeIndex(rawIndex);
     }
 
     async _putIndex(index) {
@@ -197,6 +214,189 @@
       normalized.updatedAt = this._now();
       await this.storageSet({ [this.INDEX_KEY]: normalized });
       return normalized;
+    }
+
+    async ensureCanonicalIndex({ force = false, pruneLegacy = false } = {}) {
+      const data = await this.storageGet({ [this.INDEX_KEY]: null, [this.LEGACY_INDEX_KEY]: null });
+      const hasCanonical = Boolean(data && data[this.INDEX_KEY] && typeof data[this.INDEX_KEY] === 'object' && !Array.isArray(data[this.INDEX_KEY]));
+      const index = await this._ensureIndex();
+      if ((force || !hasCanonical) && pruneLegacy && this.chromeApi && this.chromeApi.storage && this.chromeApi.storage.local && typeof this.chromeApi.storage.local.remove === 'function') {
+        await new Promise((resolve) => {
+          this.chromeApi.storage.local.remove([this.LEGACY_INDEX_KEY], () => resolve());
+        });
+      }
+      return {
+        ok: true,
+        migrated: Boolean(force || !hasCanonical),
+        index
+      };
+    }
+
+    async repairIndex({ yieldEvery = 80 } = {}) {
+      const safeYield = Number.isFinite(Number(yieldEvery)) ? Math.max(10, Math.round(Number(yieldEvery))) : 80;
+      const pages = await this._collectMeta(this.PAGES_STORE);
+      const rebuilt = this._normalizeIndex({
+        v: 1,
+        byUrl: {},
+        byDomHash: {},
+        counters: {
+          pages: 0,
+          blocks: 0
+        },
+        lastGcAt: null,
+        updatedAt: this._now()
+      });
+      for (let i = 0; i < pages.length; i += 1) {
+        const row = pages[i];
+        if (row && row.pageKey) {
+          if (typeof row.url === 'string' && row.url) {
+            this._upsertIndexKey(rebuilt.byUrl, row.url, row.pageKey);
+          }
+          if (typeof row.domHash === 'string' && row.domHash) {
+            this._upsertIndexKey(rebuilt.byDomHash, row.domHash, row.pageKey);
+          }
+        }
+        if ((i + 1) % safeYield === 0) {
+          await new Promise((resolve) => global.setTimeout(resolve, 0));
+        }
+      }
+      rebuilt.counters.pages = pages.length;
+      const blocks = await this._collectMeta(this.BLOCKS_STORE);
+      rebuilt.counters.blocks = blocks.length;
+      rebuilt.updatedAt = this._now();
+      await this._putIndex(rebuilt);
+      return {
+        ok: true,
+        counters: {
+          pages: pages.length,
+          blocks: blocks.length,
+          byUrl: Object.keys(rebuilt.byUrl || {}).length,
+          byDomHash: Object.keys(rebuilt.byDomHash || {}).length
+        }
+      };
+    }
+
+    async verifyIntegrity({
+      quarantineCorrupt = true,
+      deleteCorrupt = true,
+      strictPageKey = false,
+      maxPages = 2500,
+      maxBlocks = 10000,
+      yieldEvery = 60
+    } = {}) {
+      const safeYield = Number.isFinite(Number(yieldEvery)) ? Math.max(10, Math.round(Number(yieldEvery))) : 60;
+      const safeMaxPages = Number.isFinite(Number(maxPages)) ? Math.max(1, Math.round(Number(maxPages))) : 2500;
+      const safeMaxBlocks = Number.isFinite(Number(maxBlocks)) ? Math.max(1, Math.round(Number(maxBlocks))) : 10000;
+      const pages = await this._collectMeta(this.PAGES_STORE);
+      const blocks = await this._collectMeta(this.BLOCKS_STORE);
+      const domSignature = NT && NT.DomSignature ? NT.DomSignature : null;
+      const urlNormalizer = NT && NT.UrlNormalizer ? NT.UrlNormalizer : null;
+      const corruptPages = [];
+      const corruptBlocks = [];
+
+      for (let i = 0; i < pages.length && i < safeMaxPages; i += 1) {
+        const page = pages[i];
+        const issues = [];
+        if (!page || typeof page !== 'object') {
+          issues.push('PAGE_NOT_OBJECT');
+        } else {
+          if (!page.pageKey || typeof page.pageKey !== 'string') {
+            issues.push('PAGEKEY_MISSING');
+          }
+          if (!page.domHash || typeof page.domHash !== 'string') {
+            issues.push('DOMHASH_MISSING');
+          }
+          if (!page.targetLang || typeof page.targetLang !== 'string') {
+            issues.push('TARGET_LANG_MISSING');
+          }
+          if (page.pageKey && page.domHash && page.targetLang) {
+            const normalizedUrl = urlNormalizer && typeof urlNormalizer.normalizeUrl === 'function'
+              ? urlNormalizer.normalizeUrl(page.url || '')
+              : String(page.url || '');
+            const keySource = `${normalizedUrl}|${String(page.targetLang || '').toLowerCase()}|${page.domHash}`;
+            const expected = domSignature && typeof domSignature.hashTextSha256 === 'function'
+              ? await domSignature.hashTextSha256(keySource).catch(() => null)
+              : null;
+            if (expected && expected !== page.pageKey) {
+              if (strictPageKey) {
+                issues.push('PAGEKEY_HASH_MISMATCH');
+              }
+            }
+          }
+        }
+        if (issues.length) {
+          corruptPages.push({ pageKey: page && page.pageKey ? page.pageKey : null, issues, page });
+        }
+        if ((i + 1) % safeYield === 0) {
+          await new Promise((resolve) => global.setTimeout(resolve, 0));
+        }
+      }
+
+      for (let i = 0; i < blocks.length && i < safeMaxBlocks; i += 1) {
+        const block = blocks[i];
+        const issues = [];
+        if (!block || typeof block !== 'object') {
+          issues.push('BLOCK_NOT_OBJECT');
+        } else {
+          if (!block.blockKey || typeof block.blockKey !== 'string') {
+            issues.push('BLOCKKEY_MISSING');
+          }
+          if (!block.originalHash || typeof block.originalHash !== 'string') {
+            issues.push('ORIGINAL_HASH_MISSING');
+          }
+          if (typeof block.translatedText !== 'string') {
+            issues.push('TRANSLATED_TEXT_INVALID');
+          }
+        }
+        if (issues.length) {
+          corruptBlocks.push({ blockKey: block && block.blockKey ? block.blockKey : null, issues, block });
+        }
+        if ((i + 1) % safeYield === 0) {
+          await new Promise((resolve) => global.setTimeout(resolve, 0));
+        }
+      }
+
+      for (let i = 0; i < corruptPages.length; i += 1) {
+        const row = corruptPages[i];
+        if (quarantineCorrupt) {
+          await this._putQuarantineRecord(this.PAGES_STORE, row.page, row.issues).catch(() => null);
+        }
+        if (deleteCorrupt && row.pageKey) {
+          await this.removePage(row.pageKey).catch(() => ({ ok: false }));
+        }
+        if ((i + 1) % safeYield === 0) {
+          await new Promise((resolve) => global.setTimeout(resolve, 0));
+        }
+      }
+
+      for (let i = 0; i < corruptBlocks.length; i += 1) {
+        const row = corruptBlocks[i];
+        if (quarantineCorrupt) {
+          await this._putQuarantineRecord(this.BLOCKS_STORE, row.block, row.issues).catch(() => null);
+        }
+        if (deleteCorrupt && row.blockKey) {
+          await this._withStore(this.BLOCKS_STORE, 'readwrite', (store, _tx, finish) => {
+            const req = store.delete(row.blockKey);
+            req.onsuccess = () => finish(true);
+          }).catch(() => null);
+        }
+        if ((i + 1) % safeYield === 0) {
+          await new Promise((resolve) => global.setTimeout(resolve, 0));
+        }
+      }
+
+      await this.repairIndex({ yieldEvery: safeYield }).catch(() => ({ ok: false }));
+      return {
+        ok: true,
+        checked: {
+          pages: Math.min(pages.length, safeMaxPages),
+          blocks: Math.min(blocks.length, safeMaxBlocks)
+        },
+        corrupt: {
+          pages: corruptPages.length,
+          blocks: corruptBlocks.length
+        }
+      };
     }
 
     _upsertIndexKey(map, indexKey, pageKey) {
@@ -319,6 +519,9 @@
       const currentUpdatedAt = current && Number.isFinite(Number(current.updatedAt))
         ? Number(current.updatedAt)
         : 0;
+      const currentRev = current && Number.isFinite(Number(current.rev))
+        ? Number(current.rev)
+        : 0;
       const sourceUpdatedAt = Number.isFinite(Number(source.updatedAt))
         ? Number(source.updatedAt)
         : now;
@@ -353,6 +556,7 @@
           ? (typeof source.routeUsed === 'string' ? source.routeUsed : (current && typeof current.routeUsed === 'string' ? current.routeUsed : null))
           : (current && typeof current.routeUsed === 'string' ? current.routeUsed : null),
         createdAt: current && Number.isFinite(Number(current.createdAt)) ? Number(current.createdAt) : now,
+        rev: currentRev + 1,
         updatedAt: preferIncoming ? sourceUpdatedAt : currentUpdatedAt,
         lastUsedAt: now
       };
@@ -513,6 +717,28 @@
           cursor.continue();
         };
       });
+    }
+
+    async _putQuarantineRecord(storeName, record, issues) {
+      if (!record || typeof record !== 'object') {
+        return { ok: false };
+      }
+      await this._ensureDb();
+      const db = this.db;
+      if (!db || !db.objectStoreNames || !db.objectStoreNames.contains(this.QUARANTINE_STORE)) {
+        return { ok: false };
+      }
+      const payload = {
+        storeName: String(storeName || 'unknown'),
+        issues: Array.isArray(issues) ? issues.slice(0, 20) : [],
+        record: this._cloneJson(record, null),
+        ts: this._now()
+      };
+      await this._withStore(this.QUARANTINE_STORE, 'readwrite', (store, _tx, finish) => {
+        const req = store.put(payload);
+        req.onsuccess = () => finish(true);
+      });
+      return { ok: true };
     }
 
     async getStats() {

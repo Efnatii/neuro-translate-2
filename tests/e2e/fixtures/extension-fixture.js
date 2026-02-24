@@ -2,12 +2,62 @@ const path = require('path');
 const fs = require('fs/promises');
 const { test: base, expect, chromium } = require('@playwright/test');
 const { createStaticServer } = require('../server/static-server');
-const { createMockOpenAiServer } = require('../server/mock-openai');
+const { createMockOpenAiServer } = require('../server/mock-openai-responses');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const TEST_MODE = String(process.env.TEST_MODE || 'mock').trim().toLowerCase() === 'real' ? 'real' : 'mock';
+const TEST_OPENAI_BASE_URL = String(process.env.TEST_OPENAI_BASE_URL || '').trim();
+const TEST_REAL_PROXY_BASE_URL = String(process.env.TEST_REAL_PROXY_BASE_URL || '').trim();
+const TEST_REAL_OPENAI_KEY = String(process.env.TEST_REAL_OPENAI_KEY || process.env.OPENAI_API_KEY || '').trim();
+const TEST_REAL_PROXY_TOKEN = String(process.env.TEST_REAL_PROXY_TOKEN || process.env.TEST_PROXY_TOKEN || '').trim();
+const TEST_REAL_PROXY_PROJECT_ID = String(process.env.TEST_REAL_PROXY_PROJECT_ID || '').trim();
+const TEST_REAL_KEYS_RAW = String(process.env.TEST_REAL_KEYS || '').trim();
+
+function safeParseJson(input, fallback = null) {
+  if (typeof input !== 'string' || !input.trim()) {
+    return fallback;
+  }
+  try {
+    return JSON.parse(input);
+  } catch (_) {
+    return fallback;
+  }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function redactValue(input, depth = 0) {
+  if (depth > 12) {
+    return '[TRUNCATED]';
+  }
+  if (input === null || input === undefined) {
+    return input;
+  }
+  if (typeof input === 'string') {
+    let out = input;
+    out = out.replace(/(authorization\s*:\s*bearer\s+)([^\s,;]+)/gi, '$1[REDACTED]');
+    out = out.replace(/(x-nt-token\s*:\s*)([^\s,;]+)/gi, '$1[REDACTED]');
+    out = out.replace(/([?&](?:api[_-]?key|token|access[_-]?token|session|sess|key)=)([^&#]+)/gi, '$1[REDACTED]');
+    return out;
+  }
+  if (Array.isArray(input)) {
+    return input.map((item) => redactValue(item, depth + 1));
+  }
+  if (typeof input === 'object') {
+    const out = {};
+    Object.keys(input).forEach((key) => {
+      const lowered = String(key || '').toLowerCase();
+      if (/(authorization|api[-_]?key|token|cookie|set-cookie|bearer|x-api-key|x-nt-token|proxy[-_]?token|secret|password|session|sess)/i.test(lowered)) {
+        out[key] = '[REDACTED]';
+        return;
+      }
+      out[key] = redactValue(input[key], depth + 1);
+    });
+    return out;
+  }
+  return input;
 }
 
 async function sendUiCommand(page, { command, payload = {}, tabId = null } = {}) {
@@ -56,15 +106,25 @@ async function readTabRuntimeState(page, tabId) {
   return page.evaluate(async ({ targetTabId }) => {
     const tabKey = String(targetTabId);
     const dump = await chrome.storage.local.get({
+      'nt.jobs.v3': null,
       translationStatusByTab: {},
       translationJobsByTab: {},
       translationJobsById: {},
       translationJobIndexByTab: {}
     });
+    const jobsRoot = dump['nt.jobs.v3'] && typeof dump['nt.jobs.v3'] === 'object'
+      ? dump['nt.jobs.v3']
+      : null;
     const statusByTab = dump.translationStatusByTab || {};
-    const jobsByTab = dump.translationJobsByTab || {};
-    const jobsById = dump.translationJobsById || {};
-    const indexByTab = dump.translationJobIndexByTab || {};
+    const jobsByTab = jobsRoot && jobsRoot.translationJobsByTab && typeof jobsRoot.translationJobsByTab === 'object'
+      ? jobsRoot.translationJobsByTab
+      : (dump.translationJobsByTab || {});
+    const jobsById = jobsRoot && jobsRoot.translationJobsById && typeof jobsRoot.translationJobsById === 'object'
+      ? jobsRoot.translationJobsById
+      : (dump.translationJobsById || {});
+    const indexByTab = jobsRoot && jobsRoot.translationJobIndexByTab && typeof jobsRoot.translationJobIndexByTab === 'object'
+      ? jobsRoot.translationJobIndexByTab
+      : (dump.translationJobIndexByTab || {});
     const statusEntry = statusByTab[tabKey] || statusByTab[targetTabId] || null;
     const activeJobId = jobsByTab[tabKey] || null;
     const lastJobId = indexByTab[tabKey] && indexByTab[tabKey].lastJobId
@@ -152,6 +212,24 @@ const test = base.extend({
     };
     const popupBaseUrl = () => `chrome-extension://${currentExtensionId}/extension/ui/popup.html`;
     const debugBaseUrl = () => `chrome-extension://${currentExtensionId}/extension/ui/debug.html`;
+    const realKeys = safeParseJson(TEST_REAL_KEYS_RAW, {});
+    const realKeysObject = realKeys && typeof realKeys === 'object' ? realKeys : {};
+    const resolvedRealOpenAiKey = String(
+      TEST_REAL_OPENAI_KEY
+      || realKeysObject.openaiKey
+      || realKeysObject.apiKey
+      || ''
+    ).trim();
+    const resolvedRealProxyToken = String(
+      TEST_REAL_PROXY_TOKEN
+      || realKeysObject.proxyToken
+      || ''
+    ).trim();
+    const resolvedRealProjectId = String(
+      TEST_REAL_PROXY_PROJECT_ID
+      || realKeysObject.projectId
+      || ''
+    ).trim();
 
     const ensureHelperPage = async () => {
       if (helperPage && !helperPage.isClosed()) {
@@ -184,6 +262,9 @@ const test = base.extend({
       staticOrigin: servers.staticServer.origin,
       mockOrigin: servers.mockServer.origin,
       mockServer: servers.mockServer,
+      testMode: TEST_MODE,
+      isMockMode: TEST_MODE === 'mock',
+      isRealMode: TEST_MODE === 'real',
 
       openSite: async (pagePath) => {
         const page = await context.newPage();
@@ -280,32 +361,155 @@ const test = base.extend({
         return { ok: false, error: { code: 'COMMAND_RETRY_EXHAUSTED', message: command } };
       },
 
-      configureMockProxy: async () => {
+      configureTestBackend: async ({ mode = TEST_MODE } = {}) => {
+        const normalizedMode = String(mode || TEST_MODE).trim().toLowerCase() === 'real' ? 'real' : 'mock';
         const settingsRes = await app.sendCommand('SET_SETTINGS', {
           patch: {
             debugAllowTestCommands: true,
             translationAgentTuning: {
-              proofreadingPassesOverride: 0
+              proofreadingPassesOverride: 0,
+              plannerMaxOutputTokens: 700
             }
           }
         });
         if (!settingsRes || settingsRes.ok !== true) {
           throw new Error(`Failed to apply e2e settings patch: ${JSON.stringify(settingsRes || null)}`);
         }
-        const proxyRes = await app.sendCommand('BG_TEST_SET_PROXY_CONFIG', {
-          baseUrl: servers.mockServer.origin
-        });
-        if (!proxyRes || proxyRes.ok !== true) {
-          throw new Error(`Failed to configure mock proxy: ${JSON.stringify(proxyRes || null)}`);
+
+        if (normalizedMode === 'mock') {
+          const baseUrl = TEST_OPENAI_BASE_URL || servers.mockServer.origin;
+          const proxyRes = await app.sendCommand('BG_TEST_SET_PROXY_CONFIG', {
+            baseUrl,
+            authToken: resolvedRealProxyToken || '',
+            projectId: resolvedRealProjectId || ''
+          });
+          if (!proxyRes || proxyRes.ok !== true) {
+            throw new Error(`Failed to configure mock proxy: ${JSON.stringify(proxyRes || null)}`);
+          }
+          const ping = await app.sendCommand('BG_TEST_CONNECTION', { timeoutMs: 8000 });
+          const expectedHost = new URL(baseUrl).host;
+          if (!ping || ping.ok !== true) {
+            throw new Error(`Mock proxy connection test failed: ${JSON.stringify(ping || null)}`);
+          }
+          if (ping.endpointHost && ping.endpointHost !== expectedHost) {
+            throw new Error(`Connection endpoint mismatch: expected=${expectedHost} actual=${ping.endpointHost}`);
+          }
+          return { ok: true, mode: 'mock', baseUrl };
         }
-        const ping = await app.sendCommand('BG_TEST_CONNECTION', { timeoutMs: 8000 });
-        const expectedHost = new URL(servers.mockServer.origin).host;
+
+        const proxyBaseUrl = TEST_REAL_PROXY_BASE_URL || TEST_OPENAI_BASE_URL;
+        if (proxyBaseUrl) {
+          const proxyRes = await app.sendCommand('BG_TEST_SET_PROXY_CONFIG', {
+            baseUrl: proxyBaseUrl,
+            authToken: resolvedRealProxyToken || '',
+            projectId: resolvedRealProjectId || ''
+          });
+          if (!proxyRes || proxyRes.ok !== true) {
+            throw new Error(`Failed to configure real proxy: ${JSON.stringify(proxyRes || null)}`);
+          }
+        } else {
+          if (!resolvedRealOpenAiKey) {
+            throw new Error('REAL mode requires TEST_REAL_OPENAI_KEY/OPENAI_API_KEY or TEST_REAL_PROXY_BASE_URL');
+          }
+          const keyRes = await app.sendCommand('BG_TEST_SET_CREDENTIALS_BYOK', {
+            apiKey: resolvedRealOpenAiKey,
+            persist: false
+          });
+          if (!keyRes || keyRes.ok !== true) {
+            throw new Error(`Failed to configure BYOK key for real mode: ${JSON.stringify(keyRes || null)}`);
+          }
+        }
+
+        const ping = await app.sendCommand('BG_TEST_CONNECTION', { timeoutMs: 12000 });
         if (!ping || ping.ok !== true) {
-          throw new Error(`Mock proxy connection test failed: ${JSON.stringify(ping || null)}`);
+          throw new Error(`Real backend connection test failed: ${JSON.stringify(ping || null)}`);
         }
-        if (ping.endpointHost && ping.endpointHost !== expectedHost) {
-          throw new Error(`Connection endpoint mismatch: expected=${expectedHost} actual=${ping.endpointHost}`);
-        }
+        return {
+          ok: true,
+          mode: 'real',
+          endpointHost: ping.endpointHost || null
+        };
+      },
+
+      configureMockProxy: async () => {
+        return app.configureTestBackend({ mode: 'mock' });
+      },
+
+      configureRealBackend: async () => {
+        return app.configureTestBackend({ mode: 'real' });
+      },
+
+      getActiveJobState: async (tabId = null) => {
+        return app.sendCommand('BG_TEST_GET_ACTIVE_JOB_STATE', {
+          tabId: Number.isFinite(Number(tabId)) ? Number(tabId) : null
+        }, tabId);
+      },
+
+      exportReportJson: async (tabId = null, extra = {}) => {
+        const payload = {
+          tabId: Number.isFinite(Number(tabId)) ? Number(tabId) : null,
+          ...(extra && typeof extra === 'object' ? extra : {})
+        };
+        return app.sendCommand('BG_TEST_EXPORT_REPORT_JSON', payload, tabId);
+      },
+
+      setByokForTests: async ({ apiKey, persist = false } = {}) => {
+        return app.sendCommand('BG_TEST_SET_CREDENTIALS_BYOK', {
+          apiKey: typeof apiKey === 'string' ? apiKey : '',
+          persist: persist === true
+        });
+      },
+
+      setTargetLangForTests: async (lang = 'ru') => {
+        return app.sendCommand('BG_TEST_SET_TARGET_LANG', { lang: typeof lang === 'string' ? lang : 'ru' });
+      },
+
+      getActiveJob: async (tabId = null) => {
+        return app.sendCommand('BG_TEST_GET_ACTIVE_JOB', {
+          tabId: Number.isFinite(Number(tabId)) ? Number(tabId) : null
+        }, tabId);
+      },
+
+      getJobState: async ({ jobId = null, tabId = null } = {}) => {
+        return app.sendCommand('BG_TEST_GET_JOB_STATE', {
+          jobId: typeof jobId === 'string' && jobId ? jobId : null,
+          tabId: Number.isFinite(Number(tabId)) ? Number(tabId) : null
+        }, tabId);
+      },
+
+      eraseJobForTests: async ({ jobId = null, tabId = null, includeCache = true } = {}) => {
+        return app.sendCommand('BG_TEST_ERASE_JOB', {
+          jobId: typeof jobId === 'string' && jobId ? jobId : null,
+          tabId: Number.isFinite(Number(tabId)) ? Number(tabId) : null,
+          includeCache: includeCache !== false
+        }, tabId);
+      },
+
+      waitForStageForTests: async ({ stage, jobId = null, tabId = null, timeoutMs = 60000, pollMs = 250 } = {}) => {
+        return app.sendCommand('BG_TEST_WAIT_FOR_STAGE', {
+          stage: typeof stage === 'string' ? stage : '',
+          jobId: typeof jobId === 'string' && jobId ? jobId : null,
+          tabId: Number.isFinite(Number(tabId)) ? Number(tabId) : null,
+          timeoutMs,
+          pollMs
+        }, tabId);
+      },
+
+      kickScheduler: async (tabId = null) => {
+        return app.sendCommand('BG_TEST_KICK_SCHEDULER', {}, tabId);
+      },
+
+      forceSwIdleSim: async ({ idleMs = 35000 } = {}) => {
+        return app.sendCommand('BG_TEST_FORCE_SW_IDLE_SIM', { idleMs });
+      },
+
+      softReloadExtension: async () => {
+        return app.sendCommand('BG_TEST_RELOAD_EXTENSION', { mode: 'soft' });
+      },
+
+      setMockFaultInjection: async (faults = {}) => {
+        servers.mockServer.setFaultInjection(faults || {});
+        return { ok: true, ...(faults && typeof faults === 'object' ? faults : {}) };
       },
 
       readTabState: async (tabId) => {
@@ -363,12 +567,29 @@ const test = base.extend({
               command: 'BG_TEST_GET_LOGS',
               payload: { limit: 200 }
             });
-            const storageDump = await helper.evaluate(async () => chrome.storage.local.get(null));
+            const report = await sendUiCommand(helper, {
+              command: 'BG_TEST_EXPORT_REPORT_JSON',
+              payload: { logsLimit: 200, toolTraceLimit: 80, patchLimit: 80 }
+            });
+            const summaryState = await helper.evaluate(async () => {
+              const dump = await chrome.storage.local.get({
+                'nt.jobs.v3': null,
+                translationStatusByTab: {}
+              });
+              return {
+                hasJobsRoot: Boolean(dump && dump['nt.jobs.v3']),
+                statusByTabKeys: dump && dump.translationStatusByTab && typeof dump.translationStatusByTab === 'object'
+                  ? Object.keys(dump.translationStatusByTab).slice(0, 50)
+                  : []
+              };
+            });
             const diagnostics = {
-              logs,
-              storageDump,
-              mockStats: servers.mockServer.getStats(),
-              mockRecentRequests: servers.mockServer.getRecentRequests(120)
+              testMode: TEST_MODE,
+              logs: redactValue(logs),
+              report: redactValue(report),
+              summaryState: redactValue(summaryState),
+              mockStats: redactValue(servers.mockServer.getStats()),
+              mockRecentRequests: redactValue(servers.mockServer.getRecentRequests(120))
             };
             await fs.writeFile(
               testInfo.outputPath('debug-diagnostics.json'),

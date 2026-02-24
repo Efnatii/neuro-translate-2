@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>NT E2E Shadow DOM</title>
+    <style>
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; }
+      .card { border: 1px solid #d7dbe3; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="shadow-title">Open shadow root coverage</h1>
+    <div class="card">
+      <p id="shadow-top-text">Top-level text is present for baseline scan.</p>
+      <nt-shadow-host id="shadow-host"></nt-shadow-host>
+    </div>
+    <script>
+      (function bootstrapShadow() {
+        class NtShadowHost extends HTMLElement {
+          connectedCallback() {
+            if (this.shadowRoot) {
+              return;
+            }
+            const root = this.attachShadow({ mode: 'open' });
+            const wrapper = document.createElement('div');
+            const text = document.createElement('p');
+            text.id = 'shadow-text';
+            text.textContent = 'This sentence is inside open shadow root and should be translated.';
+            wrapper.appendChild(text);
+            root.appendChild(wrapper);
+          }
+        }
+        if (!customElements.get('nt-shadow-host')) {
+          customElements.define('nt-shadow-host', NtShadowHost);
+        }
+      })();
+    </script>
+  </body>
+</html>

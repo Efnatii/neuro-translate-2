@@ -18,24 +18,38 @@
  */
 (function initPopup(global) {
   const CATEGORY_OPTIONS = [
-    { id: 'heading', label: 'Заголовки' },
-    { id: 'paragraph', label: 'Абзацы' },
-    { id: 'list', label: 'Списки' },
-    { id: 'button', label: 'Кнопки' },
-    { id: 'label', label: 'Подписи' },
-    { id: 'navigation', label: 'Навигация' },
-    { id: 'meta', label: 'Мета' },
-    { id: 'code', label: 'Код' },
-    { id: 'quote', label: 'Цитаты' },
-    { id: 'table', label: 'Таблицы' },
-    { id: 'other', label: 'Прочее' }
+    { id: 'main_content', label: 'РћСЃРЅРѕРІРЅРѕР№ РєРѕРЅС‚РµРЅС‚' },
+    { id: 'headings', label: 'Р—Р°РіРѕР»РѕРІРєРё' },
+    { id: 'navigation', label: 'РќР°РІРёРіР°С†РёСЏ' },
+    { id: 'ui_controls', label: 'UI СЌР»РµРјРµРЅС‚С‹' },
+    { id: 'tables', label: 'РўР°Р±Р»РёС†С‹' },
+    { id: 'code', label: 'РљРѕРґ' },
+    { id: 'captions', label: 'РџРѕРґРїРёСЃРё' },
+    { id: 'footer', label: 'Р¤СѓС‚РµСЂ' },
+    { id: 'legal', label: 'Р®СЂРёРґРёС‡РµСЃРєРёРµ' },
+    { id: 'ads', label: 'Р РµРєР»Р°РјР°' },
+    { id: 'unknown', label: 'РќРµРёР·РІРµСЃС‚РЅРѕ' }
   ];
+
+  const CATEGORY_HINTS = Object.freeze({
+    main_content: 'Primary article/document text.',
+    headings: 'Headings and section titles.',
+    navigation: 'Menus, breadcrumbs, and navigation.',
+    ui_controls: 'Buttons, labels, and form controls.',
+    tables: 'Table rows/cells/captions.',
+    code: 'Code and monospace fragments.',
+    captions: 'Captions for images/tables/figures.',
+    footer: 'Footer and service information.',
+    legal: 'Privacy/terms/cookie/disclaimer text.',
+    ads: 'Ad and sponsored fragments.',
+    unknown: 'Unclassified fragments.'
+  });
 
   const CATEGORY_MODE_GROUPS = {
     all: CATEGORY_OPTIONS.map((item) => item.id),
-    content: ['heading', 'paragraph', 'list', 'quote', 'table', 'code'],
-    interface: ['button', 'label', 'navigation'],
-    meta: ['meta'],
+    content: ['main_content', 'headings', 'tables', 'code', 'captions'],
+    interface: ['ui_controls', 'navigation'],
+    meta: ['footer', 'legal', 'ads'],
     custom: []
   };
 
@@ -46,147 +60,161 @@
     {
       key: 'page.get_stats',
       label: 'page.get_stats',
-      hint: 'Статистика страницы и категорий перед планированием.'
+      hint: 'Р РЋРЎвЂљР В°РЎвЂљР С‘РЎРѓРЎвЂљР С‘Р С”Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р С‘ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„– Р С—Р ВµРЎР‚Р ВµР Т‘ Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘Р ВµР С.'
     },
     {
       key: 'page.get_blocks',
       label: 'page.get_blocks',
-      hint: 'Выборка блоков страницы для анализа и/или исполнения.'
+      hint: 'Р вЂ™РЎвЂ№Р В±Р С•РЎР‚Р С”Р В° Р В±Р В»Р С•Р С”Р С•Р Р† РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р Т‘Р В»РЎРЏ Р В°Р Р…Р В°Р В»Р С‘Р В·Р В° Р С‘/Р С‘Р В»Р С‘ Р С‘РЎРѓР С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ.'
     },
     {
       key: 'agent.set_tool_config',
       label: 'agent.set_tool_config',
-      hint: 'Установка режимов инструментов on/off/auto.'
+      hint: 'Р Р€РЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р С”Р В° РЎР‚Р ВµР В¶Р С‘Р СР С•Р Р† Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР С•Р Р† on/off/auto.'
     },
     {
       key: 'agent.propose_tool_policy',
       label: 'agent.propose_tool_policy',
-      hint: 'Предложение агентом конфигурации инструментов с пересчётом effective policy.'
+      hint: 'Р СџРЎР‚Р ВµР Т‘Р В»Р С•Р В¶Р ВµР Р…Р С‘Р Вµ Р В°Р С–Р ВµР Р…РЎвЂљР С•Р С Р С”Р С•Р Р…РЎвЂћР С‘Р С–РЎС“РЎР‚Р В°РЎвЂ Р С‘Р С‘ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР С•Р Р† РЎРѓ Р С—Р ВµРЎР‚Р ВµРЎРѓРЎвЂЎРЎвЂРЎвЂљР С•Р С effective policy.'
     },
     {
       key: 'agent.get_tool_context',
       label: 'agent.get_tool_context',
-      hint: 'Чтение toolset hash, effective policy и capability summary.'
+      hint: 'Р В§РЎвЂљР ВµР Р…Р С‘Р Вµ toolset hash, effective policy Р С‘ capability summary.'
     },
     {
       key: 'agent.get_autotune_context',
       label: 'agent.get_autotune_context',
-      hint: 'Контекст для AutoTune в planning/execution.'
+      hint: 'Р С™Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљ Р Т‘Р В»РЎРЏ AutoTune Р Р† planning/execution.'
     },
     {
       key: 'agent.propose_run_settings_patch',
       label: 'agent.propose_run_settings_patch',
-      hint: 'Предложение патча job-scoped run settings.'
+      hint: 'Р СџРЎР‚Р ВµР Т‘Р В»Р С•Р В¶Р ВµР Р…Р С‘Р Вµ Р С—Р В°РЎвЂљРЎвЂЎР В° job-scoped run settings.'
     },
     {
       key: 'agent.apply_run_settings_proposal',
       label: 'agent.apply_run_settings_proposal',
-      hint: 'Применение proposal AutoTune.'
+      hint: 'Р СџРЎР‚Р С‘Р СР ВµР Р…Р ВµР Р…Р С‘Р Вµ proposal AutoTune.'
     },
     {
       key: 'agent.reject_run_settings_proposal',
       label: 'agent.reject_run_settings_proposal',
-      hint: 'Отклонение proposal AutoTune.'
+      hint: 'Р С›РЎвЂљР С”Р В»Р С•Р Р…Р ВµР Р…Р С‘Р Вµ proposal AutoTune.'
     },
     {
       key: 'agent.explain_current_run_settings',
       label: 'agent.explain_current_run_settings',
-      hint: 'Объяснение текущего effective run settings.'
+      hint: 'Р С›Р В±РЎР‰РЎРЏРЎРѓР Р…Р ВµР Р…Р С‘Р Вµ РЎвЂљР ВµР С”РЎС“РЎвЂ°Р ВµР С–Р С• effective run settings.'
     },
     {
       key: 'agent.set_plan',
       label: 'agent.set_plan',
-      hint: 'Фиксация плана выполнения перевода.'
+      hint: 'Р В¤Р С‘Р С”РЎРѓР В°РЎвЂ Р С‘РЎРЏ Р С—Р В»Р В°Р Р…Р В° Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В°.'
+    },
+        {
+      key: 'page.classify_blocks',
+      label: 'page.classify_blocks',
+      hint: 'Р”РµС‚РµСЂРјРёРЅРёСЂРѕРІР°РЅРЅР°СЏ РєР»Р°СЃСЃРёС„РёРєР°С†РёСЏ Р±Р»РѕРєРѕРІ СЃС‚СЂР°РЅРёС†С‹.'
     },
     {
-      key: 'agent.set_recommended_categories',
-      label: 'agent.set_recommended_categories',
-      hint: 'Рекомендация категорий для подтверждения пользователем.'
+      key: 'page.get_category_summary',
+      label: 'page.get_category_summary',
+      hint: 'РЎРІРѕРґРєР° РєР°С‚РµРіРѕСЂРёР№ СЃ confidence Рё РїСЂРёРјРµСЂР°РјРё.'
     },
     {
+      key: 'agent.recommend_categories',
+      label: 'agent.recommend_categories',
+      hint: 'Р РµРєРѕРјРµРЅРґРѕРІР°РЅРЅС‹Рµ/РѕРїС†РёРѕРЅР°Р»СЊРЅС‹Рµ/РёСЃРєР»СЋС‡С‘РЅРЅС‹Рµ РєР°С‚РµРіРѕСЂРёРё РїРѕСЃР»Рµ planning.'
+    },
+    {
+      key: 'job.set_selected_categories',
+      label: 'job.set_selected_categories',
+      hint: 'РР·РјРµРЅРµРЅРёРµ РІС‹Р±СЂР°РЅРЅС‹С… РєР°С‚РµРіРѕСЂРёР№ Рё РїРµСЂРµСЃС‡С‘С‚ pending Р±Р»РѕРєРѕРІ.'
+    },    {
       key: 'agent.append_report',
       label: 'agent.append_report',
-      hint: 'Короткие отчёты о ходе планирования/исполнения.'
+      hint: 'Р С™Р С•РЎР‚Р С•РЎвЂљР С”Р С‘Р Вµ Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљРЎвЂ№ Р С• РЎвЂ¦Р С•Р Т‘Р Вµ Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘РЎРЏ/Р С‘РЎРѓР С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ.'
     },
     {
       key: 'agent.update_checklist',
       label: 'agent.update_checklist',
-      hint: 'Обновление статусов чеклиста агента.'
+      hint: 'Р С›Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘Р Вµ РЎРѓРЎвЂљР В°РЎвЂљРЎС“РЎРѓР С•Р Р† РЎвЂЎР ВµР С”Р В»Р С‘РЎРѓРЎвЂљР В° Р В°Р С–Р ВµР Р…РЎвЂљР В°.'
     },
     {
       key: 'agent.compress_context',
       label: 'agent.compress_context',
-      hint: 'Сжатие контекста, чтобы избежать переполнения.'
+      hint: 'Р РЋР В¶Р В°РЎвЂљР С‘Р Вµ Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В°, РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ Р С‘Р В·Р В±Р ВµР В¶Р В°РЎвЂљРЎРЉ Р С—Р ВµРЎР‚Р ВµР С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ.'
     },
     {
       key: 'job.get_next_blocks',
       label: 'job.get_next_blocks',
-      hint: 'Выбор следующей порции pending-блоков.'
+      hint: 'Р вЂ™РЎвЂ№Р В±Р С•РЎР‚ РЎРѓР В»Р ВµР Т‘РЎС“РЎР‹РЎвЂ°Р ВµР в„– Р С—Р С•РЎР‚РЎвЂ Р С‘Р С‘ pending-Р В±Р В»Р С•Р С”Р С•Р Р†.'
     },
     {
       key: 'translator.translate_block_stream',
       label: 'translator.translate_block_stream',
-      hint: 'Потоковый перевод одного блока.'
+      hint: 'Р СџР С•РЎвЂљР С•Р С”Р С•Р Р†РЎвЂ№Р в„– Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘ Р С•Р Т‘Р Р…Р С•Р С–Р С• Р В±Р В»Р С•Р С”Р В°.'
     },
     {
       key: 'page.apply_delta',
       label: 'page.apply_delta',
-      hint: 'Промежуточное применение дельты текста на страницу.'
+      hint: 'Р СџРЎР‚Р С•Р СР ВµР В¶РЎС“РЎвЂљР С•РЎвЂЎР Р…Р С•Р Вµ Р С—РЎР‚Р С‘Р СР ВµР Р…Р ВµР Р…Р С‘Р Вµ Р Т‘Р ВµР В»РЎРЉРЎвЂљРЎвЂ№ РЎвЂљР ВµР С”РЎРѓРЎвЂљР В° Р Р…Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎС“.'
     },
     {
       key: 'job.mark_block_done',
       label: 'job.mark_block_done',
-      hint: 'Финализация успешно переведённого блока.'
+      hint: 'Р В¤Р С‘Р Р…Р В°Р В»Р С‘Р В·Р В°РЎвЂ Р С‘РЎРЏ РЎС“РЎРѓР С—Р ВµРЎв‚¬Р Р…Р С• Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘РЎвЂР Р…Р Р…Р С•Р С–Р С• Р В±Р В»Р С•Р С”Р В°.'
     },
     {
       key: 'job.mark_block_failed',
       label: 'job.mark_block_failed',
-      hint: 'Фиксация ошибки по блоку без остановки всего пайплайна.'
+      hint: 'Р В¤Р С‘Р С”РЎРѓР В°РЎвЂ Р С‘РЎРЏ Р С•РЎв‚¬Р С‘Р В±Р С”Р С‘ Р С—Р С• Р В±Р В»Р С•Р С”РЎС“ Р В±Р ВµР В· Р С•РЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р С”Р С‘ Р Р†РЎРѓР ВµР С–Р С• Р С—Р В°Р в„–Р С—Р В»Р В°Р в„–Р Р…Р В°.'
     },
     {
       key: 'agent.audit_progress',
       label: 'agent.audit_progress',
-      hint: 'Проверка прогресса и anti-repeat guard.'
+      hint: 'Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С”Р В° Р С—РЎР‚Р С•Р С–РЎР‚Р ВµРЎРѓРЎРѓР В° Р С‘ anti-repeat guard.'
     },
     {
       key: 'memory.build_glossary',
       label: 'memory.build_glossary',
-      hint: 'Построение терминологического глоссария по уже переведённым блокам.'
+      hint: 'Р СџР С•РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…Р С‘Р Вµ РЎвЂљР ВµРЎР‚Р СР С‘Р Р…Р С•Р В»Р С•Р С–Р С‘РЎвЂЎР ВµРЎРѓР С”Р С•Р С–Р С• Р С–Р В»Р С•РЎРѓРЎРѓР В°РЎР‚Р С‘РЎРЏ Р С—Р С• РЎС“Р В¶Р Вµ Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘РЎвЂР Р…Р Р…РЎвЂ№Р С Р В±Р В»Р С•Р С”Р В°Р С.'
     },
     {
       key: 'memory.update_context_summary',
       label: 'memory.update_context_summary',
-      hint: 'Обновление краткого контекстного summary для следующих шагов.'
+      hint: 'Р С›Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘Р Вµ Р С”РЎР‚Р В°РЎвЂљР С”Р С•Р С–Р С• Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР Р…Р С•Р С–Р С• summary Р Т‘Р В»РЎРЏ РЎРѓР В»Р ВµР Т‘РЎС“РЎР‹РЎвЂ°Р С‘РЎвЂ¦ РЎв‚¬Р В°Р С–Р С•Р Р†.'
     },
     {
       key: 'proof.plan_proofreading',
       label: 'proof.plan_proofreading',
-      hint: 'Планирование блока(ов) для стадии вычитки.'
+      hint: 'Р СџР В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘Р Вµ Р В±Р В»Р С•Р С”Р В°(Р С•Р Р†) Р Т‘Р В»РЎРЏ РЎРѓРЎвЂљР В°Р Т‘Р С‘Р С‘ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘.'
     },
     {
       key: 'proof.get_next_blocks',
       label: 'proof.get_next_blocks',
-      hint: 'Получение очередных блоков на вычитку.'
+      hint: 'Р СџР С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С‘Р Вµ Р С•РЎвЂЎР ВµРЎР‚Р ВµР Т‘Р Р…РЎвЂ№РЎвЂ¦ Р В±Р В»Р С•Р С”Р С•Р Р† Р Р…Р В° Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”РЎС“.'
     },
     {
       key: 'proof.proofread_block_stream',
       label: 'proof.proofread_block_stream',
-      hint: 'Потоковая вычитка одного блока с page.apply_delta.'
+      hint: 'Р СџР С•РЎвЂљР С•Р С”Р С•Р Р†Р В°РЎРЏ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р В° Р С•Р Т‘Р Р…Р С•Р С–Р С• Р В±Р В»Р С•Р С”Р В° РЎРѓ page.apply_delta.'
     },
     {
       key: 'proof.mark_block_done',
       label: 'proof.mark_block_done',
-      hint: 'Фиксация результата вычитки и quality-tag.'
+      hint: 'Р В¤Р С‘Р С”РЎРѓР В°РЎвЂ Р С‘РЎРЏ РЎР‚Р ВµР В·РЎС“Р В»РЎРЉРЎвЂљР В°РЎвЂљР В° Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘ Р С‘ quality-tag.'
     },
     {
       key: 'proof.mark_block_failed',
       label: 'proof.mark_block_failed',
-      hint: 'Фиксация ошибки вычитки по блоку.'
+      hint: 'Р В¤Р С‘Р С”РЎРѓР В°РЎвЂ Р С‘РЎРЏ Р С•РЎв‚¬Р С‘Р В±Р С”Р С‘ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘ Р С—Р С• Р В±Р В»Р С•Р С”РЎС“.'
     },
     {
       key: 'proof.finish',
       label: 'proof.finish',
-      hint: 'Завершение стадии вычитки при пустом pending.'
+      hint: 'Р вЂ”Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р С‘Р Вµ РЎРѓРЎвЂљР В°Р Т‘Р С‘Р С‘ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘ Р С—РЎР‚Р С‘ Р С—РЎС“РЎРѓРЎвЂљР С•Р С pending.'
     }
   ];
 
@@ -202,7 +230,10 @@
     'agent.reject_run_settings_proposal': 'on',
     'agent.explain_current_run_settings': 'on',
     'agent.set_plan': 'on',
-    'agent.set_recommended_categories': 'on',
+    'page.classify_blocks': 'on',
+    'page.get_category_summary': 'on',
+    'agent.recommend_categories': 'on',
+    'job.set_selected_categories': 'on',
     'agent.append_report': 'on',
     'agent.update_checklist': 'on',
     'agent.compress_context': 'auto',
@@ -724,6 +755,7 @@
     cacheElements() {
       this.debugButton = this.doc.querySelector('[data-action="open-debug"]');
       this.exportButton = this.doc.querySelector('[data-action="open-export"]');
+      this.troubleshootingButton = this.doc.querySelector('[data-action="open-troubleshooting"]');
       this.connectionModeProxy = this.doc.querySelector('[data-field="connection-mode-proxy"]');
       this.connectionModeByok = this.doc.querySelector('[data-field="connection-mode-byok"]');
       this.proxyUrlInput = this.doc.querySelector('[data-field="proxy-url"]');
@@ -800,6 +832,7 @@
       this.categoryChooserSection = this.doc.querySelector('[data-section="category-chooser"]');
       this.categoryChooserHint = this.doc.querySelector('[data-field="category-chooser-hint"]');
       this.categoryChooserList = this.doc.querySelector('[data-section="category-chooser-list"]');
+      this.reclassifyForceButton = this.doc.querySelector('[data-action="reclassify-force"]');
       this.startButton = this.doc.querySelector('[data-action="start-translation"]');
       this.startButtonLabel = this.startButton ? this.startButton.querySelector('.popup__action-label') : null;
       this.cancelButton = this.doc.querySelector('[data-action="cancel-translation"]');
@@ -820,6 +853,9 @@
       }
       if (this.exportButton) {
         this.exportButton.addEventListener('click', () => this.openDebugExport());
+      }
+      if (this.troubleshootingButton) {
+        this.troubleshootingButton.addEventListener('click', () => this.openTroubleshooting());
       }
       const openDebugFromStatus = (event) => {
         if (!event) {
@@ -881,19 +917,19 @@
           const authHeaderName = this.proxyHeaderNameInput ? this.proxyHeaderNameInput.value || 'X-NT-Token' : 'X-NT-Token';
           const persistToken = this.proxyTokenPersistCheckbox ? this.proxyTokenPersistCheckbox.checked === true : false;
           this.ui.saveProxyConfig({ baseUrl, authToken, projectId, authHeaderName, persistToken });
-          this._setConnectionStatus('Proxy конфиг отправлен в BG');
+          this._setConnectionStatus('Proxy Р С”Р С•Р Р…РЎвЂћР С‘Р С– Р С•РЎвЂљР С—РЎР‚Р В°Р Р†Р В»Р ВµР Р… Р Р† BG');
         });
       }
       if (this.proxyClearButton) {
         this.proxyClearButton.addEventListener('click', () => {
           this.ui.clearProxyConfig();
-          this._setConnectionStatus('Proxy конфиг очищается...');
+          this._setConnectionStatus('Proxy Р С”Р С•Р Р…РЎвЂћР С‘Р С– Р С•РЎвЂЎР С‘РЎвЂ°Р В°Р ВµРЎвЂљРЎРѓРЎРЏ...');
         });
       }
       if (this.testConnectionButton) {
         this.testConnectionButton.addEventListener('click', () => {
           this.ui.testConnection();
-          this._setConnectionTestStatus('Проверка подключения...');
+          this._setConnectionTestStatus('Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С”Р В° Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘РЎРЏ...');
         });
       }
 
@@ -901,7 +937,7 @@
         this.byokSaveSessionButton.addEventListener('click', () => {
           const key = this.byokKeyInput ? this.byokKeyInput.value || '' : '';
           this.ui.saveByokKey({ key, persist: false });
-          this._setConnectionStatus('BYOK ключ сохранён в сессию');
+          this._setConnectionStatus('BYOK Р С”Р В»РЎР‹РЎвЂЎ РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… Р Р† РЎРѓР ВµРЎРѓРЎРѓР С‘РЎР‹');
         });
       }
       if (this.byokSaveButton) {
@@ -910,11 +946,11 @@
           const persist = this.byokPersistCheckbox ? this.byokPersistCheckbox.checked === true : false;
           const confirmed = this.byokPersistConfirmCheckbox ? this.byokPersistConfirmCheckbox.checked === true : false;
           if (persist && !confirmed) {
-            this._setConnectionStatus('Подтвердите риск постоянного хранения ключа');
+            this._setConnectionStatus('Р СџР С•Р Т‘РЎвЂљР Р†Р ВµРЎР‚Р Т‘Р С‘РЎвЂљР Вµ РЎР‚Р С‘РЎРѓР С” Р С—Р С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р Р…Р С•Р С–Р С• РЎвЂ¦РЎР‚Р В°Р Р…Р ВµР Р…Р С‘РЎРЏ Р С”Р В»РЎР‹РЎвЂЎР В°');
             return;
           }
           this.ui.saveByokKey({ key, persist });
-          this._setConnectionStatus(persist ? 'BYOK ключ сохранён постоянно' : 'BYOK ключ сохранён в сессию');
+          this._setConnectionStatus(persist ? 'BYOK Р С”Р В»РЎР‹РЎвЂЎ РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… Р С—Р С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р Р…Р С•' : 'BYOK Р С”Р В»РЎР‹РЎвЂЎ РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… Р Р† РЎРѓР ВµРЎРѓРЎРѓР С‘РЎР‹');
         });
       }
       if (this.byokClearButton) {
@@ -923,7 +959,7 @@
           if (this.byokKeyInput) {
             this.byokKeyInput.value = '';
           }
-          this._setConnectionStatus('BYOK ключ очищается...');
+          this._setConnectionStatus('BYOK Р С”Р В»РЎР‹РЎвЂЎ Р С•РЎвЂЎР С‘РЎвЂ°Р В°Р ВµРЎвЂљРЎРѓРЎРЏ...');
         });
       }
       if (this.byokPersistCheckbox) {
@@ -1167,7 +1203,7 @@
             tabId: this.activeTabId,
             jobId: this.state.translationJob && this.state.translationJob.id ? this.state.translationJob.id : null,
             proposalId: proposal.id,
-            reason: 'Отклонено пользователем из popup'
+            reason: 'Р С›РЎвЂљР С”Р В»Р С•Р Р…Р ВµР Р…Р С• Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР С Р С‘Р В· popup'
           });
         });
       }
@@ -1344,7 +1380,7 @@
       if (this.categoryChooserList) {
         this.categoryChooserList.addEventListener('change', (event) => {
           const target = event.target;
-          if (!target || target.type !== 'checkbox') {
+          if (!target || target.type !== 'checkbox' || target.disabled) {
             return;
           }
           const list = new Set(this.state.categorySelectionDraft || []);
@@ -1356,6 +1392,10 @@
           this.state.categorySelectionDraft = this.normalizeCategoryList(Array.from(list));
           this.updateActionButtons();
         });
+      }
+
+      if (this.reclassifyForceButton) {
+        this.reclassifyForceButton.addEventListener('click', () => this.reclassifyBlocks({ force: true }));
       }
 
       if (this.displayModeSelect) {
@@ -1614,9 +1654,9 @@
       if (patch && patch.type === settingsResultType && patch.ok === false) {
         const message = patch.error && patch.error.message
           ? patch.error.message
-          : 'Ошибка сохранения настроек';
+          : 'Р С›РЎв‚¬Р С‘Р В±Р С”Р В° РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…Р ВµР Р…Р С‘РЎРЏ Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР С”';
         if (this.statusTrace) {
-          this.statusTrace.textContent = `Ошибка настроек: ${message}`;
+          this.statusTrace.textContent = `Р С›РЎв‚¬Р С‘Р В±Р С”Р В° Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР С”: ${message}`;
         }
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'security')) {
@@ -1839,10 +1879,18 @@
         const jobId = this.state.translationJob && this.state.translationJob.id
           ? this.state.translationJob.id
           : null;
+        const status = this.state.translationJob && typeof this.state.translationJob.status === 'string'
+          ? this.state.translationJob.status
+          : '';
+        const mode = status === 'awaiting_categories' ? 'replace' : 'add';
         this.ui.sendUiCommand(command, {
           tabId: this.activeTabId,
           jobId,
-          categories
+          categories,
+          mode,
+          reason: mode === 'replace'
+            ? 'popup_start_selected_categories'
+            : 'popup_additional_categories'
         });
         return;
       }
@@ -1851,6 +1899,24 @@
         : 'START_TRANSLATION';
       this.ui.sendUiCommand(command, {
         tabId: this.activeTabId
+      });
+    }
+
+    async reclassifyBlocks({ force = true } = {}) {
+      if (this.activeTabId === null) {
+        return;
+      }
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.RECLASSIFY_BLOCKS
+        : 'RECLASSIFY_BLOCKS';
+      const jobId = this.state.translationJob && this.state.translationJob.id
+        ? this.state.translationJob.id
+        : null;
+      this.ui.sendUiCommand(command, {
+        tabId: this.activeTabId,
+        jobId,
+        force: force === true
       });
     }
 
@@ -1896,7 +1962,7 @@
       }
       this.ui.sendUiCommand(command, payload);
       if (this.statusTrace) {
-        this.statusTrace.textContent = 'Запрос вычитки отправлен. План обновится после подтверждения BG.';
+        this.statusTrace.textContent = 'Р вЂ”Р В°Р С—РЎР‚Р С•РЎРѓ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘ Р С•РЎвЂљР С—РЎР‚Р В°Р Р†Р В»Р ВµР Р…. Р СџР В»Р В°Р Р… Р С•Р В±Р Р…Р С•Р Р†Р С‘РЎвЂљРЎРѓРЎРЏ Р С—Р С•РЎРѓР В»Р Вµ Р С—Р С•Р Т‘РЎвЂљР Р†Р ВµРЎР‚Р В¶Р Т‘Р ВµР Р…Р С‘РЎРЏ BG.';
       }
     }
 
@@ -1922,7 +1988,7 @@
         action: action === 'literal' ? 'literal' : 'style_improve'
       });
       if (this.statusTrace) {
-        this.statusTrace.textContent = `Запрос действия по блоку ${id} отправлен.`;
+        this.statusTrace.textContent = `Р вЂ”Р В°Р С—РЎР‚Р С•РЎРѓ Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘РЎРЏ Р С—Р С• Р В±Р В»Р С•Р С”РЎС“ ${id} Р С•РЎвЂљР С—РЎР‚Р В°Р Р†Р В»Р ВµР Р….`;
       }
     }
 
@@ -1963,12 +2029,12 @@
         scope: 'page'
       });
       if (this.memoryRestoreStats) {
-        this.memoryRestoreStats.textContent = 'Память страницы очищается...';
+        this.memoryRestoreStats.textContent = 'Р СџР В°Р СРЎРЏРЎвЂљРЎРЉ РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р С•РЎвЂЎР С‘РЎвЂ°Р В°Р ВµРЎвЂљРЎРѓРЎРЏ...';
       }
     }
 
     eraseAllMemory() {
-      const confirmed = global.confirm ? global.confirm('Стереть всю память перевода? Это действие нельзя отменить.') : true;
+      const confirmed = global.confirm ? global.confirm('Р РЋРЎвЂљР ВµРЎР‚Р ВµРЎвЂљРЎРЉ Р Р†РЎРѓРЎР‹ Р С—Р В°Р СРЎРЏРЎвЂљРЎРЉ Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В°? Р В­РЎвЂљР С• Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘Р Вµ Р Р…Р ВµР В»РЎРЉР В·РЎРЏ Р С•РЎвЂљР СР ВµР Р…Р С‘РЎвЂљРЎРЉ.') : true;
       if (!confirmed) {
         return;
       }
@@ -1980,7 +2046,7 @@
         scope: 'all'
       });
       if (this.memoryRestoreStats) {
-        this.memoryRestoreStats.textContent = 'Вся память очищается...';
+        this.memoryRestoreStats.textContent = 'Р вЂ™РЎРѓРЎРЏ Р С—Р В°Р СРЎРЏРЎвЂљРЎРЉ Р С•РЎвЂЎР С‘РЎвЂ°Р В°Р ВµРЎвЂљРЎРѓРЎРЏ...';
       }
     }
 
@@ -1999,6 +2065,73 @@
         url: tab && tab.url ? tab.url : '',
         section: 'export'
       });
+    }
+
+    async openTroubleshooting() {
+      let tab = null;
+      try {
+        tab = await this.ui.getActiveTab();
+      } catch (_) {
+        tab = null;
+      }
+      if (this.ui && typeof this.ui.openDebug === 'function' && tab && Number.isFinite(Number(tab.id))) {
+        this.ui.openDebug({
+          tabId: tab.id,
+          url: tab && tab.url ? tab.url : '',
+          section: 'troubleshooting'
+        });
+        return;
+      }
+      const hint = this._buildStartTroubleshootingHint();
+      if (this.statusText) {
+        this.statusText.textContent = hint;
+        this.statusText.setAttribute('title', hint);
+      }
+    }
+
+    _buildStartTroubleshootingHint() {
+      if (!this.state.translationPipelineEnabled) {
+        return 'Перевод отключён: включите pipeline в настройках.';
+      }
+      if (this.activeTabId === null) {
+        return 'Нет активной вкладки для запуска перевода.';
+      }
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      if (job && job.classificationStale === true) {
+        return 'DOM изменился: выполните Reclassify (force), затем выберите категории.';
+      }
+      if (job && job.status === 'awaiting_categories') {
+        return 'План готов: выберите категории и нажмите запуск перевода.';
+      }
+      const security = this.state.security && typeof this.state.security === 'object'
+        ? this.state.security
+        : {};
+      const credentials = security.credentials && typeof security.credentials === 'object'
+        ? security.credentials
+        : null;
+      const mode = credentials && credentials.mode === 'BYOK' ? 'BYOK' : 'PROXY';
+      const proxy = credentials && credentials.proxy && typeof credentials.proxy === 'object'
+        ? credentials.proxy
+        : {};
+      if (mode === 'BYOK' && (!credentials || credentials.hasByokKey !== true)) {
+        return 'BYOK ключ не настроен: сохраните ключ и проверьте подключение.';
+      }
+      const proxyBaseUrl = proxy && typeof proxy.baseUrl === 'string' ? proxy.baseUrl.trim() : '';
+      if (mode === 'PROXY' && !proxyBaseUrl) {
+        return 'Proxy URL не задан: заполните Proxy URL и выполните Test connection.';
+      }
+      if (security.lastConnectionTest && security.lastConnectionTest.ok === false) {
+        const testError = security.lastConnectionTest.error && security.lastConnectionTest.error.code
+          ? security.lastConnectionTest.error.code
+          : 'FAILED';
+        return `Проверка подключения не пройдена (${testError}).`;
+      }
+      if (this.state.lastError && this.state.lastError.message) {
+        return `Последняя ошибка: ${this._truncateStatusText(this.state.lastError.message, 120)}`;
+      }
+      return 'Откройте debug -> Troubleshooting и Events (level=error) для детального разбора.';
     }
 
     normalizeAgentProfile(value) {
@@ -2020,24 +2153,24 @@
 
     _profileLabel(profile) {
       if (profile === 'fast') {
-        return 'быстрый';
+        return 'Р В±РЎвЂ№РЎРѓРЎвЂљРЎР‚РЎвЂ№Р в„–';
       }
       if (profile === 'balanced') {
-        return 'сбаланс.';
+        return 'РЎРѓР В±Р В°Р В»Р В°Р Р…РЎРѓ.';
       }
       if (profile === 'bulk') {
-        return 'массовый';
+        return 'Р СР В°РЎРѓРЎРѓР С•Р Р†РЎвЂ№Р в„–';
       }
       if (profile === 'accurate') {
-        return 'точный';
+        return 'РЎвЂљР С•РЎвЂЎР Р…РЎвЂ№Р в„–';
       }
       if (profile === 'research') {
-        return 'исслед.';
+        return 'Р С‘РЎРѓРЎРѓР В»Р ВµР Т‘.';
       }
       if (profile === 'custom') {
-        return 'кастом';
+        return 'Р С”Р В°РЎРѓРЎвЂљР С•Р С';
       }
-      return 'авто';
+      return 'Р В°Р Р†РЎвЂљР С•';
     }
 
     _toLegacyAgentProfile(profile) {
@@ -2071,59 +2204,59 @@
     _phaseLabel(phase) {
       const raw = String(phase || '').trim().toLowerCase();
       if (raw === 'planned') {
-        return 'план готов';
+        return 'Р С—Р В»Р В°Р Р… Р С–Р С•РЎвЂљР С•Р Р†';
       }
       if (raw === 'running' || raw === 'translating') {
-        return 'в работе';
+        return 'Р Р† РЎР‚Р В°Р В±Р С•РЎвЂљР Вµ';
       }
       if (raw === 'awaiting_categories') {
-        return 'ожидание категорий';
+        return 'Р С•Р В¶Р С‘Р Т‘Р В°Р Р…Р С‘Р Вµ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„–';
       }
       if (raw === 'proofreading') {
-        return 'вычитка';
+        return 'Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р В°';
       }
       if (raw === 'done') {
-        return 'завершено';
+        return 'Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р С•';
       }
       if (raw === 'failed') {
-        return 'ошибка';
+        return 'Р С•РЎв‚¬Р С‘Р В±Р С”Р В°';
       }
       if (raw === 'cache_restore') {
-        return 'восстановление из кэша';
+        return 'Р Р†Р С•РЎРѓРЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘Р Вµ Р С‘Р В· Р С”РЎРЊРЎв‚¬Р В°';
       }
       if (raw === 'idle') {
-        return 'ожидание';
+        return 'Р С•Р В¶Р С‘Р Т‘Р В°Р Р…Р С‘Р Вµ';
       }
-      return phase || '—';
+      return phase || 'РІР‚вЂќ';
     }
 
     _jobStatusLabel(status) {
       const raw = String(status || '').trim().toLowerCase();
       if (raw === 'idle') {
-        return 'ожидание';
+        return 'Р С•Р В¶Р С‘Р Т‘Р В°Р Р…Р С‘Р Вµ';
       }
       if (raw === 'preparing') {
-        return 'подготовка';
+        return 'Р С—Р С•Р Т‘Р С–Р С•РЎвЂљР С•Р Р†Р С”Р В°';
       }
       if (raw === 'awaiting_categories') {
-        return 'выбор категорий';
+        return 'Р Р†РЎвЂ№Р В±Р С•РЎР‚ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„–';
       }
       if (raw === 'running') {
-        return 'выполняется';
+        return 'Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ';
       }
       if (raw === 'completing') {
-        return 'завершение';
+        return 'Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р С‘Р Вµ';
       }
       if (raw === 'done') {
-        return 'готово';
+        return 'Р С–Р С•РЎвЂљР С•Р Р†Р С•';
       }
       if (raw === 'failed') {
-        return 'ошибка';
+        return 'Р С•РЎв‚¬Р С‘Р В±Р С”Р В°';
       }
       if (raw === 'cancelled') {
-        return 'отменено';
+        return 'Р С•РЎвЂљР СР ВµР Р…Р ВµР Р…Р С•';
       }
-      return status || '—';
+      return status || 'РІР‚вЂќ';
     }
 
     normalizeAgentModelPolicy(input, fallbackSelection) {
@@ -2156,21 +2289,98 @@
     }
 
     normalizeCategoryList(input) {
-      const allowed = new Set(CATEGORY_OPTIONS.map((item) => item.id));
       if (!Array.isArray(input)) {
         return [];
       }
+      const allowed = new Set(CATEGORY_OPTIONS.map((item) => item.id));
       const seen = new Set();
       const out = [];
       input.forEach((item) => {
         const key = String(item || '').trim().toLowerCase();
-        if (!key || !allowed.has(key) || seen.has(key)) {
+        const isKnown = allowed.has(key);
+        const isDynamic = /^[a-z0-9_.-]{1,64}$/.test(key);
+        if (!key || (!isKnown && !isDynamic) || seen.has(key)) {
           return;
         }
         seen.add(key);
         out.push(key);
       });
       return out;
+    }
+
+    _categoryQuestionOptions() {
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const fromJob = job && job.categoryQuestion && typeof job.categoryQuestion === 'object'
+        ? job.categoryQuestion
+        : null;
+      if (fromJob && Array.isArray(fromJob.options)) {
+        return fromJob.options;
+      }
+      const agent = this.state.agentState && typeof this.state.agentState === 'object'
+        ? this.state.agentState
+        : null;
+      const fromAgent = agent && agent.userQuestion && typeof agent.userQuestion === 'object'
+        ? agent.userQuestion
+        : null;
+      return fromAgent && Array.isArray(fromAgent.options) ? fromAgent.options : [];
+    }
+
+    _categoryQuestionOptionById(category) {
+      const key = typeof category === 'string' ? category.trim().toLowerCase() : '';
+      if (!key) {
+        return null;
+      }
+      const options = this._categoryQuestionOptions();
+      for (let i = 0; i < options.length; i += 1) {
+        const item = options[i];
+        if (!item || typeof item !== 'object') {
+          continue;
+        }
+        const id = String(item.id || '').trim().toLowerCase();
+        if (id && id === key) {
+          return item;
+        }
+      }
+      return null;
+    }
+
+    _categoryOptionById(category) {
+      const key = typeof category === 'string' ? category.trim().toLowerCase() : '';
+      if (!key) {
+        return null;
+      }
+      const fromQuestion = this._categoryQuestionOptionById(key);
+      if (fromQuestion) {
+        return {
+          id: key,
+          label: typeof fromQuestion.titleRu === 'string' && fromQuestion.titleRu.trim()
+            ? fromQuestion.titleRu.trim()
+            : key,
+          hint: typeof fromQuestion.descriptionRu === 'string' ? fromQuestion.descriptionRu.trim() : ''
+        };
+      }
+      const known = CATEGORY_OPTIONS.find((item) => item.id === key) || null;
+      if (!known) {
+        return null;
+      }
+      return {
+        ...known,
+        hint: Object.prototype.hasOwnProperty.call(CATEGORY_HINTS, key) ? CATEGORY_HINTS[key] : ''
+      };
+    }
+
+    _categoryLabel(category) {
+      const option = this._categoryOptionById(category);
+      return option && typeof option.label === 'string' && option.label.trim()
+        ? option.label.trim()
+        : String(category || '').trim();
+    }
+
+    _categoryHint(category) {
+      const option = this._categoryOptionById(category);
+      return option && typeof option.hint === 'string' ? option.hint : '';
     }
 
     normalizeAgentTools(input) {
@@ -2418,9 +2628,9 @@
           : null);
       if (this.memoryRestoreStats) {
         if (memoryRestore && Number.isFinite(Number(memoryRestore.restoredCount)) && Number(memoryRestore.restoredCount) > 0) {
-          this.memoryRestoreStats.textContent = `Память: восстановлено ${Number(memoryRestore.restoredCount)} блоков (${memoryRestore.matchType || 'match'})`;
+          this.memoryRestoreStats.textContent = `Р СџР В°Р СРЎРЏРЎвЂљРЎРЉ: Р Р†Р С•РЎРѓРЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С• ${Number(memoryRestore.restoredCount)} Р В±Р В»Р С•Р С”Р С•Р Р† (${memoryRestore.matchType || 'match'})`;
         } else {
-          this.memoryRestoreStats.textContent = 'Память: данных восстановления пока нет';
+          this.memoryRestoreStats.textContent = 'Р СџР В°Р СРЎРЏРЎвЂљРЎРЉ: Р Т‘Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦ Р Р†Р С•РЎРѓРЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎРЏ Р С—Р С•Р С”Р В° Р Р…Р ВµРЎвЂљ';
         }
       }
       this.renderToolControls();
@@ -2465,28 +2675,28 @@
           : null);
       if (this.autoTuneLastDecision) {
         if (!autoTune) {
-          this.autoTuneLastDecision.textContent = 'Нет данных для текущей задачи';
+          this.autoTuneLastDecision.textContent = 'Р СњР ВµРЎвЂљ Р Т‘Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦ Р Т‘Р В»РЎРЏ РЎвЂљР ВµР С”РЎС“РЎвЂ°Р ВµР в„– Р В·Р В°Р Т‘Р В°РЎвЂЎР С‘';
         } else {
           const mode = autoTune.mode === 'ask_user' ? 'ask_user' : 'auto_apply';
-          const stage = lastDecision && lastDecision.stage ? String(lastDecision.stage) : '—';
+          const stage = lastDecision && lastDecision.stage ? String(lastDecision.stage) : 'РІР‚вЂќ';
           const when = lastDecision && Number.isFinite(Number(lastDecision.ts))
             ? this._formatTimestamp(Number(lastDecision.ts))
-            : '—';
+            : 'РІР‚вЂќ';
           const summary = lastDecision && Array.isArray(lastDecision.patchSummary) && lastDecision.patchSummary.length
             ? lastDecision.patchSummary.slice(0, 4).join(', ')
-            : '—';
+            : 'РІР‚вЂќ';
           this.autoTuneLastDecision.textContent = `mode=${mode} | stage=${stage} | when=${when} | ${summary}`;
         }
       }
       if (this.autoTunePendingDiff) {
         this.autoTunePendingDiff.textContent = pending && pending.diffSummary
           ? pending.diffSummary
-          : 'Ожидающих proposals нет';
+          : 'Р С›Р В¶Р С‘Р Т‘Р В°РЎР‹РЎвЂ°Р С‘РЎвЂ¦ proposals Р Р…Р ВµРЎвЂљ';
       }
       if (this.autoTunePendingReason) {
         this.autoTunePendingReason.textContent = pending && pending.reason && pending.reason.short
           ? String(pending.reason.short)
-          : '—';
+          : 'РІР‚вЂќ';
       }
       const canAct = Boolean(pending && pending.id);
       if (this.autoTuneApplyButton) {
@@ -2514,28 +2724,114 @@
       this.categoryChooserSection.hidden = !visible;
       if (!visible) {
         this.categoryChooserList.innerHTML = '';
+        if (this.reclassifyForceButton) {
+          this.reclassifyForceButton.disabled = true;
+        }
         return;
       }
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const stale = Boolean(job && job.classificationStale === true);
       const available = this._currentAvailableCategories();
-      const selected = new Set(this._currentCategoryDraft());
+      const draftSet = new Set(this._currentCategoryDraft());
+      const selectedSet = new Set(this._currentSelectedCategories());
+      const counts = this._currentCategoryCounts();
+      const recommendations = this._currentCategoryRecommendations();
+      const recommended = recommendations && Array.isArray(recommendations.recommended)
+        ? this.normalizeCategoryList(recommendations.recommended).filter((category) => available.includes(category))
+        : [];
+      const optional = recommendations && Array.isArray(recommendations.optional)
+        ? this.normalizeCategoryList(recommendations.optional).filter((category) => available.includes(category))
+        : [];
+      const excluded = recommendations && Array.isArray(recommendations.excluded)
+        ? this.normalizeCategoryList(recommendations.excluded).filter((category) => available.includes(category))
+        : [];
       this.categoryChooserHint.textContent = this._categoryChooserHintText();
       this.categoryChooserList.innerHTML = '';
+      if (this.reclassifyForceButton) {
+        this.reclassifyForceButton.disabled = !job;
+      }
+
+      const recommendedSet = new Set(recommended);
+      const optionalSet = new Set(optional.filter((category) => !recommendedSet.has(category)));
+      const excludedSet = new Set(excluded.filter((category) => !recommendedSet.has(category) && !optionalSet.has(category)));
       available.forEach((category) => {
-        const option = CATEGORY_OPTIONS.find((item) => item.id === category) || { id: category, label: category };
-        const label = this.doc.createElement('label');
-        label.className = 'popup__checkbox';
+        if (!recommendedSet.has(category) && !optionalSet.has(category) && !excludedSet.has(category)) {
+          optionalSet.add(category);
+        }
+      });
 
-        const input = this.doc.createElement('input');
-        input.type = 'checkbox';
-        input.value = option.id;
-        input.checked = selected.has(option.id);
+      const groups = [
+        {
+          key: 'recommended',
+          title: 'Recommended',
+          muted: false,
+          categories: Array.from(recommendedSet)
+        },
+        {
+          key: 'optional',
+          title: 'Optional',
+          muted: false,
+          categories: Array.from(optionalSet)
+        },
+        {
+          key: 'excluded',
+          title: 'Excluded',
+          muted: true,
+          categories: Array.from(excludedSet)
+        }
+      ];
 
-        const text = this.doc.createElement('span');
-        text.textContent = option.label;
+      groups.forEach((group) => {
+        if (!Array.isArray(group.categories) || !group.categories.length) {
+          return;
+        }
+        const groupRoot = this.doc.createElement('section');
+        groupRoot.className = 'popup__category-group';
 
-        label.appendChild(input);
-        label.appendChild(text);
-        this.categoryChooserList.appendChild(label);
+        const header = this.doc.createElement('div');
+        header.className = 'popup__category-group-title';
+        header.textContent = `${group.title} (${group.categories.length})`;
+        groupRoot.appendChild(header);
+
+        group.categories.forEach((category) => {
+          const label = this.doc.createElement('label');
+          label.className = `popup__checkbox${group.muted ? ' popup__checkbox--muted' : ''}`;
+          const hint = this._categoryHint(category);
+          if (hint) {
+            label.setAttribute('title', hint);
+          }
+
+          const input = this.doc.createElement('input');
+          input.type = 'checkbox';
+          input.value = category;
+          input.checked = draftSet.has(category);
+          if (group.muted || stale) {
+            input.disabled = true;
+            if (group.key === 'excluded') {
+              input.checked = selectedSet.has(category);
+            }
+          }
+
+          const text = this.doc.createElement('span');
+          text.className = 'popup__checkbox-text';
+
+          const name = this.doc.createElement('span');
+          name.textContent = this._categoryLabel(category) || category;
+          text.appendChild(name);
+
+          const chip = this.doc.createElement('span');
+          chip.className = 'popup__category-chip';
+          chip.textContent = String(Number.isFinite(Number(counts[category])) ? Number(counts[category]) : 0);
+          text.appendChild(chip);
+
+          label.appendChild(input);
+          label.appendChild(text);
+          groupRoot.appendChild(label);
+        });
+
+        this.categoryChooserList.appendChild(groupRoot);
       });
     }
 
@@ -2584,40 +2880,40 @@
 
     _categoryModeLabel(mode) {
       if (mode === 'auto') {
-        return 'авто';
+        return 'Р В°Р Р†РЎвЂљР С•';
       }
       if (mode === 'content') {
-        return 'контент';
+        return 'Р С”Р С•Р Р…РЎвЂљР ВµР Р…РЎвЂљ';
       }
       if (mode === 'interface') {
-        return 'интерфейс';
+        return 'Р С‘Р Р…РЎвЂљР ВµРЎР‚РЎвЂћР ВµР в„–РЎРѓ';
       }
       if (mode === 'meta') {
-        return 'мета';
+        return 'Р СР ВµРЎвЂљР В°';
       }
       if (mode === 'custom') {
-        return 'кастом';
+        return 'Р С”Р В°РЎРѓРЎвЂљР С•Р С';
       }
-      return 'всё';
+      return 'Р Р†РЎРѓРЎвЂ';
     }
 
     _categoryModeHint(mode) {
       if (mode === 'auto') {
-        return 'Агент автоматически рекомендует категории после анализа страницы.';
+        return 'Р С’Р С–Р ВµР Р…РЎвЂљ Р В°Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘ РЎР‚Р ВµР С”Р С•Р СР ВµР Р…Р Т‘РЎС“Р ВµРЎвЂљ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘ Р С—Р С•РЎРѓР В»Р Вµ Р В°Р Р…Р В°Р В»Р С‘Р В·Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№.';
       }
       if (mode === 'content') {
-        return 'Будут выбраны контентные категории: заголовки, абзацы, списки, таблицы, цитаты и код.';
+        return 'Р вЂРЎС“Р Т‘РЎС“РЎвЂљ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…РЎвЂ№ Р С”Р С•Р Р…РЎвЂљР ВµР Р…РЎвЂљР Р…РЎвЂ№Р Вµ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘: Р В·Р В°Р С–Р С•Р В»Р С•Р Р†Р С”Р С‘, Р В°Р В±Р В·Р В°РЎвЂ РЎвЂ№, РЎРѓР С—Р С‘РЎРѓР С”Р С‘, РЎвЂљР В°Р В±Р В»Р С‘РЎвЂ РЎвЂ№, РЎвЂ Р С‘РЎвЂљР В°РЎвЂљРЎвЂ№ Р С‘ Р С”Р С•Р Т‘.';
       }
       if (mode === 'interface') {
-        return 'Будут выбраны UI-категории: кнопки, подписи и навигация.';
+        return 'Р вЂРЎС“Р Т‘РЎС“РЎвЂљ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…РЎвЂ№ UI-Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘: Р С”Р Р…Р С•Р С—Р С”Р С‘, Р С—Р С•Р Т‘Р С—Р С‘РЎРѓР С‘ Р С‘ Р Р…Р В°Р Р†Р С‘Р С–Р В°РЎвЂ Р С‘РЎРЏ.';
       }
       if (mode === 'meta') {
-        return 'Будет выбрана только meta-категория.';
+        return 'Р вЂРЎС“Р Т‘Р ВµРЎвЂљ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…Р В° РЎвЂљР С•Р В»РЎРЉР С”Р С• meta-Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ.';
       }
       if (mode === 'custom') {
-        return 'Выберите собственный набор категорий (можно изменить в любой момент).';
+        return 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎРѓР С•Р В±РЎРѓРЎвЂљР Р†Р ВµР Р…Р Р…РЎвЂ№Р в„– Р Р…Р В°Р В±Р С•РЎР‚ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„– (Р СР С•Р В¶Р Р…Р С• Р С‘Р В·Р СР ВµР Р…Р С‘РЎвЂљРЎРЉ Р Р† Р В»РЎР‹Р В±Р С•Р в„– Р СР С•Р СР ВµР Р…РЎвЂљ).';
       }
-      return 'Будут выбраны все категории, обнаруженные на странице.';
+      return 'Р вЂРЎС“Р Т‘РЎС“РЎвЂљ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…РЎвЂ№ Р Р†РЎРѓР Вµ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘, Р С•Р В±Р Р…Р В°РЎР‚РЎС“Р В¶Р ВµР Р…Р Р…РЎвЂ№Р Вµ Р Р…Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р Вµ.';
     }
 
     renderToolControls() {
@@ -2644,10 +2940,10 @@
           const opt = this.doc.createElement('option');
           opt.value = mode;
           opt.textContent = mode === 'on'
-            ? 'ВКЛ'
+            ? 'Р вЂ™Р С™Р вЂє'
             : mode === 'off'
-              ? 'ВЫКЛ'
-              : 'АВТО';
+              ? 'Р вЂ™Р В«Р С™Р вЂє'
+              : 'Р С’Р вЂ™Р СћР С›';
           select.appendChild(opt);
         });
         select.value = this.state.translationAgentTools[tool.key] || 'auto';
@@ -2666,10 +2962,10 @@
       const policy = this.normalizeAgentModelPolicy(this.state.translationAgentModelPolicy, this.state.modelSelection);
       const tuning = this.normalizeAgentTuning(this.state.translationAgentTuning);
       const preferenceLabel = policy.preference === 'smartest'
-        ? 'умные'
+        ? 'РЎС“Р СР Р…РЎвЂ№Р Вµ'
         : policy.preference === 'cheapest'
-          ? 'дешёвые'
-          : 'без';
+          ? 'Р Т‘Р ВµРЎв‚¬РЎвЂР Р†РЎвЂ№Р Вµ'
+          : 'Р В±Р ВµР В·';
       const toolValues = Object.values(this.state.translationAgentTools || {});
       const autoTools = toolValues.filter((value) => value === 'auto').length;
       const onTools = toolValues.filter((value) => value === 'on').length;
@@ -2678,40 +2974,40 @@
       const customCount = this.normalizeCategoryList(this.state.translationCategoryList).length;
       const entries = [
         {
-          text: `Профиль: ${this._profileLabel(profile)}`,
-          title: 'Текущий профиль поведения переводчика-агента'
+          text: `Р СџРЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ: ${this._profileLabel(profile)}`,
+          title: 'Р СћР ВµР С”РЎС“РЎвЂ°Р С‘Р в„– Р С—РЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ Р С—Р С•Р Р†Р ВµР Т‘Р ВµР Р…Р С‘РЎРЏ Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘РЎвЂЎР С‘Р С”Р В°-Р В°Р С–Р ВµР Р…РЎвЂљР В°'
         },
         {
-          text: `Пайплайн: ${this.state.translationPipelineEnabled ? 'вкл' : 'выкл'}`,
-          title: 'Глобальное состояние запуска переводческого пайплайна'
+          text: `Р СџР В°Р в„–Р С—Р В»Р В°Р в„–Р Р…: ${this.state.translationPipelineEnabled ? 'Р Р†Р С”Р В»' : 'Р Р†РЎвЂ№Р С”Р В»'}`,
+          title: 'Р вЂњР В»Р С•Р В±Р В°Р В»РЎРЉР Р…Р С•Р Вµ РЎРѓР С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р С‘Р Вµ Р В·Р В°Р С—РЎС“РЎРѓР С”Р В° Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘РЎвЂЎР ВµРЎРѓР С”Р С•Р С–Р С• Р С—Р В°Р в„–Р С—Р В»Р В°Р в„–Р Р…Р В°'
         },
         {
-          text: `Категории: ${this._categoryModeLabel(categoryMode)}${categoryMode === 'custom' ? ` (${customCount})` : ''}`,
-          title: 'Базовая стратегия выбора категорий до первого планирования'
+          text: `Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘: ${this._categoryModeLabel(categoryMode)}${categoryMode === 'custom' ? ` (${customCount})` : ''}`,
+          title: 'Р вЂР В°Р В·Р С•Р Р†Р В°РЎРЏ РЎРѓРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘РЎРЏ Р Р†РЎвЂ№Р В±Р С•РЎР‚Р В° Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„– Р Т‘Р С• Р С—Р ВµРЎР‚Р Р†Р С•Р С–Р С• Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘РЎРЏ'
         },
         {
-          text: `Модели: ${policy.mode === 'fixed' ? 'фикс.' : 'авто'}/${preferenceLabel}`,
-          title: 'Активная модельная политика агента'
+          text: `Р СљР С•Р Т‘Р ВµР В»Р С‘: ${policy.mode === 'fixed' ? 'РЎвЂћР С‘Р С”РЎРѓ.' : 'Р В°Р Р†РЎвЂљР С•'}/${preferenceLabel}`,
+          title: 'Р С’Р С”РЎвЂљР С‘Р Р†Р Р…Р В°РЎРЏ Р СР С•Р Т‘Р ВµР В»РЎРЉР Р…Р В°РЎРЏ Р С—Р С•Р В»Р С‘РЎвЂљР С‘Р С”Р В° Р В°Р С–Р ВµР Р…РЎвЂљР В°'
         },
         {
-          text: `Маршрут: ${policy.allowRouteOverride ? 'вкл' : 'выкл'}`,
-          title: 'Разрешено ли агенту форсировать fast/strong маршрут'
+          text: `Р СљР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљ: ${policy.allowRouteOverride ? 'Р Р†Р С”Р В»' : 'Р Р†РЎвЂ№Р С”Р В»'}`,
+          title: 'Р В Р В°Р В·РЎР‚Р ВµРЎв‚¬Р ВµР Р…Р С• Р В»Р С‘ Р В°Р С–Р ВµР Р…РЎвЂљРЎС“ РЎвЂћР С•РЎР‚РЎРѓР С‘РЎР‚Р С•Р Р†Р В°РЎвЂљРЎРЉ fast/strong Р СР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљ'
         },
         {
-          text: `Инстр.: auto=${autoTools} on=${onTools} off=${offTools}`,
-          title: 'Распределение режимов инструментов агента'
+          text: `Р ВР Р…РЎРѓРЎвЂљРЎР‚.: auto=${autoTools} on=${onTools} off=${offTools}`,
+          title: 'Р В Р В°РЎРѓР С—РЎР‚Р ВµР Т‘Р ВµР В»Р ВµР Р…Р С‘Р Вµ РЎР‚Р ВµР В¶Р С‘Р СР С•Р Р† Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР С•Р Р† Р В°Р С–Р ВµР Р…РЎвЂљР В°'
         },
         {
-          text: `Планер: t=${tuning.plannerTemperature} tok=${tuning.plannerMaxOutputTokens}`,
-          title: 'Текущие параметры шага планирования'
+          text: `Р СџР В»Р В°Р Р…Р ВµРЎР‚: t=${tuning.plannerTemperature} tok=${tuning.plannerMaxOutputTokens}`,
+          title: 'Р СћР ВµР С”РЎС“РЎвЂ°Р С‘Р Вµ Р С—Р В°РЎР‚Р В°Р СР ВµРЎвЂљРЎР‚РЎвЂ№ РЎв‚¬Р В°Р С–Р В° Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘РЎРЏ'
         },
         {
-          text: `Аудит: ${tuning.auditIntervalMs}/${tuning.mandatoryAuditIntervalMs}мс`,
-          title: 'Обычный и обязательный интервалы аудита'
+          text: `Р С’РЎС“Р Т‘Р С‘РЎвЂљ: ${tuning.auditIntervalMs}/${tuning.mandatoryAuditIntervalMs}Р СРЎРѓ`,
+          title: 'Р С›Р В±РЎвЂ№РЎвЂЎР Р…РЎвЂ№Р в„– Р С‘ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р в„– Р С‘Р Р…РЎвЂљР ВµРЎР‚Р Р†Р В°Р В»РЎвЂ№ Р В°РЎС“Р Т‘Р С‘РЎвЂљР В°'
         },
         {
-          text: `Контекст: ${tuning.compressionThreshold}@${tuning.contextFootprintLimit}`,
-          title: 'Порог автосжатия и лимит размера контекста'
+          text: `Р С™Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљ: ${tuning.compressionThreshold}@${tuning.contextFootprintLimit}`,
+          title: 'Р СџР С•РЎР‚Р С•Р С– Р В°Р Р†РЎвЂљР С•РЎРѓР В¶Р В°РЎвЂљР С‘РЎРЏ Р С‘ Р В»Р С‘Р СР С‘РЎвЂљ РЎР‚Р В°Р В·Р СР ВµРЎР‚Р В° Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В°'
         }
       ];
       this.agentMiniStatuses.innerHTML = '';
@@ -2730,17 +3026,17 @@
       }
       const preview = this.buildAgentProfilePreview();
       const lines = [
-        { label: 'Стиль', value: this._previewValue(preview, 'style') },
-        { label: 'Размер батча', value: this._previewValue(preview, 'maxBatchSize') },
-        { label: 'Проходы вычитки', value: this._previewValue(preview, 'proofreadingPasses') },
-        { label: 'Параллелизм', value: this._previewValue(preview, 'parallelism') },
-        { label: 'Температура планировщика', value: `${preview.tuning.plannerTemperature}` },
-        { label: 'Лимит токенов планировщика', value: `${preview.tuning.plannerMaxOutputTokens}` },
-        { label: 'Интервал аудита', value: `${preview.runtime.auditIntervalMs}мс` },
-        { label: 'Обязательный аудит', value: `${preview.runtime.mandatoryAuditIntervalMs}мс` },
-        { label: 'Порог сжатия', value: `${preview.runtime.compressionThreshold}` },
-        { label: 'Лимит контекста', value: `${preview.runtime.contextFootprintLimit}` },
-        { label: 'Пауза между сжатиями', value: `${preview.runtime.compressionCooldownMs}мс` }
+        { label: 'Р РЋРЎвЂљР С‘Р В»РЎРЉ', value: this._previewValue(preview, 'style') },
+        { label: 'Р В Р В°Р В·Р СР ВµРЎР‚ Р В±Р В°РЎвЂљРЎвЂЎР В°', value: this._previewValue(preview, 'maxBatchSize') },
+        { label: 'Р СџРЎР‚Р С•РЎвЂ¦Р С•Р Т‘РЎвЂ№ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘', value: this._previewValue(preview, 'proofreadingPasses') },
+        { label: 'Р СџР В°РЎР‚Р В°Р В»Р В»Р ВµР В»Р С‘Р В·Р С', value: this._previewValue(preview, 'parallelism') },
+        { label: 'Р СћР ВµР СР С—Р ВµРЎР‚Р В°РЎвЂљРЎС“РЎР‚Р В° Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†РЎвЂ°Р С‘Р С”Р В°', value: `${preview.tuning.plannerTemperature}` },
+        { label: 'Р вЂєР С‘Р СР С‘РЎвЂљ РЎвЂљР С•Р С”Р ВµР Р…Р С•Р Р† Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†РЎвЂ°Р С‘Р С”Р В°', value: `${preview.tuning.plannerMaxOutputTokens}` },
+        { label: 'Р ВР Р…РЎвЂљР ВµРЎР‚Р Р†Р В°Р В» Р В°РЎС“Р Т‘Р С‘РЎвЂљР В°', value: `${preview.runtime.auditIntervalMs}Р СРЎРѓ` },
+        { label: 'Р С›Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р в„– Р В°РЎС“Р Т‘Р С‘РЎвЂљ', value: `${preview.runtime.mandatoryAuditIntervalMs}Р СРЎРѓ` },
+        { label: 'Р СџР С•РЎР‚Р С•Р С– РЎРѓР В¶Р В°РЎвЂљР С‘РЎРЏ', value: `${preview.runtime.compressionThreshold}` },
+        { label: 'Р вЂєР С‘Р СР С‘РЎвЂљ Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В°', value: `${preview.runtime.contextFootprintLimit}` },
+        { label: 'Р СџР В°РЎС“Р В·Р В° Р СР ВµР В¶Р Т‘РЎС“ РЎРѓР В¶Р В°РЎвЂљР С‘РЎРЏР СР С‘', value: `${preview.runtime.compressionCooldownMs}Р СРЎРѓ` }
       ];
       const resolved = preview && preview.resolved && typeof preview.resolved === 'object'
         ? preview.resolved
@@ -2749,12 +3045,12 @@
         const categoryMode = this.normalizeCategoryMode(resolved.categoryMode);
         const categoryList = this.normalizeCategoryList(resolved.categoryList);
         lines.push({
-          label: 'Категории (первичный режим)',
+          label: 'Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘ (Р С—Р ВµРЎР‚Р Р†Р С‘РЎвЂЎР Р…РЎвЂ№Р в„– РЎР‚Р ВµР В¶Р С‘Р С)',
           value: `${this._categoryModeLabel(categoryMode)}${categoryMode === 'custom' ? ` (${categoryList.length})` : ''}`
         });
         lines.push({
-          label: 'Кэш страниц',
-          value: resolved.pageCacheEnabled !== false ? 'вкл' : 'выкл'
+          label: 'Р С™РЎРЊРЎв‚¬ РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ ',
+          value: resolved.pageCacheEnabled !== false ? 'Р Р†Р С”Р В»' : 'Р Р†РЎвЂ№Р С”Р В»'
         });
         const modelPolicy = resolved.modelPolicy && typeof resolved.modelPolicy === 'object'
           ? resolved.modelPolicy
@@ -2766,13 +3062,13 @@
           : 'none';
         const routeOverride = modelPolicy.allowRouteOverride !== false ? 'on' : 'off';
         lines.push({
-          label: 'Политика модели',
+          label: 'Р СџР С•Р В»Р С‘РЎвЂљР С‘Р С”Р В° Р СР С•Р Т‘Р ВµР В»Р С‘',
           value: `${modelMode}, speed=${modelSpeed}, pref=${modelPreference}, routeOverride=${routeOverride}`
         });
         const effectiveTools = this._formatEffectiveToolsPreview(resolved);
         if (effectiveTools) {
           lines.push({
-            label: 'Инструменты (эффективно)',
+            label: 'Р ВР Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљРЎвЂ№ (РЎРЊРЎвЂћРЎвЂћР ВµР С”РЎвЂљР С‘Р Р†Р Р…Р С•)',
             value: effectiveTools
           });
         }
@@ -2808,7 +3104,7 @@
           label: 'Tools (effective)',
           value: Object.keys(toolConfigEffective).length
             ? Object.keys(toolConfigEffective).slice(0, 4).map((key) => `${key}:${toolConfigEffective[key]}`).join(', ')
-            : '—'
+            : 'РІР‚вЂќ'
         });
         lines.push({
           label: 'Models (effective)',
@@ -2819,7 +3115,7 @@
           : {};
         lines.push({
           label: 'Memory (effective)',
-          value: `enabled=${effMemory.enabled !== false ? 'on' : 'off'}, pages=${Number.isFinite(Number(effMemory.maxPages)) ? Number(effMemory.maxPages) : '—'}, blocks=${Number.isFinite(Number(effMemory.maxBlocks)) ? Number(effMemory.maxBlocks) : '—'}, age=${Number.isFinite(Number(effMemory.maxAgeDays)) ? Number(effMemory.maxAgeDays) : '—'}d`
+          value: `enabled=${effMemory.enabled !== false ? 'on' : 'off'}, pages=${Number.isFinite(Number(effMemory.maxPages)) ? Number(effMemory.maxPages) : 'РІР‚вЂќ'}, blocks=${Number.isFinite(Number(effMemory.maxBlocks)) ? Number(effMemory.maxBlocks) : 'РІР‚вЂќ'}, age=${Number.isFinite(Number(effMemory.maxAgeDays)) ? Number(effMemory.maxAgeDays) : 'РІР‚вЂќ'}d`
         });
       }
       const overrides = this.state.settingsOverrides && Array.isArray(this.state.settingsOverrides.changed)
@@ -2827,7 +3123,7 @@
         : [];
       lines.push({
         label: 'Overrides',
-        value: overrides.length ? overrides.slice(0, 6).join(', ') : 'нет'
+        value: overrides.length ? overrides.slice(0, 6).join(', ') : 'Р Р…Р ВµРЎвЂљ'
       });
 
       this.agentProfileImpactRoot.innerHTML = '';
@@ -2959,57 +3255,57 @@
         || (key === 'parallelism' && tuning.parallelismOverride && tuning.parallelismOverride !== 'auto')
       );
       if (isAutoProfile && !hasOverride) {
-        return `адаптивно (база: ${effectiveText})`;
+        return `Р В°Р Т‘Р В°Р С—РЎвЂљР С‘Р Р†Р Р…Р С• (Р В±Р В°Р В·Р В°: ${effectiveText})`;
       }
       return baseText === effectiveText
         ? effectiveText
-        : `${effectiveText} (профиль: ${baseText})`;
+        : `${effectiveText} (Р С—РЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ: ${baseText})`;
     }
 
     _humanizePreviewToken(value) {
       if (value === null || value === undefined) {
-        return 'авто';
+        return 'Р В°Р Р†РЎвЂљР С•';
       }
       const raw = String(value);
       const lower = raw.toLowerCase();
       if (lower === 'auto') {
-        return 'авто';
+        return 'Р В°Р Р†РЎвЂљР С•';
       }
       if (lower === 'balanced') {
-        return 'сбалансированный';
+        return 'РЎРѓР В±Р В°Р В»Р В°Р Р…РЎРѓР С‘РЎР‚Р С•Р Р†Р В°Р Р…Р Р…РЎвЂ№Р в„–';
       }
       if (lower === 'fast') {
-        return 'быстрый';
+        return 'Р В±РЎвЂ№РЎРѓРЎвЂљРЎР‚РЎвЂ№Р в„–';
       }
       if (lower === 'bulk') {
-        return 'массовый';
+        return 'Р СР В°РЎРѓРЎРѓР С•Р Р†РЎвЂ№Р в„–';
       }
       if (lower === 'accurate') {
-        return 'точный';
+        return 'РЎвЂљР С•РЎвЂЎР Р…РЎвЂ№Р в„–';
       }
       if (lower === 'research') {
-        return 'исследовательский';
+        return 'Р С‘РЎРѓРЎРѓР В»Р ВµР Т‘Р С•Р Р†Р В°РЎвЂљР ВµР В»РЎРЉРЎРѓР С”Р С‘Р в„–';
       }
       if (lower === 'custom') {
-        return 'кастом';
+        return 'Р С”Р В°РЎРѓРЎвЂљР С•Р С';
       }
       if (lower === 'literal') {
-        return 'дословный';
+        return 'Р Т‘Р С•РЎРѓР В»Р С•Р Р†Р Р…РЎвЂ№Р в„–';
       }
       if (lower === 'readable') {
-        return 'читабельный';
+        return 'РЎвЂЎР С‘РЎвЂљР В°Р В±Р ВµР В»РЎРЉР Р…РЎвЂ№Р в„–';
       }
       if (lower === 'technical') {
-        return 'технический';
+        return 'РЎвЂљР ВµРЎвЂ¦Р Р…Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„–';
       }
       if (lower === 'low') {
-        return 'низкий';
+        return 'Р Р…Р С‘Р В·Р С”Р С‘Р в„–';
       }
       if (lower === 'mixed') {
-        return 'смешанный';
+        return 'РЎРѓР СР ВµРЎв‚¬Р В°Р Р…Р Р…РЎвЂ№Р в„–';
       }
       if (lower === 'high') {
-        return 'высокий';
+        return 'Р Р†РЎвЂ№РЎРѓР С•Р С”Р С‘Р в„–';
       }
       return raw;
     }
@@ -3027,7 +3323,7 @@
       if (!options.length) {
         const empty = this.doc.createElement('div');
         empty.className = 'popup__models-empty';
-        empty.textContent = 'Нет доступных моделей в реестре';
+        empty.textContent = 'Р СњР ВµРЎвЂљ Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р Р…РЎвЂ№РЎвЂ¦ Р СР С•Р Т‘Р ВµР В»Р ВµР в„– Р Р† РЎР‚Р ВµР ВµРЎРѓРЎвЂљРЎР‚Р Вµ';
         this.modelsRoot.appendChild(empty);
         return;
       }
@@ -3062,19 +3358,19 @@
       if (pricingStats.selectedCount > 0) {
         const totalText = pricingStats.knownCount > 0
           ? this._formatUsdPrice(pricingStats.sum)
-          : 'н/д';
-        pricingSummary.textContent = `Выбрано моделей: ${pricingStats.selectedCount} | Σ цена за 1M токенов: ${totalText}`;
+          : 'Р Р…/Р Т‘';
+        pricingSummary.textContent = `Р вЂ™РЎвЂ№Р В±РЎР‚Р В°Р Р…Р С• Р СР С•Р Т‘Р ВµР В»Р ВµР в„–: ${pricingStats.selectedCount} | РћР€ РЎвЂ Р ВµР Р…Р В° Р В·Р В° 1M РЎвЂљР С•Р С”Р ВµР Р…Р С•Р Р†: ${totalText}`;
       } else {
-        pricingSummary.textContent = 'Выберите модели, чтобы видеть суммарную цену за 1M токенов.';
+        pricingSummary.textContent = 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ Р СР С•Р Т‘Р ВµР В»Р С‘, РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ Р Р†Р С‘Р Т‘Р ВµРЎвЂљРЎРЉ РЎРѓРЎС“Р СР СР В°РЎР‚Р Р…РЎС“РЎР‹ РЎвЂ Р ВµР Р…РЎС“ Р В·Р В° 1M РЎвЂљР С•Р С”Р ВµР Р…Р С•Р Р†.';
       }
-      pricingSummary.setAttribute('title', 'Σ цена = input + output за 1M токенов для выбранных моделей');
+      pricingSummary.setAttribute('title', 'РћР€ РЎвЂ Р ВµР Р…Р В° = input + output Р В·Р В° 1M РЎвЂљР С•Р С”Р ВµР Р…Р С•Р Р† Р Т‘Р В»РЎРЏ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦ Р СР С•Р Т‘Р ВµР В»Р ВµР в„–');
       this.modelsRoot.appendChild(pricingSummary);
 
       const sections = [
-        { key: 'flex', title: 'ГИБКИЕ' },
-        { key: 'standard', title: 'СТАНДАРТНЫЕ' },
-        { key: 'priority', title: 'ПРИОРИТЕТНЫЕ' },
-        { key: 'other', title: 'ПРОЧИЕ' }
+        { key: 'flex', title: 'Р вЂњР ВР вЂР С™Р ВР вЂў' },
+        { key: 'standard', title: 'Р РЋР СћР С’Р СњР вЂќР С’Р В Р СћР СњР В«Р вЂў' },
+        { key: 'priority', title: 'Р СџР В Р ВР С›Р В Р ВР СћР вЂўР СћР СњР В«Р вЂў' },
+        { key: 'other', title: 'Р СџР В Р С›Р В§Р ВР вЂў' }
       ];
 
       let renderedGroupCount = 0;
@@ -3110,7 +3406,7 @@
           text.className = 'popup__model-text';
           const name = this.doc.createElement('span');
           name.className = 'popup__model-name';
-          const safe = Html ? Html.safeText(entry.id, '—') : entry.id;
+          const safe = Html ? Html.safeText(entry.id, 'РІР‚вЂќ') : entry.id;
           name.textContent = safe;
           const price = this.doc.createElement('span');
           price.className = 'popup__model-price';
@@ -3131,7 +3427,7 @@
       if (!renderedGroupCount) {
         const empty = this.doc.createElement('div');
         empty.className = 'popup__models-empty';
-        empty.textContent = 'Нет доступных моделей в реестре';
+        empty.textContent = 'Р СњР ВµРЎвЂљ Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р Р…РЎвЂ№РЎвЂ¦ Р СР С•Р Т‘Р ВµР В»Р ВµР в„– Р Р† РЎР‚Р ВµР ВµРЎРѓРЎвЂљРЎР‚Р Вµ';
         this.modelsRoot.appendChild(empty);
       }
     }
@@ -3196,7 +3492,7 @@
 
     _formatUsdPrice(value) {
       if (!Number.isFinite(Number(value))) {
-        return 'н/д';
+        return 'Р Р…/Р Т‘';
       }
       const numeric = Number(value);
       const abs = Math.abs(numeric);
@@ -3207,33 +3503,33 @@
     _formatModelTotalPriceText(entry) {
       const total = entry && Number.isFinite(Number(entry.sum_1M)) ? Number(entry.sum_1M) : null;
       if (total === null) {
-        return 'Σ 1M: н/д';
+        return 'РћР€ 1M: Р Р…/Р Т‘';
       }
-      return `Σ 1M: ${this._formatUsdPrice(total)}`;
+      return `РћР€ 1M: ${this._formatUsdPrice(total)}`;
     }
 
     _formatModelPriceTooltip(entry) {
       const input = entry && Number.isFinite(Number(entry.inputPrice))
         ? this._formatUsdPrice(Number(entry.inputPrice))
-        : 'н/д';
+        : 'Р Р…/Р Т‘';
       const output = entry && Number.isFinite(Number(entry.outputPrice))
         ? this._formatUsdPrice(Number(entry.outputPrice))
-        : 'н/д';
+        : 'Р Р…/Р Т‘';
       const cached = entry && Number.isFinite(Number(entry.cachedInputPrice))
         ? this._formatUsdPrice(Number(entry.cachedInputPrice))
-        : 'н/д';
-      return `Вход: ${input} / 1M | Выход: ${output} / 1M | Cached input: ${cached} / 1M`;
+        : 'Р Р…/Р Т‘';
+      return `Р вЂ™РЎвЂ¦Р С•Р Т‘: ${input} / 1M | Р вЂ™РЎвЂ№РЎвЂ¦Р С•Р Т‘: ${output} / 1M | Cached input: ${cached} / 1M`;
     }
 
     _setConnectionStatus(text) {
       if (this.credentialsStatus) {
-        this.credentialsStatus.textContent = text || 'Подключение: —';
+        this.credentialsStatus.textContent = text || 'Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘Р Вµ: РІР‚вЂќ';
       }
     }
 
     _setConnectionTestStatus(text) {
       if (this.connectionTestStatus) {
-        this.connectionTestStatus.textContent = text || 'Проверка: —';
+        this.connectionTestStatus.textContent = text || 'Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С”Р В°: РІР‚вЂќ';
       }
     }
 
@@ -3309,12 +3605,12 @@
       const hasProxyToken = proxy && proxy.hasAuthToken === true;
       const proxyBase = typeof proxy.baseUrl === 'string' ? proxy.baseUrl : '';
       this._setConnectionStatus(
-        `Подключение: mode=${mode}, BYOK=${hasByok ? 'configured' : 'empty'}, proxy=${proxyBase || '—'}, token=${hasProxyToken ? 'yes' : 'no'}`
+        `Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘Р Вµ: mode=${mode}, BYOK=${hasByok ? 'configured' : 'empty'}, proxy=${proxyBase || 'РІР‚вЂќ'}, token=${hasProxyToken ? 'yes' : 'no'}`
       );
       if (this.credentialsWarning) {
         this.credentialsWarning.textContent = byokPersisted
-          ? 'Внимание: BYOK ключ сохранён постоянно. Это менее безопасно.'
-          : 'Внимание: BYOK в браузере менее безопасен, чем Proxy режим.';
+          ? 'Р вЂ™Р Р…Р С‘Р СР В°Р Р…Р С‘Р Вµ: BYOK Р С”Р В»РЎР‹РЎвЂЎ РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… Р С—Р С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р Р…Р С•. Р В­РЎвЂљР С• Р СР ВµР Р…Р ВµР Вµ Р В±Р ВµР В·Р С•Р С—Р В°РЎРѓР Р…Р С•.'
+          : 'Р вЂ™Р Р…Р С‘Р СР В°Р Р…Р С‘Р Вµ: BYOK Р Р† Р В±РЎР‚Р В°РЎС“Р В·Р ВµРЎР‚Р Вµ Р СР ВµР Р…Р ВµР Вµ Р В±Р ВµР В·Р С•Р С—Р В°РЎРѓР ВµР Р…, РЎвЂЎР ВµР С Proxy РЎР‚Р ВµР В¶Р С‘Р С.';
       }
 
       const test = security.lastConnectionTest && typeof security.lastConnectionTest === 'object'
@@ -3322,13 +3618,13 @@
         : null;
       if (test) {
         if (test.ok) {
-          this._setConnectionTestStatus(`Проверка: OK (${test.latencyMs} ms, ${test.endpointHost || 'endpoint'})`);
+          this._setConnectionTestStatus(`Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С”Р В°: OK (${test.latencyMs} ms, ${test.endpointHost || 'endpoint'})`);
         } else {
           const errCode = test.error && test.error.code ? test.error.code : 'FAILED';
-          this._setConnectionTestStatus(`Проверка: FAIL (${errCode})`);
+          this._setConnectionTestStatus(`Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С”Р В°: FAIL (${errCode})`);
         }
       } else {
-        this._setConnectionTestStatus('Проверка: —');
+        this._setConnectionTestStatus('Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚Р С”Р В°: РІР‚вЂќ');
       }
     }
 
@@ -3349,21 +3645,21 @@
       this._syncCategoryDraft();
       const job = this.state.translationJob || null;
       const agentState = this.state.agentState || (entry && entry.agentState ? entry.agentState : null);
-      let message = '—';
+      let message = 'РІР‚вЂќ';
       let progress = 0;
       if (job) {
-        message = job.message || job.status || '—';
+        message = job.message || job.status || 'РІР‚вЂќ';
         progress = Number.isFinite(Number(this.state.translationProgress)) ? Number(this.state.translationProgress) : 0;
         if (this.state.failedBlocksCount > 0) {
-          message = `${message} (ошибок: ${this.state.failedBlocksCount})`;
+          message = `${message} (Р С•РЎв‚¬Р С‘Р В±Р С•Р С”: ${this.state.failedBlocksCount})`;
         }
       } else if (entry) {
         progress = typeof entry.progress === 'number'
           ? (Time && typeof Time.clamp === 'function' ? Time.clamp(entry.progress, 0, 100) : Math.max(0, Math.min(100, entry.progress)))
           : 0;
-        message = entry.message || entry.status || '—';
+        message = entry.message || entry.status || 'РІР‚вЂќ';
       } else if (!this.state.translationPipelineEnabled) {
-        message = 'Готов к запуску перевода';
+        message = 'Р вЂњР С•РЎвЂљР С•Р Р† Р С” Р В·Р В°Р С—РЎС“РЎРѓР С”РЎС“ Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В°';
       }
       if (this.state.lastError && this.state.lastError.message) {
         message = `${message} | ${this.state.lastError.message}`;
@@ -3372,13 +3668,13 @@
         this.statusText.textContent = message;
         this.statusText.setAttribute('role', 'button');
         this.statusText.setAttribute('tabindex', '0');
-        this.statusText.setAttribute('title', 'Нажмите, чтобы открыть страницу отладки');
+        this.statusText.setAttribute('title', 'Р СњР В°Р В¶Р СР С‘РЎвЂљР Вµ, РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ Р С•РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљРЎРЉ РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎС“ Р С•РЎвЂљР В»Р В°Р Т‘Р С”Р С‘');
       }
       if (this.statusProgress) {
         this.statusProgress.value = progress;
       }
       if (this.agentStatusText) {
-        const phaseRaw = agentState && agentState.phase ? agentState.phase : '—';
+        const phaseRaw = agentState && agentState.phase ? agentState.phase : 'РІР‚вЂќ';
         const profileRaw = agentState && agentState.profile ? agentState.profile : this.state.translationAgentProfile;
         const phase = this._phaseLabel(phaseRaw);
         const profile = this._profileLabel(this.normalizeAgentProfile(profileRaw));
@@ -3386,13 +3682,13 @@
           ? this.state.selectedCategories.join(', ')
           : (agentState && Array.isArray(agentState.selectedCategories) && agentState.selectedCategories.length
             ? agentState.selectedCategories.join(', ')
-            : '—');
+            : 'РІР‚вЂќ');
         const digest = this._buildAgentDigest(agentState);
         const categoriesText = this._truncateStatusText(categories, 48);
-        this.agentStatusText.textContent = `Агент: ${phase} | профиль=${profile} | кат=${categoriesText}${digest ? ` | ${digest}` : ''}`;
+        this.agentStatusText.textContent = `Р С’Р С–Р ВµР Р…РЎвЂљ: ${phase} | Р С—РЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ=${profile} | Р С”Р В°РЎвЂљ=${categoriesText}${digest ? ` | ${digest}` : ''}`;
         this.agentStatusText.setAttribute('role', 'button');
         this.agentStatusText.setAttribute('tabindex', '0');
-        this.agentStatusText.setAttribute('title', 'Нажмите, чтобы открыть страницу отладки');
+        this.agentStatusText.setAttribute('title', 'Р СњР В°Р В¶Р СР С‘РЎвЂљР Вµ, РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ Р С•РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљРЎРЉ РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎС“ Р С•РЎвЂљР В»Р В°Р Т‘Р С”Р С‘');
       }
       this.renderStatusChips({ job, agentState, entry });
       this.renderRuntimeDiagnostics({
@@ -3414,7 +3710,7 @@
         : {};
       const jobs = Array.isArray(runtime.activeJobs) ? runtime.activeJobs : [];
       if (this.activeJobsSummary) {
-        this.activeJobsSummary.textContent = `Активные задачи: ${jobs.length}`;
+        this.activeJobsSummary.textContent = `Р С’Р С”РЎвЂљР С‘Р Р†Р Р…РЎвЂ№Р Вµ Р В·Р В°Р Т‘Р В°РЎвЂЎР С‘: ${jobs.length}`;
       }
       if (!this.activeJobsSelect) {
         if (this.gotoJobTabButton) {
@@ -3427,7 +3723,7 @@
       if (!jobs.length) {
         const empty = this.doc.createElement('option');
         empty.value = '';
-        empty.textContent = 'Нет активных задач';
+        empty.textContent = 'Р СњР ВµРЎвЂљ Р В°Р С”РЎвЂљР С‘Р Р†Р Р…РЎвЂ№РЎвЂ¦ Р В·Р В°Р Т‘Р В°РЎвЂЎ';
         this.activeJobsSelect.appendChild(empty);
         this.activeJobsSelect.disabled = true;
       } else {
@@ -3506,15 +3802,15 @@
     renderStatusChips({ job, agentState, entry } = {}) {
       const pipelineText = (() => {
         if (!this.state.translationPipelineEnabled && !job && !entry) {
-          return 'Пайплайн: готов';
+          return 'Р СџР В°Р в„–Р С—Р В»Р В°Р в„–Р Р…: Р С–Р С•РЎвЂљР С•Р Р†';
         }
         if (job && job.status) {
-          return `Пайплайн: ${this._jobStatusLabel(job.status)}`;
+          return `Р СџР В°Р в„–Р С—Р В»Р В°Р в„–Р Р…: ${this._jobStatusLabel(job.status)}`;
         }
         if (entry && entry.status) {
-          return `Пайплайн: ${this._jobStatusLabel(entry.status)}`;
+          return `Р СџР В°Р в„–Р С—Р В»Р В°Р в„–Р Р…: ${this._jobStatusLabel(entry.status)}`;
         }
-        return 'Пайплайн: готов';
+        return 'Р СџР В°Р в„–Р С—Р В»Р В°Р в„–Р Р…: Р С–Р С•РЎвЂљР С•Р Р†';
       })();
 
       const modelPolicy = this.normalizeAgentModelPolicy(this.state.translationAgentModelPolicy, this.state.modelSelection);
@@ -3522,11 +3818,11 @@
         ? this.normalizeAgentModelPolicy(agentState.modelPolicy, modelPolicy)
         : modelPolicy;
       const preferenceText = runtimePolicy.preference === 'smartest'
-        ? 'умные'
+        ? 'РЎС“Р СР Р…РЎвЂ№Р Вµ'
         : runtimePolicy.preference === 'cheapest'
-          ? 'дешёвые'
-          : 'без приоритета';
-      const runtimePolicyText = `${runtimePolicy.mode === 'fixed' ? 'фикс.' : 'авто'} / ${preferenceText} / ${runtimePolicy.speed ? 'скорость' : 'качество'}`;
+          ? 'Р Т‘Р ВµРЎв‚¬РЎвЂР Р†РЎвЂ№Р Вµ'
+          : 'Р В±Р ВµР В· Р С—РЎР‚Р С‘Р С•РЎР‚Р С‘РЎвЂљР ВµРЎвЂљР В°';
+      const runtimePolicyText = `${runtimePolicy.mode === 'fixed' ? 'РЎвЂћР С‘Р С”РЎРѓ.' : 'Р В°Р Р†РЎвЂљР С•'} / ${preferenceText} / ${runtimePolicy.speed ? 'РЎРѓР С”Р С•РЎР‚Р С•РЎРѓРЎвЂљРЎРЉ' : 'Р С”Р В°РЎвЂЎР ВµРЎРѓРЎвЂљР Р†Р С•'}`;
       const modelDecision = entry && entry.modelDecision && typeof entry.modelDecision === 'object'
         ? entry.modelDecision
         : null;
@@ -3540,21 +3836,21 @@
         ? modelLimitsMap[chosenModelSpec]
         : null;
       const modelText = chosenModelSpec
-        ? `Модели: ${chosenModelSpec} · ${runtimePolicyText}`
-        : `Модели: ${runtimePolicyText}`;
-      let modelTitle = 'Эффективная политика выбора модели для переводчика-агента';
+        ? `Р СљР С•Р Т‘Р ВµР В»Р С‘: ${chosenModelSpec} Р’В· ${runtimePolicyText}`
+        : `Р СљР С•Р Т‘Р ВµР В»Р С‘: ${runtimePolicyText}`;
+      let modelTitle = 'Р В­РЎвЂћРЎвЂћР ВµР С”РЎвЂљР С‘Р Р†Р Р…Р В°РЎРЏ Р С—Р С•Р В»Р С‘РЎвЂљР С‘Р С”Р В° Р Р†РЎвЂ№Р В±Р С•РЎР‚Р В° Р СР С•Р Т‘Р ВµР В»Р С‘ Р Т‘Р В»РЎРЏ Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘РЎвЂЎР С‘Р С”Р В°-Р В°Р С–Р ВµР Р…РЎвЂљР В°';
       if (chosenModelSpec) {
-        modelTitle = `Фактическая модель: ${chosenModelSpec}. Политика: ${runtimePolicyText}.`;
+        modelTitle = `Р В¤Р В°Р С”РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р В°РЎРЏ Р СР С•Р Т‘Р ВµР В»РЎРЉ: ${chosenModelSpec}. Р СџР С•Р В»Р С‘РЎвЂљР С‘Р С”Р В°: ${runtimePolicyText}.`;
         if (limits) {
-          const show = (value) => (value === null || value === undefined ? '—' : String(value));
-          modelTitle = `${modelTitle} RPM=${show(limits.remainingRequests)}/${show(limits.limitRequests)} до ${this._formatTimestamp(limits.resetRequestsAt)}; TPM=${show(limits.remainingTokens)}/${show(limits.limitTokens)} до ${this._formatTimestamp(limits.resetTokensAt)}; cooldown=${this._formatTimestamp(limits.cooldownUntilTs)}`;
+          const show = (value) => (value === null || value === undefined ? 'РІР‚вЂќ' : String(value));
+          modelTitle = `${modelTitle} RPM=${show(limits.remainingRequests)}/${show(limits.limitRequests)} Р Т‘Р С• ${this._formatTimestamp(limits.resetRequestsAt)}; TPM=${show(limits.remainingTokens)}/${show(limits.limitTokens)} Р Т‘Р С• ${this._formatTimestamp(limits.resetTokensAt)}; cooldown=${this._formatTimestamp(limits.cooldownUntilTs)}`;
         }
       }
-      const cacheText = `Кэш: стр=${this.state.translationPageCacheEnabled ? 'вкл' : 'выкл'} · api=${this.state.translationApiCacheEnabled ? 'вкл' : 'выкл'}`;
+      const cacheText = `Р С™РЎРЊРЎв‚¬: РЎРѓРЎвЂљРЎР‚=${this.state.translationPageCacheEnabled ? 'Р Р†Р С”Р В»' : 'Р Р†РЎвЂ№Р С”Р В»'} Р’В· api=${this.state.translationApiCacheEnabled ? 'Р Р†Р С”Р В»' : 'Р Р†РЎвЂ№Р С”Р В»'}`;
 
       if (this.statusChipPipeline) {
         this.statusChipPipeline.textContent = pipelineText;
-        this.statusChipPipeline.setAttribute('title', 'Состояние пайплайна перевода на текущей вкладке');
+        this.statusChipPipeline.setAttribute('title', 'Р РЋР С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р С‘Р Вµ Р С—Р В°Р в„–Р С—Р В»Р В°Р в„–Р Р…Р В° Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В° Р Р…Р В° РЎвЂљР ВµР С”РЎС“РЎвЂ°Р ВµР в„– Р Р†Р С”Р В»Р В°Р Т‘Р С”Р Вµ');
       }
       if (this.statusChipModel) {
         this.statusChipModel.textContent = modelText;
@@ -3562,7 +3858,7 @@
       }
       if (this.statusChipCache) {
         this.statusChipCache.textContent = cacheText;
-        this.statusChipCache.setAttribute('title', 'Состояние кэширования перевода страницы и ответов API');
+        this.statusChipCache.setAttribute('title', 'Р РЋР С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р С‘Р Вµ Р С”РЎРЊРЎв‚¬Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘РЎРЏ Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р С‘ Р С•РЎвЂљР Р†Р ВµРЎвЂљР С•Р Р† API');
       }
     }
 
@@ -3616,8 +3912,8 @@
       const latestAudit = audits.length ? audits[audits.length - 1] : null;
       const auditCoverage = latestAudit && Number.isFinite(Number(latestAudit.coverage))
         ? `${Math.round(Number(latestAudit.coverage))}%`
-        : '—';
-      const auditStatus = latestAudit && latestAudit.status ? String(latestAudit.status) : '—';
+        : 'РІР‚вЂќ';
+      const auditStatus = latestAudit && latestAudit.status ? String(latestAudit.status) : 'РІР‚вЂќ';
 
       const toolHistory = agentState && Array.isArray(agentState.toolHistory) ? agentState.toolHistory : [];
       const toolTrace = agentState && Array.isArray(agentState.toolExecutionTrace) ? agentState.toolExecutionTrace : [];
@@ -3637,16 +3933,16 @@
 
       const pipelineStatus = safeJob && safeJob.status
         ? this._jobStatusLabel(safeJob.status)
-        : (safeEntry.status ? this._jobStatusLabel(safeEntry.status) : '—');
-      const phase = agentState && agentState.phase ? this._phaseLabel(agentState.phase) : '—';
+        : (safeEntry.status ? this._jobStatusLabel(safeEntry.status) : 'РІР‚вЂќ');
+      const phase = agentState && agentState.phase ? this._phaseLabel(agentState.phase) : 'РІР‚вЂќ';
       const profile = agentState && agentState.profile
         ? this._profileLabel(this.normalizeAgentProfile(agentState.profile))
         : this._profileLabel(this.normalizeAgentProfile(this.state.translationAgentProfile));
 
-      const planStyle = plan && plan.style ? String(plan.style) : '—';
-      const planBatch = plan && Number.isFinite(Number(plan.batchSize)) ? String(Math.round(Number(plan.batchSize))) : '—';
-      const planProof = plan && Number.isFinite(Number(plan.proofreadingPasses)) ? String(Math.round(Number(plan.proofreadingPasses))) : '—';
-      const planParallel = plan && plan.parallelism ? String(plan.parallelism) : '—';
+      const planStyle = plan && plan.style ? String(plan.style) : 'РІР‚вЂќ';
+      const planBatch = plan && Number.isFinite(Number(plan.batchSize)) ? String(Math.round(Number(plan.batchSize))) : 'РІР‚вЂќ';
+      const planProof = plan && Number.isFinite(Number(plan.proofreadingPasses)) ? String(Math.round(Number(plan.proofreadingPasses))) : 'РІР‚вЂќ';
+      const planParallel = plan && plan.parallelism ? String(plan.parallelism) : 'РІР‚вЂќ';
       const lastRate = agentState && agentState.lastRateLimits && typeof agentState.lastRateLimits === 'object'
         ? agentState.lastRateLimits
         : null;
@@ -3654,86 +3950,86 @@
         ? lastRate.headersSubset
         : {};
       const rateValue = lastRate
-        ? `RPM ${rateHeaders['x-ratelimit-remaining-requests'] || '—'}/${rateHeaders['x-ratelimit-limit-requests'] || '—'} | TPM ${rateHeaders['x-ratelimit-remaining-tokens'] || '—'}/${rateHeaders['x-ratelimit-limit-tokens'] || '—'}`
-        : '—';
+        ? `RPM ${rateHeaders['x-ratelimit-remaining-requests'] || 'РІР‚вЂќ'}/${rateHeaders['x-ratelimit-limit-requests'] || 'РІР‚вЂќ'} | TPM ${rateHeaders['x-ratelimit-remaining-tokens'] || 'РІР‚вЂќ'}/${rateHeaders['x-ratelimit-limit-tokens'] || 'РІР‚вЂќ'}`
+        : 'РІР‚вЂќ';
 
       const metrics = [
         {
           label: 'Job ID',
           value: this._shortId(safeJob && safeJob.id ? safeJob.id : ''),
-          title: safeJob && safeJob.id ? safeJob.id : 'Идентификатор активной задачи'
+          title: safeJob && safeJob.id ? safeJob.id : 'Р ВР Т‘Р ВµР Р…РЎвЂљР С‘РЎвЂћР С‘Р С”Р В°РЎвЂљР С•РЎР‚ Р В°Р С”РЎвЂљР С‘Р Р†Р Р…Р С•Р в„– Р В·Р В°Р Т‘Р В°РЎвЂЎР С‘'
         },
         {
-          label: 'Пайплайн',
+          label: 'Р СџР В°Р в„–Р С—Р В»Р В°Р в„–Р Р…',
           value: pipelineStatus,
-          title: 'Текущее состояние пайплайна перевода'
+          title: 'Р СћР ВµР С”РЎС“РЎвЂ°Р ВµР Вµ РЎРѓР С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р С‘Р Вµ Р С—Р В°Р в„–Р С—Р В»Р В°Р в„–Р Р…Р В° Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В°'
         },
         {
-          label: 'Прогресс',
+          label: 'Р СџРЎР‚Р С•Р С–РЎР‚Р ВµРЎРѓРЎРѓ',
           value: `${Math.max(0, Math.min(100, Math.round(Number(progress) || 0)))}%`,
-          title: 'Текущий процент выполнения'
+          title: 'Р СћР ВµР С”РЎС“РЎвЂ°Р С‘Р в„– Р С—РЎР‚Р С•РЎвЂ Р ВµР Р…РЎвЂљ Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ'
         },
         {
-          label: 'Блоки',
+          label: 'Р вЂР В»Р С•Р С”Р С‘',
           value: `${completed}/${total} | run=${inProgress} | err=${failed}`,
-          title: 'Сводка обработки блоков страницы'
+          title: 'Р РЋР Р†Р С•Р Т‘Р С”Р В° Р С•Р В±РЎР‚Р В°Р В±Р С•РЎвЂљР С”Р С‘ Р В±Р В»Р С•Р С”Р С•Р Р† РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№'
         },
         {
-          label: 'Текущий батч',
+          label: 'Р СћР ВµР С”РЎС“РЎвЂ°Р С‘Р в„– Р В±Р В°РЎвЂљРЎвЂЎ',
           value: this._shortId(safeJob && safeJob.currentBatchId ? safeJob.currentBatchId : ''),
-          title: safeJob && safeJob.currentBatchId ? safeJob.currentBatchId : 'Идентификатор текущего батча'
+          title: safeJob && safeJob.currentBatchId ? safeJob.currentBatchId : 'Р ВР Т‘Р ВµР Р…РЎвЂљР С‘РЎвЂћР С‘Р С”Р В°РЎвЂљР С•РЎР‚ РЎвЂљР ВµР С”РЎС“РЎвЂ°Р ВµР С–Р С• Р В±Р В°РЎвЂљРЎвЂЎР В°'
         },
         {
-          label: 'Агент',
+          label: 'Р С’Р С–Р ВµР Р…РЎвЂљ',
           value: `${phase} | ${profile}`,
-          title: 'Текущая фаза и профиль агента'
+          title: 'Р СћР ВµР С”РЎС“РЎвЂ°Р В°РЎРЏ РЎвЂћР В°Р В·Р В° Р С‘ Р С—РЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ Р В°Р С–Р ВµР Р…РЎвЂљР В°'
         },
         {
-          label: 'План',
+          label: 'Р СџР В»Р В°Р Р…',
           value: `${planStyle} | b=${planBatch} | p=${planProof} | par=${planParallel}`,
-          title: 'Сжатая сводка плана, выбранного агентом'
+          title: 'Р РЋР В¶Р В°РЎвЂљР В°РЎРЏ РЎРѓР Р†Р С•Р Т‘Р С”Р В° Р С—Р В»Р В°Р Р…Р В°, Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…Р Р…Р С•Р С–Р С• Р В°Р С–Р ВµР Р…РЎвЂљР С•Р С'
         },
         {
-          label: 'Категории',
+          label: 'Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘',
           value: `${selectedCount}/${availableCount} | ${this._categoryModeLabel(this.state.translationCategoryMode)}`,
-          title: 'Число выбранных категорий к доступным и базовый режим категорий'
+          title: 'Р В§Р С‘РЎРѓР В»Р С• Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„– Р С” Р Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р Р…РЎвЂ№Р С Р С‘ Р В±Р В°Р В·Р С•Р Р†РЎвЂ№Р в„– РЎР‚Р ВµР В¶Р С‘Р С Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„–'
         },
         {
-          label: 'Аудиты',
+          label: 'Р С’РЎС“Р Т‘Р С‘РЎвЂљРЎвЂ№',
           value: `${audits.length} | ${auditStatus} ${auditCoverage}`,
-          title: 'Количество аудитов и статус последнего аудита'
+          title: 'Р С™Р С•Р В»Р С‘РЎвЂЎР ВµРЎРѓРЎвЂљР Р†Р С• Р В°РЎС“Р Т‘Р С‘РЎвЂљР С•Р Р† Р С‘ РЎРѓРЎвЂљР В°РЎвЂљРЎС“РЎРѓ Р С—Р С•РЎРѓР В»Р ВµР Т‘Р Р…Р ВµР С–Р С• Р В°РЎС“Р Т‘Р С‘РЎвЂљР В°'
         },
         {
-          label: 'Инструменты',
+          label: 'Р ВР Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљРЎвЂ№',
           value: `trace=${toolTrace.length} log=${toolHistory.length}`,
-          title: 'Трассировка и история вызовов инструментов'
+          title: 'Р СћРЎР‚Р В°РЎРѓРЎРѓР С‘РЎР‚Р С•Р Р†Р С”Р В° Р С‘ Р С‘РЎРѓРЎвЂљР С•РЎР‚Р С‘РЎРЏ Р Р†РЎвЂ№Р В·Р С•Р Р†Р С•Р Р† Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР С•Р Р†'
         },
         {
-          label: 'Отчёты/DIFF',
+          label: 'Р С›РЎвЂљРЎвЂЎРЎвЂРЎвЂљРЎвЂ№/DIFF',
           value: `rep=${reports.length} diff=${diffItems.length}`,
-          title: 'Количество отчётов агента и последних diff-изменений'
+          title: 'Р С™Р С•Р В»Р С‘РЎвЂЎР ВµРЎРѓРЎвЂљР Р†Р С• Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљР С•Р Р† Р В°Р С–Р ВµР Р…РЎвЂљР В° Р С‘ Р С—Р С•РЎРѓР В»Р ВµР Т‘Р Р…Р С‘РЎвЂ¦ diff-Р С‘Р В·Р СР ВµР Р…Р ВµР Р…Р С‘Р в„–'
         },
         {
-          label: 'Контекст',
+          label: 'Р С™Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљ',
           value: `cmp=${Number(agentState && agentState.compressedContextCount || 0)} gls=${Number(agentState && agentState.glossarySize || 0)}`,
-          title: 'Сжатия контекста и размер глоссария'
+          title: 'Р РЋР В¶Р В°РЎвЂљР С‘РЎРЏ Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В° Р С‘ РЎР‚Р В°Р В·Р СР ВµРЎР‚ Р С–Р В»Р С•РЎРѓРЎРѓР В°РЎР‚Р С‘РЎРЏ'
         },
         {
           label: 'Rate limit',
           value: rateValue,
-          title: 'Последние заголовки x-ratelimit-* (RPM/TPM)'
+          title: 'Р СџР С•РЎРѓР В»Р ВµР Т‘Р Р…Р С‘Р Вµ Р В·Р В°Р С–Р С•Р В»Р С•Р Р†Р С”Р С‘ x-ratelimit-* (RPM/TPM)'
         },
         {
-          label: 'Обновлено',
+          label: 'Р С›Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С•',
           value: this._formatTimestamp(updatedAt),
-          title: 'Время последнего обновления состояния'
+          title: 'Р вЂ™РЎР‚Р ВµР СРЎРЏ Р С—Р С•РЎРѓР В»Р ВµР Т‘Р Р…Р ВµР С–Р С• Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎРЏ РЎРѓР С•РЎРѓРЎвЂљР С•РЎРЏР Р…Р С‘РЎРЏ'
         }
       ];
       if (fetchDebug) {
         metrics.push({
-          label: 'OpenAI сеть',
+          label: 'OpenAI РЎРѓР ВµРЎвЂљРЎРЉ',
           value: this._formatFetchDebugSummary(fetchDebug),
-          title: 'Диагностика транспорта и probe при FETCH_FAILED'
+          title: 'Р вЂќР С‘Р В°Р С–Р Р…Р С•РЎРѓРЎвЂљР С‘Р С”Р В° РЎвЂљРЎР‚Р В°Р Р…РЎРѓР С—Р С•РЎР‚РЎвЂљР В° Р С‘ probe Р С—РЎР‚Р С‘ FETCH_FAILED'
         });
       }
 
@@ -3752,7 +4048,7 @@
 
           const valueNode = this.doc.createElement('span');
           valueNode.className = 'popup__status-metric-value';
-          valueNode.textContent = item.value && String(item.value).trim() ? String(item.value) : '—';
+          valueNode.textContent = item.value && String(item.value).trim() ? String(item.value) : 'РІР‚вЂќ';
 
           row.appendChild(labelNode);
           row.appendChild(valueNode);
@@ -3807,7 +4103,7 @@
       const audits = agentState && Array.isArray(agentState.audits) ? agentState.audits : [];
       const latestAudit = audits.length ? audits[audits.length - 1] : null;
       if (latestAudit) {
-        const coverage = Number.isFinite(Number(latestAudit.coverage)) ? `${Math.round(Number(latestAudit.coverage))}%` : '—';
+        const coverage = Number.isFinite(Number(latestAudit.coverage)) ? `${Math.round(Number(latestAudit.coverage))}%` : 'РІР‚вЂќ';
         parts.push(`audit: ${latestAudit.status || 'unknown'} ${coverage}`);
       }
 
@@ -3829,7 +4125,7 @@
 
       return parts.length
         ? parts.join(' | ')
-        : 'Подробных live-событий пока нет. После запуска здесь появятся последние отчёты и вызовы инструментов.';
+        : 'Р СџР С•Р Т‘РЎР‚Р С•Р В±Р Р…РЎвЂ№РЎвЂ¦ live-РЎРѓР С•Р В±РЎвЂ№РЎвЂљР С‘Р в„– Р С—Р С•Р С”Р В° Р Р…Р ВµРЎвЂљ. Р СџР С•РЎРѓР В»Р Вµ Р В·Р В°Р С—РЎС“РЎРѓР С”Р В° Р В·Р Т‘Р ВµРЎРѓРЎРЉ Р С—Р С•РЎРЏР Р†РЎРЏРЎвЂљРЎРѓРЎРЏ Р С—Р С•РЎРѓР В»Р ВµР Т‘Р Р…Р С‘Р Вµ Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљРЎвЂ№ Р С‘ Р Р†РЎвЂ№Р В·Р С•Р Р†РЎвЂ№ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР С•Р Р†.';
     }
 
     _resolveFetchDebugPayload({ job, entry, stateLastError } = {}) {
@@ -3865,7 +4161,7 @@
 
     _formatFetchDebugSummary(debug) {
       if (!debug || typeof debug !== 'object') {
-        return '—';
+        return 'РІР‚вЂќ';
       }
       const parts = [];
       if (typeof debug.baseUrl === 'string' && debug.baseUrl) {
@@ -3883,7 +4179,7 @@
       if (probe && typeof probe.ok === 'boolean') {
         parts.push(`probe=${probe.ok ? 'ok' : 'fail'}`);
       }
-      return parts.length ? parts.join(' | ') : '—';
+      return parts.length ? parts.join(' | ') : 'РІР‚вЂќ';
     }
 
     _formatFetchDebugSteps(debug) {
@@ -3908,27 +4204,27 @@
     _shortId(value, limit = 14) {
       const raw = typeof value === 'string' ? value.trim() : '';
       if (!raw) {
-        return '—';
+        return 'РІР‚вЂќ';
       }
       const max = Number.isFinite(Number(limit)) ? Number(limit) : 14;
       if (raw.length <= max) {
         return raw;
       }
-      return `${raw.slice(0, Math.max(1, max - 1))}…`;
+      return `${raw.slice(0, Math.max(1, max - 1))}РІР‚В¦`;
     }
 
     _formatTimestamp(value) {
       const timestamp = Number(value);
       if (!Number.isFinite(timestamp) || timestamp <= 0) {
-        return '—';
+        return 'РІР‚вЂќ';
       }
       const Time = global.NT && global.NT.Time ? global.NT.Time : null;
       if (Time && typeof Time.formatTime === 'function') {
-        return Time.formatTime(timestamp, { fallback: '—' });
+        return Time.formatTime(timestamp, { fallback: 'РІР‚вЂќ' });
       }
       const date = new Date(timestamp);
       if (Number.isNaN(date.getTime())) {
-        return '—';
+        return 'РІР‚вЂќ';
       }
       return date.toLocaleTimeString();
     }
@@ -3947,7 +4243,7 @@
         const source = latestReport.body || latestReport.title || '';
         const text = this._truncateStatusText(source, 56);
         if (text) {
-          return `заметка=${text}`;
+          return `Р В·Р В°Р СР ВµРЎвЂљР С”Р В°=${text}`;
         }
       }
 
@@ -3957,15 +4253,15 @@
         const msg = latestTool.message || latestTool.status || '';
         const text = this._truncateStatusText(`${tool}:${msg}`, 56);
         if (text) {
-          return `инстр=${text}`;
+          return `Р С‘Р Р…РЎРѓРЎвЂљРЎР‚=${text}`;
         }
       }
 
       const running = checklist.find((item) => item && item.status === 'running');
       if (running) {
-        const text = this._truncateStatusText(running.title || running.id || 'выполняется', 56);
+        const text = this._truncateStatusText(running.title || running.id || 'Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ', 56);
         if (text) {
-          return `шаг=${text}`;
+          return `РЎв‚¬Р В°Р С–=${text}`;
         }
       }
       return '';
@@ -3980,7 +4276,7 @@
       if (raw.length <= max) {
         return raw;
       }
-      return `${raw.slice(0, Math.max(1, max - 1))}…`;
+      return `${raw.slice(0, Math.max(1, max - 1))}РІР‚В¦`;
     }
 
     _syncCategoryDataFromJob() {
@@ -4026,11 +4322,32 @@
         this.state.categorySelectionDraftJobId = jobId;
         return;
       }
+      const recommendations = this._currentCategoryRecommendations();
+      const recommended = recommendations && Array.isArray(recommendations.recommended)
+        ? this.normalizeCategoryList(recommendations.recommended).filter((category) => available.includes(category))
+        : [];
+      const optional = recommendations && Array.isArray(recommendations.optional)
+        ? this.normalizeCategoryList(recommendations.optional).filter((category) => available.includes(category))
+        : [];
+      const excluded = recommendations && Array.isArray(recommendations.excluded)
+        ? this.normalizeCategoryList(recommendations.excluded).filter((category) => available.includes(category))
+        : [];
+      const excludedSet = new Set(excluded);
+      const selectedCurrent = this._currentSelectedCategories().filter((category) => available.includes(category));
+      const availableNotSelected = available.filter((category) => !selectedCurrent.includes(category) && !excludedSet.has(category));
       const currentDraft = this.normalizeCategoryList(this.state.categorySelectionDraft);
-      const filteredDraft = currentDraft.filter((category) => available.includes(category));
+      const filteredDraft = currentDraft.filter((category) => available.includes(category) && !excludedSet.has(category));
       if (this.state.categorySelectionDraftJobId !== jobId || !filteredDraft.length) {
-        const selected = this._currentSelectedCategories().filter((category) => available.includes(category));
-        this.state.categorySelectionDraft = selected.length ? selected : available.slice();
+        const awaiting = job && job.status === 'awaiting_categories';
+        if (awaiting) {
+          const selected = selectedCurrent.length ? selectedCurrent : recommended;
+          this.state.categorySelectionDraft = selected.length ? selected : availableNotSelected.slice();
+        } else {
+          const candidate = optional.length
+            ? optional.filter((category) => !selectedCurrent.includes(category))
+            : availableNotSelected;
+          this.state.categorySelectionDraft = candidate.length ? candidate : availableNotSelected.slice();
+        }
         this.state.categorySelectionDraftJobId = jobId;
         return;
       }
@@ -4055,15 +4372,60 @@
     }
 
     _currentAvailableCategories() {
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      if (job && job.status === 'awaiting_categories') {
+        const questionOptions = this._categoryQuestionOptions();
+        const fromQuestion = this.normalizeCategoryList(
+          questionOptions.map((item) => (item && typeof item === 'object' ? item.id : null))
+        );
+        if (fromQuestion.length) {
+          return fromQuestion;
+        }
+      }
       const available = this.normalizeCategoryList(this.state.availableCategories);
       if (available.length) {
         return available;
       }
-      const job = this.state.translationJob || null;
       if (job && Array.isArray(job.availableCategories)) {
         return this.normalizeCategoryList(job.availableCategories);
       }
       return [];
+    }
+
+    _currentCategoryRecommendations() {
+      const job = this.state.translationJob || null;
+      if (job && job.categoryRecommendations && typeof job.categoryRecommendations === 'object') {
+        return job.categoryRecommendations;
+      }
+      const agentState = this.state.agentState || null;
+      if (agentState && agentState.categoryRecommendations && typeof agentState.categoryRecommendations === 'object') {
+        return agentState.categoryRecommendations;
+      }
+      return null;
+    }
+
+    _currentCategoryCounts() {
+      const job = this.state.translationJob || null;
+      const classification = job && job.classification && typeof job.classification === 'object'
+        ? job.classification
+        : null;
+      const summary = classification && classification.summary && typeof classification.summary === 'object'
+        ? classification.summary
+        : null;
+      const counts = summary && summary.countsByCategory && typeof summary.countsByCategory === 'object'
+        ? summary.countsByCategory
+        : {};
+      const out = {};
+      Object.keys(counts).forEach((key) => {
+        const value = Number(counts[key]);
+        if (!Number.isFinite(value) || value <= 0) {
+          return;
+        }
+        out[key] = Math.max(0, Math.round(value));
+      });
+      return out;
     }
 
     _currentCategoryDraft() {
@@ -4079,7 +4441,12 @@
         return false;
       }
       const selectedSet = new Set(this._currentSelectedCategories());
-      return available.some((category) => !selectedSet.has(category));
+      const recommendations = this._currentCategoryRecommendations();
+      const excluded = recommendations && Array.isArray(recommendations.excluded)
+        ? this.normalizeCategoryList(recommendations.excluded)
+        : [];
+      const excludedSet = new Set(excluded);
+      return available.some((category) => !selectedSet.has(category) && !excludedSet.has(category));
     }
 
     _isCategorySelectionStep() {
@@ -4087,8 +4454,17 @@
       if (!job || !job.status) {
         return false;
       }
-      return job.status === 'awaiting_categories'
-        && this._currentAvailableCategories().length > 0;
+      const available = this._currentAvailableCategories();
+      if (!available.length) {
+        return false;
+      }
+      if (job.status === 'awaiting_categories') {
+        return true;
+      }
+      if ((job.status === 'done' || job.status === 'running') && this._hasUnselectedCategories()) {
+        return true;
+      }
+      return false;
     }
 
     _categoryChooserHintText() {
@@ -4096,8 +4472,14 @@
       if (!job) {
         return '';
       }
+      if (job.classificationStale === true) {
+        return 'DOM РёР·РјРµРЅРёР»СЃСЏ РїРѕСЃР»Рµ РєР»Р°СЃСЃРёС„РёРєР°С†РёРё. Р’С‹РїРѕР»РЅРёС‚Рµ Reclassify (force), Р·Р°С‚РµРј РІС‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёРё.';
+      }
       if (job.status === 'awaiting_categories') {
-        return 'Планирование завершено. Выберите рекомендованные категории и запустите перевод. Дополнительные категории можно выбрать позже.';
+        return 'РџР»Р°РЅРёСЂРѕРІР°РЅРёРµ Р·Р°РІРµСЂС€РµРЅРѕ. Р’С‹Р±РµСЂРёС‚Рµ СЂРµРєРѕРјРµРЅРґРѕРІР°РЅРЅС‹Рµ РєР°С‚РµРіРѕСЂРёРё Рё Р·Р°РїСѓСЃС‚РёС‚Рµ РїРµСЂРµРІРѕРґ.';
+      }
+      if (job.status === 'done' || job.status === 'running') {
+        return 'РњРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ РµС‰С‘ РєР°С‚РµРіРѕСЂРёРё Рё РїРµСЂРµРІРµСЃС‚Рё С‚РѕР»СЊРєРѕ РЅРѕРІС‹Рµ Р±Р»РѕРєРё.';
       }
       return '';
     }
@@ -4113,18 +4495,19 @@
         this.displayModeSelect.setAttribute(
           'title',
           mode === 'compare'
-            ? 'Сравнение подсвечивает изменения. Для больших блоков см. debug.'
-            : (mode === 'original' ? 'Показ оригинального текста страницы' : 'Показ переведённого текста страницы')
+            ? 'Р РЋРЎР‚Р В°Р Р†Р Р…Р ВµР Р…Р С‘Р Вµ Р С—Р С•Р Т‘РЎРѓР Р†Р ВµРЎвЂЎР С‘Р Р†Р В°Р ВµРЎвЂљ Р С‘Р В·Р СР ВµР Р…Р ВµР Р…Р С‘РЎРЏ. Р вЂќР В»РЎРЏ Р В±Р С•Р В»РЎРЉРЎв‚¬Р С‘РЎвЂ¦ Р В±Р В»Р С•Р С”Р С•Р Р† РЎРѓР С. debug.'
+            : (mode === 'original' ? 'Р СџР С•Р С”Р В°Р В· Р С•РЎР‚Р С‘Р С–Р С‘Р Р…Р В°Р В»РЎРЉР Р…Р С•Р С–Р С• РЎвЂљР ВµР С”РЎРѓРЎвЂљР В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№' : 'Р СџР С•Р С”Р В°Р В· Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘РЎвЂР Р…Р Р…Р С•Р С–Р С• РЎвЂљР ВµР С”РЎРѓРЎвЂљР В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№')
         );
       }
     }
 
     updateActionButtons() {
       const job = this.state.translationJob || null;
-      const running = job && (job.status === 'running' || job.status === 'preparing' || job.status === 'completing');
-      const cancellable = job && (job.status === 'running' || job.status === 'preparing' || job.status === 'completing' || job.status === 'awaiting_categories');
+      const running = job && (job.status === 'running' || job.status === 'preparing' || job.status === 'planning' || job.status === 'completing');
+      const cancellable = job && (job.status === 'running' || job.status === 'preparing' || job.status === 'planning' || job.status === 'completing' || job.status === 'awaiting_categories');
       const categoryStep = this._isCategorySelectionStep();
-      const canSubmitCategories = !categoryStep || this._currentCategoryDraft().length > 0;
+      const staleClassification = Boolean(job && job.classificationStale === true);
+      const canSubmitCategories = !categoryStep || (this._currentCategoryDraft().length > 0 && !staleClassification);
       const selectedCategories = this._currentSelectedCategories();
       const canProofread = this.activeTabId !== null
         && Boolean(job)
@@ -4134,13 +4517,16 @@
           || job.status === 'awaiting_categories');
       if (this.startButton) {
         this.startButton.disabled = this.activeTabId === null || Boolean(running) || !canSubmitCategories;
+        const categoryActionLabel = job && job.status === 'awaiting_categories'
+          ? 'Start translating selected'
+          : 'Translate more categories';
         const startTitle = !this.state.translationPipelineEnabled
-          ? 'Перевести (пайплайн включится автоматически)'
-          : (categoryStep ? 'Применить категории' : 'Перевести');
+          ? 'Translation disabled (pipeline off)'
+          : (categoryStep ? categoryActionLabel : 'Translate');
         this.startButton.setAttribute('title', startTitle);
         this.startButton.setAttribute('aria-label', startTitle);
         if (this.startButtonLabel) {
-          this.startButtonLabel.textContent = categoryStep ? 'Применить категории' : 'Перевести';
+          this.startButtonLabel.textContent = categoryStep ? categoryActionLabel : 'Translate';
         }
       }
       if (this.cancelButton) {
@@ -4154,8 +4540,8 @@
         this.proofreadAutoButton.setAttribute(
           'title',
           selectedCategories.length
-            ? 'Агент сам выберет блоки для вычитки в выбранных категориях'
-            : 'Сначала выберите хотя бы одну категорию'
+            ? 'Р С’Р С–Р ВµР Р…РЎвЂљ РЎРѓР В°Р С Р Р†РЎвЂ№Р В±Р ВµРЎР‚Р ВµРЎвЂљ Р В±Р В»Р С•Р С”Р С‘ Р Т‘Р В»РЎРЏ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р С‘ Р Р† Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏРЎвЂ¦'
+            : 'Р РЋР Р…Р В°РЎвЂЎР В°Р В»Р В° Р Р†РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂ¦Р С•РЎвЂљРЎРЏ Р В±РЎвЂ№ Р С•Р Т‘Р Р…РЎС“ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎР‹'
         );
       }
       if (this.proofreadAllButton) {
@@ -4163,8 +4549,8 @@
         this.proofreadAllButton.setAttribute(
           'title',
           selectedCategories.length
-            ? 'Запустить вычитку всех выбранных категорий'
-            : 'Сначала выберите хотя бы одну категорию'
+            ? 'Р вЂ”Р В°Р С—РЎС“РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”РЎС“ Р Р†РЎРѓР ВµРЎвЂ¦ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…Р Р…РЎвЂ№РЎвЂ¦ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„–'
+            : 'Р РЋР Р…Р В°РЎвЂЎР В°Р В»Р В° Р Р†РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂ¦Р С•РЎвЂљРЎРЏ Р В±РЎвЂ№ Р С•Р Т‘Р Р…РЎС“ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎР‹'
         );
       }
       if (this.proofreadCurrentCategoryButton) {
@@ -4172,8 +4558,8 @@
         this.proofreadCurrentCategoryButton.setAttribute(
           'title',
           selectedCategories.length
-            ? `Запустить вычитку категории: ${selectedCategories[0]}`
-            : 'Сначала выберите хотя бы одну категорию'
+            ? `Р вЂ”Р В°Р С—РЎС“РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”РЎС“ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘: ${selectedCategories[0]}`
+            : 'Р РЋР Р…Р В°РЎвЂЎР В°Р В»Р В° Р Р†РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂ¦Р С•РЎвЂљРЎРЏ Р В±РЎвЂ№ Р С•Р Т‘Р Р…РЎС“ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎР‹'
         );
       }
     }
@@ -4220,3 +4606,4 @@
     controller.init();
   })();
 })(globalThis);
+

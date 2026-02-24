@@ -22,6 +22,13 @@
       const baseMeta = {
         source: safeMeta.source || 'unknown',
         tabId: safeMeta.tabId ?? null,
+        frameId: Number.isFinite(Number(safeMeta.frameId)) ? Number(safeMeta.frameId) : null,
+        documentId: typeof safeMeta.documentId === 'string' && safeMeta.documentId
+          ? safeMeta.documentId
+          : null,
+        frameUrl: typeof safeMeta.frameUrl === 'string' && safeMeta.frameUrl
+          ? safeMeta.frameUrl
+          : null,
         stage: safeMeta.stage || 'unknown',
         requestId: safeMeta.requestId || null
       };

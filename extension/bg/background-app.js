@@ -39,6 +39,8 @@
       this.pageCacheStore = null;
       this.translationMemoryStore = null;
       this.inflightStore = null;
+      this.perfProfiler = null;
+      this.migrationManager = null;
       this.tabSessionManager = null;
       this.jobQueue = null;
       this.rateLimitBudgetStore = null;
@@ -68,6 +70,12 @@
       this._lastLimitsBroadcastAt = 0;
       this._lastJobCompactionAt = 0;
       this._jobCompactionIntervalMs = 2 * 60 * 1000;
+      this._lastStorageQuotaCheckAt = 0;
+      this._storageQuotaCheckIntervalMs = 65 * 1000;
+      this._storageSoftThresholdBytes = 8.5 * 1024 * 1024;
+      this._storageHardThresholdBytes = 9.4 * 1024 * 1024;
+      this._listenersAttached = false;
+      this._testTargetLang = null;
 
       this._onStorageChanged = this._onStorageChanged.bind(this);
       this._onRuntimeMessage = this._onRuntimeMessage.bind(this);
@@ -83,7 +91,12 @@
 
     async start() {
       this._initServices();
+      this._attachListeners();
       await this.eventLogStore.load();
+      await this._runMigrations({ reason: 'start' }).catch(() => ({ ok: false }));
+      if (this.perfProfiler && typeof this.perfProfiler.init === 'function') {
+        await this.perfProfiler.init().catch(() => null);
+      }
       await this._preloadState();
       await this._refreshActiveTabId().catch(() => null);
       if (this.translationMemoryStore && typeof this.translationMemoryStore.init === 'function') {
@@ -99,7 +112,6 @@
       await this._recoverOffscreenInflightAfterRestart().catch(() => ({ ok: false }));
       await this._refreshSecurityState().catch(() => {});
       await this._hydrateRuntimeSchedulers().catch(() => ({ ok: false }));
-      this._attachListeners();
       if (this.scheduler && typeof this.scheduler.ensureAlarms === 'function') {
         await this.scheduler.ensureAlarms().catch(() => ({ ok: false }));
       }
@@ -142,16 +154,36 @@
           translationCategoryList: [],
           translationPageCacheEnabled: true,
           translationApiCacheEnabled: true,
+          translationClassifierObserveDomChanges: false,
+          translationPerfMaxTextNodesPerScan: 5000,
+          translationPerfYieldEveryNNodes: 260,
+          translationPerfAbortScanIfOverMs: 0,
+          translationPerfDegradedScanOnHeavy: true,
           translationCompareDiffThreshold: 8000,
+          translationCompareRendering: 'auto',
           translationPopupActiveTab: 'control',
           debugAllowTestCommands: false
         }
       });
+      this.perfProfiler = NT.PerfProfiler
+        ? new NT.PerfProfiler({ chromeApi: this.chromeApi })
+        : null;
       this.tabStateStore = new NT.TabStateStore({ chromeApi: this.chromeApi });
       this.translationJobStore = new NT.TranslationJobStore({ chromeApi: this.chromeApi });
       this.pageCacheStore = new NT.TranslationPageCacheStore({ chromeApi: this.chromeApi });
       this.translationMemoryStore = new NT.TranslationMemoryStore({ chromeApi: this.chromeApi });
       this.inflightStore = new NT.InflightRequestStore({ chromeApi: this.chromeApi });
+      this.migrationManager = NT.MigrationManager
+        ? new NT.MigrationManager({
+          chromeApi: this.chromeApi,
+          settingsStore: this.settingsStore,
+          translationJobStore: this.translationJobStore,
+          inflightStore: this.inflightStore,
+          tabStateStore: this.tabStateStore,
+          translationMemoryStore: this.translationMemoryStore,
+          eventLogFn: (event) => this._logEvent(this.eventFactory.make(event || {}))
+        })
+        : null;
       this.tabSessionManager = NT.TabSessionManager
         ? new NT.TabSessionManager({
           chromeApi: this.chromeApi,
@@ -258,6 +290,7 @@
         settingsStore: this.settingsStore,
         tabStateStore: this.tabStateStore,
         jobStore: this.translationJobStore,
+        perfProfiler: this.perfProfiler,
         pageCacheStore: this.pageCacheStore,
         translationMemoryStore: this.translationMemoryStore,
         toolManifest: this.toolManifest,
@@ -308,6 +341,7 @@
           chromeApi: this.chromeApi,
           jobStore: this.translationJobStore,
           translationOrchestrator: this.translationOrchestrator,
+          perfProfiler: this.perfProfiler,
           offscreenExecutor: this.offscreenExecutor,
           retryPolicy: NT.RetryPolicy || null,
           ownerInstanceId: this._instanceId
@@ -370,9 +404,16 @@
         'translationCategoryList',
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
+        'translationClassifierObserveDomChanges',
+        'translationPerfMaxTextNodesPerScan',
+        'translationPerfYieldEveryNNodes',
+        'translationPerfAbortScanIfOverMs',
+        'translationPerfDegradedScanOnHeavy',
         'translationCompareDiffThreshold',
+        'translationCompareRendering',
         'translationPopupActiveTab',
-        'debugAllowTestCommands'
+        'debugAllowTestCommands',
+        'debugTestTargetLang'
       ]);
       const status = state.modelBenchmarkStatus || null;
       const now = Date.now();
@@ -455,8 +496,26 @@
       if (!Object.prototype.hasOwnProperty.call(state, 'translationApiCacheEnabled')) {
         await this.settingsStore.set({ translationApiCacheEnabled: true });
       }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationClassifierObserveDomChanges')) {
+        await this.settingsStore.set({ translationClassifierObserveDomChanges: false });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationPerfMaxTextNodesPerScan')) {
+        await this.settingsStore.set({ translationPerfMaxTextNodesPerScan: 5000 });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationPerfYieldEveryNNodes')) {
+        await this.settingsStore.set({ translationPerfYieldEveryNNodes: 260 });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationPerfAbortScanIfOverMs')) {
+        await this.settingsStore.set({ translationPerfAbortScanIfOverMs: 0 });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationPerfDegradedScanOnHeavy')) {
+        await this.settingsStore.set({ translationPerfDegradedScanOnHeavy: true });
+      }
       if (!Object.prototype.hasOwnProperty.call(state, 'translationCompareDiffThreshold')) {
         await this.settingsStore.set({ translationCompareDiffThreshold: 8000 });
+      }
+      if (!Object.prototype.hasOwnProperty.call(state, 'translationCompareRendering')) {
+        await this.settingsStore.set({ translationCompareRendering: 'auto' });
       }
       if (!Object.prototype.hasOwnProperty.call(state, 'translationPopupActiveTab')) {
         await this.settingsStore.set({ translationPopupActiveTab: 'control' });
@@ -464,6 +523,19 @@
       if (!Object.prototype.hasOwnProperty.call(state, 'debugAllowTestCommands')) {
         await this.settingsStore.set({ debugAllowTestCommands: false });
       }
+      const restoredTestLang = this._normalizeTargetLang(state && state.debugTestTargetLang);
+      this._testTargetLang = restoredTestLang || null;
+    }
+
+    _normalizeTargetLang(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (!raw) {
+        return null;
+      }
+      if (!/^[a-z]{2,10}(?:-[a-z0-9]{2,8})?$/i.test(raw)) {
+        return null;
+      }
+      return raw.slice(0, 24);
     }
 
     async _maybeRunTranslationMemoryGc() {
@@ -542,9 +614,94 @@
           diffLimit: 20
         }).catch(() => ({ ok: false }));
       }
+      await this._maybeGuardStorageQuota().catch(() => ({ ok: false }));
       return {
         ok: true,
         activeJobsCount: Array.isArray(activeJobs) ? activeJobs.length : 0
+      };
+    }
+
+    async _estimateStorageBytesInUse() {
+      if (!this.chromeApi || !this.chromeApi.storage || !this.chromeApi.storage.local || typeof this.chromeApi.storage.local.getBytesInUse !== 'function') {
+        return null;
+      }
+      return new Promise((resolve) => {
+        try {
+          this.chromeApi.storage.local.getBytesInUse(null, (bytes) => {
+            const lastError = this.chromeApi && this.chromeApi.runtime && this.chromeApi.runtime.lastError
+              ? this.chromeApi.runtime.lastError
+              : null;
+            if (lastError) {
+              resolve(null);
+              return;
+            }
+            resolve(Number.isFinite(Number(bytes)) ? Number(bytes) : null);
+          });
+        } catch (_) {
+          resolve(null);
+        }
+      });
+    }
+
+    async _maybeGuardStorageQuota() {
+      const now = Date.now();
+      if ((now - this._lastStorageQuotaCheckAt) < this._storageQuotaCheckIntervalMs) {
+        return { ok: true, skipped: true };
+      }
+      this._lastStorageQuotaCheckAt = now;
+      const bytes = await this._estimateStorageBytesInUse();
+      if (!Number.isFinite(Number(bytes))) {
+        return { ok: false, error: { code: 'BYTES_ESTIMATE_UNAVAILABLE', message: 'storage bytes estimate unavailable' } };
+      }
+      if (this.perfProfiler && typeof this.perfProfiler.recordGlobalMetric === 'function') {
+        this.perfProfiler.recordGlobalMetric('storageBytesEstimate', Number(bytes));
+      }
+      if (Number(bytes) < this._storageSoftThresholdBytes) {
+        return { ok: true, bytes: Number(bytes), compacted: false };
+      }
+      let compactResult = null;
+      if (this.translationJobStore && typeof this.translationJobStore.compactAllJobs === 'function') {
+        compactResult = await this.translationJobStore.compactAllJobs({
+          traceLimit: 90,
+          patchLimit: 130,
+          rateLimitLimit: 90,
+          reportsLimit: 90,
+          diffLimit: 12,
+          sizeThresholdBytes: 180 * 1024,
+          hardSizeThresholdBytes: 300 * 1024,
+          chunkSize: 18
+        }).catch(() => ({ ok: false }));
+      }
+      const overHard = Number(bytes) >= this._storageHardThresholdBytes;
+      if (overHard && this.translationMemoryStore && typeof this.translationMemoryStore.runGc === 'function') {
+        await this.translationMemoryStore.runGc({
+          maxPages: 180,
+          maxBlocks: 4200,
+          maxAgeDays: 21,
+          yieldEvery: 70
+        }).catch(() => ({ ok: false }));
+      }
+      this._logEvent(this.eventFactory.warn(
+        NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.BG_ERROR : 'bg.error',
+        'Storage quota guard triggered compaction',
+        {
+          bytesInUse: Number(bytes),
+          softThreshold: this._storageSoftThresholdBytes,
+          hardThreshold: this._storageHardThresholdBytes,
+          compactedJobs: compactResult && Number.isFinite(Number(compactResult.compactedJobs))
+            ? Number(compactResult.compactedJobs)
+            : 0,
+          overHard
+        }
+      ));
+      return {
+        ok: true,
+        bytes: Number(bytes),
+        compacted: true,
+        overHard,
+        compactedJobs: compactResult && Number.isFinite(Number(compactResult.compactedJobs))
+          ? Number(compactResult.compactedJobs)
+          : 0
       };
     }
 
@@ -719,11 +876,19 @@
           }))
           .filter((job) => Boolean(job.id))
           : [];
+      const migrationStatus = this.migrationManager && typeof this.migrationManager.exportStatus === 'function'
+        ? await this.migrationManager.exportStatus().catch(() => null)
+        : null;
+      const perfSnapshot = this.perfProfiler && typeof this.perfProfiler.getSnapshot === 'function'
+        ? this.perfProfiler.getSnapshot()
+        : null;
       return {
         toolset,
         effectiveToolPolicy: resolvedPolicy.effective || {},
         effectiveToolPolicyReasons: resolvedPolicy.reasons || {},
         security: this._buildSecurityRuntimeSnapshot(),
+        migrationStatus,
+        perfSnapshot,
         negotiation: {
           client: {
             portName: portName || null,
@@ -752,7 +917,8 @@
             queueStats: queueStats && typeof queueStats === 'object' ? queueStats : null,
             budget: budgetSnapshot && typeof budgetSnapshot === 'object' ? budgetSnapshot : null,
             activeJobs: activeJobsSummary
-          }
+          },
+          perf: perfSnapshot
         }
       };
     }
@@ -770,12 +936,18 @@
         effectiveToolPolicy: runtime.effectiveToolPolicy || {},
         effectiveToolPolicyReasons: runtime.effectiveToolPolicyReasons || {},
         security: runtime.security || null,
+        migrationStatus: runtime.migrationStatus || null,
+        perfSnapshot: runtime.perfSnapshot || null,
         negotiation: runtime.negotiation || null,
         serverCaps: runtime.serverCaps || null
       });
     }
 
     _attachListeners() {
+      if (this._listenersAttached) {
+        return;
+      }
+      this._listenersAttached = true;
       this.uiHub.attachToRuntime();
       if (this.chromeApi && this.chromeApi.runtime && this.chromeApi.runtime.onMessage) {
         this.chromeApi.runtime.onMessage.addListener(this._onRuntimeMessage);
@@ -803,7 +975,46 @@
       }
     }
 
+    async _runMigrations({ reason = 'runtime' } = {}) {
+      if (!this.migrationManager || typeof this.migrationManager.migrateAll !== 'function') {
+        return { ok: false, skipped: true };
+      }
+      try {
+        const result = await this.migrationManager.migrateAll({ reason });
+        this._emitMigrationPatch().catch(() => {});
+        return result;
+      } catch (error) {
+        this._logEvent(this.eventFactory.warn(
+          NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.BG_ERROR : 'bg.error',
+          'MigrationManager failed',
+          {
+            reason,
+            message: error && error.message ? error.message : 'unknown'
+          }
+        ));
+        return {
+          ok: false,
+          error: {
+            code: error && error.code ? error.code : 'MIGRATION_FAILED',
+            message: error && error.message ? error.message : 'migration failed'
+          }
+        };
+      }
+    }
+
+    async _emitMigrationPatch() {
+      if (!this.uiHub || typeof this.uiHub.broadcastPatch !== 'function' || !this.migrationManager || typeof this.migrationManager.exportStatus !== 'function') {
+        return;
+      }
+      const migrationStatus = await this.migrationManager.exportStatus().catch(() => null);
+      if (!migrationStatus) {
+        return;
+      }
+      this.uiHub.broadcastPatch({ migrationStatus });
+    }
+
     async _onRuntimeInstalled() {
+      await this._runMigrations({ reason: 'runtime.onInstalled' }).catch(() => ({ ok: false }));
       await this._refreshActiveTabId().catch(() => null);
       await this._hydrateRuntimeSchedulers().catch(() => ({ ok: false }));
       if (this.scheduler && typeof this.scheduler.ensureAlarms === 'function') {
@@ -816,6 +1027,7 @@
     }
 
     async _onRuntimeStartup() {
+      await this._runMigrations({ reason: 'runtime.onStartup' }).catch(() => ({ ok: false }));
       await this._refreshActiveTabId().catch(() => null);
       await this._hydrateRuntimeSchedulers().catch(() => ({ ok: false }));
       if (this.scheduler && typeof this.scheduler.ensureAlarms === 'function') {
@@ -1156,6 +1368,22 @@
           responsesOptions
         }
       });
+      const approxBytesOut = this._estimateJsonBytes({
+        taskType: taskType || 'unknown',
+        request: {
+          input: safeRequest.input || null,
+          maxOutputTokens: safeRequest.maxOutputTokens,
+          temperature: safeRequest.temperature,
+          store: safeRequest.store,
+          background: safeRequest.background,
+          stream: safeRequest.stream === true,
+          selectedModelSpecs,
+          responsesOptions
+        }
+      });
+      if (this.perfProfiler && requestMeta.jobId && approxBytesOut > 0) {
+        this.perfProfiler.recordJobMetric(requestMeta.jobId, 'offscreenBytesOut', approxBytesOut);
+      }
       if (this.inflightStore && typeof this.inflightStore.findByKey === 'function') {
         const existing = await this.inflightStore.findByKey(requestKey).catch(() => null);
         if (existing && existing.status === 'done' && existing.payloadHash === payloadHash && existing.rawJson && typeof existing.rawJson === 'object') {
@@ -1412,6 +1640,10 @@
         } else {
           await this.inflightStore.remove(requestMeta.requestId);
         }
+        const approxBytesIn = this._estimateJsonBytes(result ? result.json : null);
+        if (this.perfProfiler && requestMeta.jobId && approxBytesIn > 0) {
+          this.perfProfiler.recordJobMetric(requestMeta.jobId, 'offscreenBytesIn', approxBytesIn);
+        }
         this._broadcastRuntimeToolingPatch().catch(() => {});
         return result ? result.json : null;
       } catch (error) {
@@ -1480,6 +1712,15 @@
         hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
       }
       return (hash >>> 0).toString(16);
+    }
+
+    _estimateJsonBytes(value) {
+      try {
+        const text = JSON.stringify(value);
+        return typeof text === 'string' ? text.length : 0;
+      } catch (_) {
+        return 0;
+      }
     }
 
     _pickResponsesOptions(request) {
@@ -2013,6 +2254,7 @@
       const payload = envelope.payload || {};
       const commandName = payload.name;
       const commandPayload = payload.payload && typeof payload.payload === 'object' ? payload.payload : {};
+      const tabId = this._resolveCommandTabId(envelope, commandPayload);
 
       if (commandName === 'LOG_EVENT') {
         const event = commandPayload && typeof commandPayload === 'object' ? commandPayload : null;
@@ -2135,11 +2377,76 @@
         return result;
       }
 
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_SET_CREDENTIALS_BYOK : 'BG_TEST_SET_CREDENTIALS_BYOK')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        const result = await this._testSetCredentialsByok(commandPayload || {});
+        await this._broadcastSecurityPatch().catch(() => {});
+        return result;
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_SET_TARGET_LANG : 'BG_TEST_SET_TARGET_LANG')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testSetTargetLang(commandPayload || {});
+      }
+
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_GET_LOGS : 'BG_TEST_GET_LOGS')) {
         if (!(await this._isTestCommandsEnabled())) {
           return this._denyTestCommandResult(commandName);
         }
         return this._testGetLogs(commandPayload || {});
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_GET_ACTIVE_JOB : 'BG_TEST_GET_ACTIVE_JOB')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testGetActiveJob(commandPayload || {}, tabId);
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_GET_JOB_STATE : 'BG_TEST_GET_JOB_STATE')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testGetJobState(commandPayload || {}, tabId);
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_GET_ACTIVE_JOB_STATE : 'BG_TEST_GET_ACTIVE_JOB_STATE')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testGetActiveJobState(commandPayload || {}, tabId);
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_EXPORT_REPORT_JSON : 'BG_TEST_EXPORT_REPORT_JSON')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testExportReportJson(commandPayload || {}, tabId);
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_FORCE_SW_IDLE_SIM : 'BG_TEST_FORCE_SW_IDLE_SIM')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testForceSwIdleSim(commandPayload || {});
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_ERASE_JOB : 'BG_TEST_ERASE_JOB')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testEraseJob(commandPayload || {}, tabId);
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_WAIT_FOR_STAGE : 'BG_TEST_WAIT_FOR_STAGE')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        return this._testWaitForStage(commandPayload || {}, tabId);
       }
 
       if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_RELOAD_EXTENSION : 'BG_TEST_RELOAD_EXTENSION')) {
@@ -2179,11 +2486,25 @@
         return result;
       }
 
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_REPAIR_ALL : 'BG_REPAIR_ALL')) {
+        const result = await this._repairAllState(commandPayload || {});
+        this._kickScheduler('ui:bg_repair_all');
+        await this._broadcastRuntimeToolingPatch().catch(() => {});
+        return result;
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_EXPORT_MIGRATION_STATUS : 'BG_EXPORT_MIGRATION_STATUS')) {
+        return this._exportMigrationStatus();
+      }
+
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.EXPORT_PERF_SNAPSHOT : 'EXPORT_PERF_SNAPSHOT')) {
+        return this._exportPerfSnapshot();
+      }
+
       if (!this.translationOrchestrator) {
         return { ok: false, error: { code: 'ORCHESTRATOR_UNAVAILABLE', message: 'Оркестратор перевода недоступен' } };
       }
 
-      const tabId = this._resolveCommandTabId(envelope, commandPayload);
       if (Number.isFinite(Number(tabId))) {
         await this._refreshActiveTabId({ tabIdHint: Number(tabId) }).catch(() => null);
       }
@@ -2194,10 +2515,12 @@
           ? commandPayload.url.trim()
           : '';
         const resolvedUrl = requestedUrl || await this._resolveTabUrl(tabId);
+        const normalizedTargetLang = this._normalizeTargetLang(commandPayload && commandPayload.targetLang);
+        const fallbackTestTargetLang = this._normalizeTargetLang(this._testTargetLang) || 'ru';
         const result = await this.translationOrchestrator.startJob({
           tabId,
           url: resolvedUrl || '',
-          targetLang: commandPayload.targetLang || 'ru',
+          targetLang: normalizedTargetLang || fallbackTestTargetLang,
           force: Boolean(commandPayload.force)
         });
         if (!result.ok) {
@@ -2230,10 +2553,26 @@
       if (commandName === commands.SET_TRANSLATION_CATEGORIES || commandName === 'SET_TRANSLATION_CATEGORIES') {
         const result = await this.translationOrchestrator.applyCategorySelection({
           tabId,
-          categories: Array.isArray(commandPayload.categories) ? commandPayload.categories : [],
-          jobId: commandPayload.jobId || null
+          categories: Array.isArray(commandPayload.categories)
+            ? commandPayload.categories
+            : (Array.isArray(commandPayload.ids) ? commandPayload.ids : []),
+          jobId: commandPayload.jobId || null,
+          mode: commandPayload.mode === 'add' || commandPayload.mode === 'remove' || commandPayload.mode === 'replace'
+            ? commandPayload.mode
+            : 'replace',
+          reason: typeof commandPayload.reason === 'string' ? commandPayload.reason : ''
         });
         this._kickScheduler('ui:set_translation_categories');
+        return result;
+      }
+
+      if (commandName === commands.RECLASSIFY_BLOCKS || commandName === 'RECLASSIFY_BLOCKS') {
+        const result = await this.translationOrchestrator.reclassifyBlocks({
+          tabId,
+          jobId: commandPayload.jobId || null,
+          force: commandPayload.force !== false
+        });
+        this._kickScheduler('ui:reclassify_blocks');
         return result;
       }
 
@@ -2354,6 +2693,14 @@
         return { ok: true };
       }
 
+      if (commandName === (UiProtocol && UiProtocol.Commands ? UiProtocol.Commands.BG_TEST_KICK_SCHEDULER : 'BG_TEST_KICK_SCHEDULER')) {
+        if (!(await this._isTestCommandsEnabled())) {
+          return this._denyTestCommandResult(commandName);
+        }
+        this._kickScheduler('ui:bg_test_kick_scheduler');
+        return { ok: true, kicked: true, ts: Date.now() };
+      }
+
       this._logEvent(this.eventFactory.warn(NT.EventTypes.Tags.UI_COMMAND, 'Неизвестная команда UI', {
         source: 'ui',
         stage: commandName || 'неизвестно'
@@ -2429,6 +2776,66 @@
       }
     }
 
+    async _testSetCredentialsByok(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const apiKey = typeof source.apiKey === 'string' ? source.apiKey.trim() : '';
+      const persist = source.persist === true;
+      if (!apiKey) {
+        return {
+          ok: false,
+          error: {
+            code: 'NO_API_KEY',
+            message: 'apiKey is required'
+          }
+        };
+      }
+      const modeResult = await this._setConnectionMode('BYOK').catch((error) => ({
+        ok: false,
+        error: {
+          code: error && error.code ? error.code : 'SET_MODE_FAILED',
+          message: error && error.message ? error.message : 'Failed to switch connection mode'
+        }
+      }));
+      if (!modeResult || modeResult.ok !== true) {
+        return this._redactTestPayload(modeResult || { ok: false, error: { code: 'SET_MODE_FAILED', message: 'Failed to switch mode' } });
+      }
+      const saveResult = await this._saveByokKey({
+        key: apiKey,
+        persist
+      });
+      const out = saveResult && saveResult.ok === true
+        ? {
+          ok: true,
+          mode: 'BYOK',
+          persist: Boolean(saveResult.persist),
+          keyStored: true
+        }
+        : (saveResult || { ok: false, error: { code: 'BYOK_SAVE_FAILED', message: 'Failed to save BYOK key' } });
+      return this._redactTestPayload(out);
+    }
+
+    async _testSetTargetLang(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const normalized = this._normalizeTargetLang(source.lang);
+      if (!normalized) {
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_TARGET_LANG',
+            message: 'lang is required (e.g. ru)'
+          }
+        };
+      }
+      this._testTargetLang = normalized;
+      if (this.settingsStore && typeof this.settingsStore.set === 'function') {
+        await this.settingsStore.set({ debugTestTargetLang: normalized }).catch(() => null);
+      }
+      return {
+        ok: true,
+        lang: normalized
+      };
+    }
+
     async _testGetLogs(payload) {
       const source = payload && typeof payload === 'object' ? payload : {};
       const requested = Number(source.limit);
@@ -2444,6 +2851,365 @@
         seq: Number.isFinite(Number(tail && tail.seq)) ? Number(tail.seq) : 0,
         logs: Array.isArray(tail && tail.items) ? tail.items : []
       };
+    }
+
+    _redactTestPayload(payload) {
+      const clone = this._safeClone(payload, payload);
+      const redactor = NT && NT.Redaction && typeof NT.Redaction.redactDeep === 'function'
+        ? NT.Redaction.redactDeep.bind(NT.Redaction)
+        : (NT && typeof NT.redactDeep === 'function' ? NT.redactDeep : null);
+      if (!redactor) {
+        return clone;
+      }
+      try {
+        return redactor(clone, {});
+      } catch (_) {
+        return clone;
+      }
+    }
+
+    async _resolveTestJobContext({ payload = {}, fallbackTabId = null } = {}) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const explicitJobId = typeof source.jobId === 'string' && source.jobId.trim()
+        ? source.jobId.trim()
+        : null;
+      const explicitTabId = Number(source.tabId);
+      const candidateTabId = Number.isFinite(explicitTabId)
+        ? explicitTabId
+        : (Number.isFinite(Number(fallbackTabId)) ? Number(fallbackTabId) : Number(this._activeTabId));
+      const out = {
+        tabId: Number.isFinite(candidateTabId) ? candidateTabId : null,
+        activeJobId: null,
+        lastJobId: null,
+        job: null
+      };
+      if (!this.translationJobStore) {
+        return out;
+      }
+      if (explicitJobId && typeof this.translationJobStore.getJob === 'function') {
+        const directJob = await this.translationJobStore.getJob(explicitJobId).catch(() => null);
+        if (directJob && typeof directJob === 'object') {
+          out.job = directJob;
+          out.tabId = Number.isFinite(Number(directJob.tabId)) ? Number(directJob.tabId) : out.tabId;
+        }
+      }
+      if (Number.isFinite(Number(out.tabId))) {
+        if (typeof this.translationJobStore.getActiveJobId === 'function') {
+          out.activeJobId = await this.translationJobStore.getActiveJobId(out.tabId).catch(() => null);
+        }
+        if (typeof this.translationJobStore.getLastJobId === 'function') {
+          out.lastJobId = await this.translationJobStore.getLastJobId(out.tabId).catch(() => null);
+        }
+        if (typeof this.translationJobStore.getActiveJob === 'function') {
+          out.job = await this.translationJobStore.getActiveJob(out.tabId).catch(() => null);
+        }
+      }
+      if (!out.job && out.activeJobId && typeof this.translationJobStore.getJob === 'function') {
+        out.job = await this.translationJobStore.getJob(out.activeJobId).catch(() => null);
+      }
+      if (!out.job && out.lastJobId && typeof this.translationJobStore.getJob === 'function') {
+        out.job = await this.translationJobStore.getJob(out.lastJobId).catch(() => null);
+      }
+      return out;
+    }
+
+    _testStageFromJob(job) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const status = typeof safeJob.status === 'string' ? safeJob.status.toLowerCase() : '';
+      const runtimeStage = safeJob.runtime && safeJob.runtime.stage && typeof safeJob.runtime.stage === 'string'
+        ? safeJob.runtime.stage.toLowerCase()
+        : '';
+      const phase = safeJob.agentState && typeof safeJob.agentState.phase === 'string'
+        ? safeJob.agentState.phase.toLowerCase()
+        : '';
+      if (status === 'preparing') {
+        return 'preanalysis';
+      }
+      if (status === 'planning') {
+        return 'planning';
+      }
+      if (status === 'awaiting_categories') {
+        return 'awaiting_categories';
+      }
+      if (status === 'running' || status === 'completing') {
+        if (runtimeStage === 'planning' || phase.indexOf('planning') >= 0) {
+          return 'planning';
+        }
+        if (runtimeStage === 'proofreading' || phase.indexOf('proof') >= 0) {
+          return 'proofreading';
+        }
+        return 'execution';
+      }
+      if (status === 'done') {
+        return 'done';
+      }
+      if (status === 'failed') {
+        return 'failed';
+      }
+      if (status === 'cancelled') {
+        return 'cancelled';
+      }
+      return runtimeStage || phase || 'unknown';
+    }
+
+    _testStateSummaryFromJob(job) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const state = safeJob.agentState && typeof safeJob.agentState === 'object'
+        ? safeJob.agentState
+        : {};
+      const planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
+        ? state.planningMarkers
+        : {};
+      const checklist = Array.isArray(state.checklist) ? state.checklist.slice() : [];
+      const selectedCategories = Array.isArray(safeJob.selectedCategories) ? safeJob.selectedCategories.slice() : [];
+      const hasTaxonomy = state.taxonomy && typeof state.taxonomy === 'object'
+        && Array.isArray(state.taxonomy.categories)
+        && state.taxonomy.categories.length > 0;
+      const hasPipeline = state.pipeline && typeof state.pipeline === 'object'
+        && Object.keys(state.pipeline).length > 0;
+      const hasGlossary = Array.isArray(state.glossary)
+        ? state.glossary.length > 0
+        : (state.glossary && typeof state.glossary === 'object'
+          ? Object.keys(state.glossary).length > 0
+          : false);
+      const pendingBlockCount = Array.isArray(safeJob.pendingBlockIds) ? safeJob.pendingBlockIds.length : 0;
+      const pendingRangeCount = Array.isArray(safeJob.pendingRangeIds) ? safeJob.pendingRangeIds.length : 0;
+      const pendingCount = Math.max(pendingBlockCount, pendingRangeCount);
+      const doneCount = Number.isFinite(Number(safeJob.completedBlocks))
+        ? Number(safeJob.completedBlocks)
+        : 0;
+      const leaseUntilTs = safeJob.runtime
+        && safeJob.runtime.lease
+        && Number.isFinite(Number(safeJob.runtime.lease.leaseUntilTs))
+        ? Number(safeJob.runtime.lease.leaseUntilTs)
+        : (Number.isFinite(Number(safeJob.leaseUntilTs)) ? Number(safeJob.leaseUntilTs) : null);
+      const userQuestion = state.userQuestion && typeof state.userQuestion === 'object'
+        ? {
+          questionRu: typeof state.userQuestion.questionRu === 'string' ? state.userQuestion.questionRu : '',
+          optionsCount: Array.isArray(state.userQuestion.options) ? state.userQuestion.options.length : 0
+        }
+        : null;
+      return {
+        status: safeJob.status || null,
+        stage: this._testStageFromJob(safeJob),
+        checklist,
+        selectedCategories,
+        planPresent: Boolean(hasPipeline),
+        planFinalized: planningMarkers.finishAnalysisOk === true,
+        taxonomyPresent: Boolean(hasTaxonomy),
+        glossaryPresent: Boolean(hasGlossary),
+        lastError: safeJob.lastError && typeof safeJob.lastError === 'object'
+          ? this._safeClone(safeJob.lastError, safeJob.lastError)
+          : null,
+        leaseUntilTs,
+        pendingCount,
+        doneCount,
+        userQuestion
+      };
+    }
+
+    async _testGetActiveJob(payload, fallbackTabId = null) {
+      const context = await this._resolveTestJobContext({ payload, fallbackTabId });
+      const job = context.job && typeof context.job === 'object' ? context.job : null;
+      return this._redactTestPayload({
+        ok: true,
+        jobId: job && job.id ? job.id : null,
+        tabId: Number.isFinite(Number(context.tabId)) ? Number(context.tabId) : null
+      });
+    }
+
+    async _testGetJobState(payload, fallbackTabId = null) {
+      const context = await this._resolveTestJobContext({ payload, fallbackTabId });
+      const job = context.job && typeof context.job === 'object' ? context.job : null;
+      if (!job) {
+        return {
+          ok: false,
+          error: {
+            code: 'JOB_NOT_FOUND',
+            message: 'No matching job'
+          }
+        };
+      }
+      return this._redactTestPayload({
+        ok: true,
+        jobId: job.id || null,
+        tabId: Number.isFinite(Number(context.tabId)) ? Number(context.tabId) : null,
+        state: this._testStateSummaryFromJob(job)
+      });
+    }
+
+    async _testGetActiveJobState(payload, fallbackTabId = null) {
+      const context = await this._resolveTestJobContext({ payload, fallbackTabId });
+      return {
+        ok: true,
+        tabId: context.tabId,
+        activeJobId: context.activeJobId || null,
+        lastJobId: context.lastJobId || null,
+        job: context.job ? this._redactTestPayload(context.job) : null
+      };
+    }
+
+    async _testExportReportJson(payload, fallbackTabId = null) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const logsLimit = Number.isFinite(Number(source.logsLimit))
+        ? Math.max(20, Math.min(500, Math.round(Number(source.logsLimit))))
+        : 200;
+      const toolTraceLimit = Number.isFinite(Number(source.toolTraceLimit))
+        ? Math.max(10, Math.min(300, Math.round(Number(source.toolTraceLimit))))
+        : 50;
+      const patchLimit = Number.isFinite(Number(source.patchLimit))
+        ? Math.max(5, Math.min(200, Math.round(Number(source.patchLimit))))
+        : 50;
+      const context = await this._resolveTestJobContext({ payload: source, fallbackTabId });
+      const logs = await this._testGetLogs({ limit: logsLimit }).catch(() => ({ ok: true, seq: 0, logs: [] }));
+      const job = context.job && typeof context.job === 'object' ? context.job : null;
+      const state = job && job.agentState && typeof job.agentState === 'object'
+        ? job.agentState
+        : {};
+      const report = {
+        kind: 'nt_test_report',
+        exportedAt: Date.now(),
+        tabId: context.tabId,
+        activeJobId: context.activeJobId || null,
+        lastJobId: context.lastJobId || null,
+        job: job
+          ? {
+            id: job.id || null,
+            status: job.status || null,
+            stage: job.stage || null,
+            message: job.message || '',
+            runtime: this._safeClone(job.runtime, {}),
+            lastError: this._safeClone(job.lastError, null),
+            pendingBlockIds: Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.slice(0, 400) : [],
+            failedBlockIds: Array.isArray(job.failedBlockIds) ? job.failedBlockIds.slice(0, 400) : [],
+            selectedCategories: Array.isArray(job.selectedCategories) ? job.selectedCategories.slice(0, 80) : [],
+            pageAnalysis: job.pageAnalysis && typeof job.pageAnalysis === 'object'
+              ? {
+                domHash: job.pageAnalysis.domHash || null,
+                preanalysisVersion: job.pageAnalysis.preanalysisVersion || null,
+                stats: this._safeClone(job.pageAnalysis.stats, {})
+              }
+              : null
+          }
+          : null,
+        agent: {
+          checklist: Array.isArray(state.checklist) ? state.checklist.slice() : [],
+          reports: Array.isArray(state.reports) ? state.reports.slice(-50) : [],
+          toolExecutionTrace: Array.isArray(state.toolExecutionTrace) ? state.toolExecutionTrace.slice(-toolTraceLimit) : [],
+          patchHistory: Array.isArray(state.patchHistory) ? state.patchHistory.slice(-patchLimit) : [],
+          recentDiffItems: Array.isArray(state.recentDiffItems) ? state.recentDiffItems.slice(-patchLimit) : []
+        },
+        logs: Array.isArray(logs.logs) ? logs.logs.slice(-logsLimit) : []
+      };
+      return {
+        ok: true,
+        tabId: context.tabId,
+        report: this._redactTestPayload(report)
+      };
+    }
+
+    async _testForceSwIdleSim(payload) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const suggestedIdleMs = Number.isFinite(Number(source.idleMs))
+        ? Math.max(1000, Math.min(120000, Math.round(Number(source.idleMs))))
+        : 35000;
+      let disconnectedPorts = 0;
+      const subscribers = this.uiHub && this.uiHub.subscribers && typeof this.uiHub.subscribers.forEach === 'function'
+        ? this.uiHub.subscribers
+        : null;
+      if (subscribers) {
+        subscribers.forEach((port) => {
+          if (!port || typeof port.disconnect !== 'function') {
+            return;
+          }
+          try {
+            port.disconnect();
+            disconnectedPorts += 1;
+          } catch (_) {
+            // ignore per-port failures
+          }
+        });
+      }
+      return {
+        ok: true,
+        simulated: true,
+        disconnectedPorts,
+        note: 'MV3 worker cannot be force-terminated; wait for natural idle timeout.',
+        suggestedIdleMs
+      };
+    }
+
+    async _testEraseJob(payload, fallbackTabId = null) {
+      const context = await this._resolveTestJobContext({ payload, fallbackTabId });
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const tabId = Number.isFinite(Number(context.tabId)) ? Number(context.tabId) : null;
+      if (!Number.isFinite(Number(tabId)) || !this.translationOrchestrator || typeof this.translationOrchestrator.clearJobData !== 'function') {
+        return {
+          ok: false,
+          error: {
+            code: 'JOB_NOT_FOUND',
+            message: 'No tab/job context for erase'
+          }
+        };
+      }
+      const result = await this.translationOrchestrator.clearJobData({
+        tabId,
+        includeCache: source.includeCache !== false
+      });
+      return this._redactTestPayload({
+        ok: Boolean(result && result.ok === true),
+        tabId,
+        erased: Boolean(result && result.cleared === true),
+        result: result || null
+      });
+    }
+
+    async _testWaitForStage(payload, fallbackTabId = null) {
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const expectedStage = typeof source.stage === 'string' ? source.stage.trim().toLowerCase() : '';
+      if (!expectedStage) {
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_STAGE',
+            message: 'stage is required'
+          }
+        };
+      }
+      const timeoutMs = Number.isFinite(Number(source.timeoutMs))
+        ? Math.max(500, Math.min(180000, Math.round(Number(source.timeoutMs))))
+        : 60000;
+      const pollMs = Number.isFinite(Number(source.pollMs))
+        ? Math.max(100, Math.min(2000, Math.round(Number(source.pollMs))))
+        : 250;
+      const startedAt = Date.now();
+      let last = null;
+      while ((Date.now() - startedAt) < timeoutMs) {
+        last = await this._testGetJobState(source, fallbackTabId);
+        if (last && last.ok === true && last.state && String(last.state.stage || '').toLowerCase() === expectedStage) {
+          return this._redactTestPayload({
+            ok: true,
+            matched: true,
+            elapsedMs: Date.now() - startedAt,
+            stage: expectedStage,
+            jobId: last.jobId || null,
+            tabId: last.tabId || null,
+            state: last.state
+          });
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+      return this._redactTestPayload({
+        ok: false,
+        matched: false,
+        elapsedMs: Date.now() - startedAt,
+        stage: expectedStage,
+        last: last && typeof last === 'object' ? last : null,
+        error: {
+          code: 'WAIT_STAGE_TIMEOUT',
+          message: `Timed out waiting for stage=${expectedStage}`
+        }
+      });
     }
 
     async _testSoftReloadExtension({ reason = 'test_reload_extension' } = {}) {
@@ -2484,6 +3250,56 @@
       }
       await this._broadcastRuntimeToolingPatch().catch(() => {});
       return out;
+    }
+
+    async _repairAllState(payload = {}) {
+      if (!this.migrationManager) {
+        return { ok: false, error: { code: 'MIGRATION_MANAGER_UNAVAILABLE', message: 'MigrationManager unavailable' } };
+      }
+      const source = payload && typeof payload === 'object' ? payload : {};
+      const compactJobs = source.compactJobs !== false;
+      const verify = source.verify !== false;
+      const repair = await this.migrationManager.repairIndexes({ compactJobs }).catch((error) => ({
+        ok: false,
+        error: {
+          code: error && error.code ? error.code : 'REPAIR_FAILED',
+          message: error && error.message ? error.message : 'repair failed'
+        }
+      }));
+      const integrity = verify
+        ? await this.migrationManager.verifyIntegrity().catch((error) => ({
+          ok: false,
+          error: {
+            code: error && error.code ? error.code : 'VERIFY_FAILED',
+            message: error && error.message ? error.message : 'verify failed'
+          }
+        }))
+        : { ok: true, skipped: true };
+      const migrationStatus = await this.migrationManager.exportStatus().catch(() => null);
+      await this._emitMigrationPatch().catch(() => {});
+      return {
+        ok: Boolean(repair && repair.ok !== false && integrity && integrity.ok !== false),
+        repair,
+        integrity,
+        migrationStatus
+      };
+    }
+
+    async _exportMigrationStatus() {
+      if (!this.migrationManager || typeof this.migrationManager.exportStatus !== 'function') {
+        return { ok: false, error: { code: 'MIGRATION_MANAGER_UNAVAILABLE', message: 'MigrationManager unavailable' } };
+      }
+      return this.migrationManager.exportStatus();
+    }
+
+    async _exportPerfSnapshot() {
+      if (!this.perfProfiler || typeof this.perfProfiler.getSnapshot !== 'function') {
+        return { ok: false, error: { code: 'PERF_PROFILER_UNAVAILABLE', message: 'PerfProfiler unavailable' } };
+      }
+      return {
+        ok: true,
+        snapshot: this.perfProfiler.getSnapshot()
+      };
     }
 
     _toProxyOriginPattern(baseUrl) {
@@ -2786,13 +3602,14 @@
         'translationPageCacheEnabled',
         'translationApiCacheEnabled',
         'translationCompareDiffThreshold',
+        'translationCompareRendering',
         'translationPopupActiveTab',
-        'translationVisibilityByTab',
-        'translationDisplayModeByTab',
         'debugAllowTestCommands'
       ];
       const watchedKeys = [
         'translationStatusByTab',
+        'translationVisibilityByTab',
+        'translationDisplayModeByTab',
         'modelBenchmarkStatus',
         'modelBenchmarks'
       ];

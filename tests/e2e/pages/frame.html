@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>NT E2E Frames</title>
+    <style>
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; }
+      .card { border: 1px solid #d7dbe3; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      iframe { width: 100%; height: 120px; border: 1px solid #c5cad4; border-radius: 6px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="frames-title">Frame coverage page</h1>
+    <div class="card">
+      <p id="frames-top-text">Top frame text should still be translated normally.</p>
+    </div>
+    <div class="card">
+      <p>iframe srcdoc</p>
+      <iframe
+        id="frame-srcdoc"
+        srcdoc="<!doctype html><html><body><p id='srcdoc-text'>This text lives inside iframe srcdoc and must be translated too.</p></body></html>"
+      ></iframe>
+    </div>
+    <div class="card">
+      <p>iframe same-origin</p>
+      <iframe id="frame-same-origin" src="/frame-child.html"></iframe>
+    </div>
+  </body>
+</html>

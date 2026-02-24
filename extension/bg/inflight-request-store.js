@@ -18,25 +18,46 @@
   class InflightRequestStore extends NT.ChromeLocalStoreBase {
     constructor({ chromeApi } = {}) {
       super({ chromeApi });
-      this.KEY = 'ntInflightRequests';
-      this.LEGACY_KEY = 'inflightRequests';
-      this.DEFAULTS = { ntInflightRequests: {}, inflightRequests: {} };
+      this.KEY = 'nt.inflight.v2';
+      this.LEGACY_KEYS = ['ntInflightRequests', 'inflightRequests'];
+      this.DEFAULTS = {
+        [this.KEY]: {},
+        ntInflightRequests: {},
+        inflightRequests: {}
+      };
       this.LEASE_MS = 2 * 60 * 1000;
       this.SWEEP_INTERVAL_MS = 30 * 1000;
+    }
+
+    async ensureCanonicalSnapshot({ force = false, pruneLegacy = false } = {}) {
+      const all = await this.getAll();
+      const raw = await this.storageGet(this.DEFAULTS);
+      const hasCanonical = Boolean(raw && raw[this.KEY] && typeof raw[this.KEY] === 'object' && !Array.isArray(raw[this.KEY]));
+      if (force || !hasCanonical) {
+        await this._saveAll(all, { pruneLegacy });
+      }
+      return {
+        ok: true,
+        migrated: Boolean(force || !hasCanonical),
+        size: Object.keys(all).length
+      };
     }
 
     async getAll() {
       try {
         const data = await this.storageGet(this.DEFAULTS);
-        const current = data && data[this.KEY] && typeof data[this.KEY] === 'object'
+        const current = data && data[this.KEY] && typeof data[this.KEY] === 'object' && !Array.isArray(data[this.KEY])
           ? data[this.KEY]
           : {};
-        const legacy = data && data[this.LEGACY_KEY] && typeof data[this.LEGACY_KEY] === 'object'
-          ? data[this.LEGACY_KEY]
-          : {};
-        const merged = { ...legacy, ...current };
-        if (!Object.keys(current).length && Object.keys(legacy).length) {
-          await this.storageSet({ [this.KEY]: merged, [this.LEGACY_KEY]: merged });
+        const merged = { ...current };
+        this.LEGACY_KEYS.forEach((legacyKey) => {
+          const value = data && data[legacyKey] && typeof data[legacyKey] === 'object' && !Array.isArray(data[legacyKey])
+            ? data[legacyKey]
+            : {};
+          Object.assign(merged, value);
+        });
+        if (!Object.keys(current).length && Object.keys(merged).length) {
+          await this._saveAll(merged);
         }
         return merged;
       } catch (_) {
@@ -83,9 +104,20 @@
       };
     }
 
-    async _saveAll(all) {
+    async _saveAll(all, { pruneLegacy = false } = {}) {
       try {
-        await this.storageSet({ [this.KEY]: all, [this.LEGACY_KEY]: all });
+        await this.storageSet({ [this.KEY]: all });
+        if (
+          pruneLegacy
+          && this.chromeApi
+          && this.chromeApi.storage
+          && this.chromeApi.storage.local
+          && typeof this.chromeApi.storage.local.remove === 'function'
+        ) {
+          await new Promise((resolve) => {
+            this.chromeApi.storage.local.remove(this.LEGACY_KEYS, () => resolve());
+          });
+        }
       } catch (_) {
         // best-effort
       }

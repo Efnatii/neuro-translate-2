@@ -24,6 +24,8 @@
   const TOOL_KEYS = Object.freeze([
     'page.get_stats',
     'page.get_blocks',
+    'page.classify_blocks',
+    'page.get_category_summary',
     'agent.set_tool_config',
     'agent.propose_tool_policy',
     'agent.get_tool_context',
@@ -33,7 +35,8 @@
     'agent.reject_run_settings_proposal',
     'agent.explain_current_run_settings',
     'agent.set_plan',
-    'agent.set_recommended_categories',
+    'job.set_selected_categories',
+    'agent.recommend_categories',
     'agent.append_report',
     'agent.update_checklist',
     'agent.compress_context',
@@ -55,6 +58,7 @@
   const CACHE_RETENTION_VALUES = Object.freeze(['auto', 'in_memory', 'extended', 'disabled']);
   const ROUTING_MODE_VALUES = Object.freeze(['auto', 'user_priority', 'profile_priority']);
   const UI_LANG_VALUES = Object.freeze(['ru']);
+  const UI_COMPARE_RENDERING_VALUES = Object.freeze(['auto', 'highlights', 'wrappers']);
   const DEFAULT_MEMORY_IGNORED_QUERY_PARAMS = Object.freeze(['utm_*', 'fbclid', 'gclid']);
 
   const LEGACY_PROFILE_MAP = Object.freeze({
@@ -77,7 +81,7 @@
 
   const LEGACY_TOOL_MAP = Object.freeze({
     pageAnalyzer: ['page.get_stats', 'page.get_blocks'],
-    categorySelector: ['agent.set_recommended_categories'],
+    categorySelector: ['page.classify_blocks', 'page.get_category_summary', 'agent.recommend_categories', 'job.set_selected_categories'],
     glossaryBuilder: ['translator.translate_block_stream'],
     batchPlanner: ['agent.set_plan'],
     modelRouter: ['translator.translate_block_stream'],
@@ -127,6 +131,8 @@
       toolConfigDefault: {
         'page.get_stats': 'on',
         'page.get_blocks': 'auto',
+        'page.classify_blocks': 'on',
+        'page.get_category_summary': 'on',
         'agent.set_tool_config': 'on',
         'agent.propose_tool_policy': 'on',
         'agent.get_tool_context': 'on',
@@ -136,7 +142,8 @@
         'agent.reject_run_settings_proposal': 'on',
         'agent.explain_current_run_settings': 'on',
         'agent.set_plan': 'on',
-        'agent.set_recommended_categories': 'on',
+        'job.set_selected_categories': 'on',
+        'agent.recommend_categories': 'on',
         'agent.append_report': 'on',
         'agent.update_checklist': 'on',
         'agent.compress_context': 'auto',
@@ -256,7 +263,8 @@
     ui: {
       uiLanguage: 'ru',
       showAdvanced: false,
-      collapseState: {}
+      collapseState: {},
+      compareRendering: 'auto'
     }
   });
 
@@ -386,7 +394,12 @@
       ui: {
         uiLanguage: normalizeEnum(ui.uiLanguage, UI_LANG_VALUES, DEFAULT_USER_SETTINGS.ui.uiLanguage),
         showAdvanced: ui.showAdvanced === true,
-        collapseState: normalizeCollapseState(ui.collapseState)
+        collapseState: normalizeCollapseState(ui.collapseState),
+        compareRendering: normalizeEnum(
+          ui.compareRendering,
+          UI_COMPARE_RENDERING_VALUES,
+          DEFAULT_USER_SETTINGS.ui.compareRendering
+        )
       },
       _meta: {
         availableModelCount: normalizeModelList(modelList).length
@@ -483,6 +496,9 @@
     if (agentMode !== defaultAgentMode) {
       addOverride(overrides, 'agent.agentMode', agentMode);
     }
+    if (normalized.ui.compareRendering !== DEFAULT_USER_SETTINGS.ui.compareRendering) {
+      addOverride(overrides, 'ui.compareRendering', normalized.ui.compareRendering);
+    }
 
     const effectiveProfile = overrides.changed.length && profileKey !== 'custom'
       ? 'custom'
@@ -548,7 +564,12 @@
       ui: {
         uiLanguage: normalized.ui.uiLanguage || 'ru',
         showAdvanced: normalized.ui.showAdvanced === true,
-        collapseState: cloneJson(normalized.ui.collapseState, {})
+        collapseState: cloneJson(normalized.ui.collapseState, {}),
+        compareRendering: normalizeEnum(
+          normalized.ui.compareRendering,
+          UI_COMPARE_RENDERING_VALUES,
+          DEFAULT_USER_SETTINGS.ui.compareRendering
+        )
       },
       legacyProjection: {
         translationAgentProfile: legacyProfile,
@@ -561,7 +582,12 @@
         translationMemoryMaxBlocks: normalized.memory.maxBlocks,
         translationMemoryMaxAgeDays: normalized.memory.maxAgeDays,
         translationMemoryGcOnStartup: normalized.memory.gcOnStartup !== false,
-        translationMemoryIgnoredQueryParams: normalizeIgnoredQueryParams(normalized.memory.ignoredQueryParams)
+        translationMemoryIgnoredQueryParams: normalizeIgnoredQueryParams(normalized.memory.ignoredQueryParams),
+        translationCompareRendering: normalizeEnum(
+          normalized.ui.compareRendering,
+          UI_COMPARE_RENDERING_VALUES,
+          DEFAULT_USER_SETTINGS.ui.compareRendering
+        )
       }
     };
 
@@ -620,6 +646,11 @@
     base.memory.maxAgeDays = normalizeBoundedInteger(src.translationMemoryMaxAgeDays, DEFAULT_USER_SETTINGS.memory.maxAgeDays, { min: 1, max: 365 });
     base.memory.gcOnStartup = src.translationMemoryGcOnStartup !== false;
     base.memory.ignoredQueryParams = normalizeIgnoredQueryParams(src.translationMemoryIgnoredQueryParams);
+    base.ui.compareRendering = normalizeEnum(
+      src.translationCompareRendering,
+      UI_COMPARE_RENDERING_VALUES,
+      DEFAULT_USER_SETTINGS.ui.compareRendering
+    );
 
     return normalizeUserSettings(base, { modelList });
   }

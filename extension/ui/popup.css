@@ -327,7 +327,47 @@ body {
 }
 
 .popup__categories--runtime {
-  max-height: 164px;
+  max-height: 208px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.popup__category-group {
+  display: grid;
+  gap: 4px;
+}
+
+.popup__category-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #222;
+}
+
+.popup__category-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  font-size: 10px;
+  line-height: 1.3;
+  margin-left: auto;
+}
+
+.popup__checkbox--muted {
+  opacity: 0.56;
+}
+
+.popup__checkbox-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .popup__categories--settings {
@@ -442,9 +482,19 @@ body {
   padding: 5px 8px;
 }
 
+.popup__debug--help {
+  white-space: normal;
+  line-height: 1.25;
+}
+
 .popup__button {
   padding: 7px 10px;
   font-size: 12px;
+}
+
+.popup__button--small {
+  padding: 5px 8px;
+  font-size: 11px;
 }
 
 .popup__icon-button {
@@ -630,6 +680,10 @@ body {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.popup__buttons-row--start {
+  justify-content: flex-start;
 }
 
 .popup__buttons-row .popup__button {

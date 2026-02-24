@@ -154,17 +154,34 @@
           agentState: null,
           selectedCategories: [],
           availableCategories: [],
-          recentDiffItems: []
+          recentDiffItems: [],
+          classification: null,
+          categoryRecommendations: null,
+          domHash: null,
+          classificationStale: false,
+          migrationStatus: null,
+          perfSnapshot: null
         };
       }
       const helloPayload = envelope && envelope.payload && typeof envelope.payload === 'object' ? envelope.payload : {};
       const lastEventSeq = typeof helloPayload.lastEventSeq === 'number' ? helloPayload.lastEventSeq : null;
       const settings = await this.settingsStore.getPublicSnapshot();
-      const visibilityData = await this.settingsStore.get([
-        'translationVisibilityByTab',
-        'translationDisplayModeByTab',
-        'activeTabId'
-      ]);
+      const activeTabData = await this.settingsStore.get(['activeTabId']).catch(() => ({ activeTabId: null }));
+      const visibilityData = this.tabStateStore && typeof this.tabStateStore.getVisibilitySnapshot === 'function'
+        ? await this.tabStateStore.getVisibilitySnapshot().catch(() => ({
+          translationVisibilityByTab: {},
+          translationDisplayModeByTab: {}
+        }))
+        : await this.settingsStore.get([
+          'translationVisibilityByTab',
+          'translationDisplayModeByTab'
+        ]).catch(() => ({
+          translationVisibilityByTab: {},
+          translationDisplayModeByTab: {}
+        }));
+      visibilityData.activeTabId = Number.isFinite(Number(activeTabData && activeTabData.activeTabId))
+        ? Number(activeTabData.activeTabId)
+        : null;
       const translationStatusByTab = await this.tabStateStore.getAllStatus();
       const benchmarkData = this.aiModule && typeof this.aiModule.getBenchmarkSnapshot === 'function'
         ? await this.aiModule.getBenchmarkSnapshot()
@@ -212,10 +229,16 @@
         selectedCategories: translationState.selectedCategories,
         availableCategories: translationState.availableCategories,
         recentDiffItems: translationState.recentDiffItems,
+        classification: translationState.classification,
+        categoryRecommendations: translationState.categoryRecommendations,
+        domHash: translationState.domHash,
+        classificationStale: translationState.classificationStale,
         toolset: runtime && runtime.toolset ? runtime.toolset : null,
         effectiveToolPolicy: runtime && runtime.effectiveToolPolicy ? runtime.effectiveToolPolicy : null,
         effectiveToolPolicyReasons: runtime && runtime.effectiveToolPolicyReasons ? runtime.effectiveToolPolicyReasons : null,
         security: runtime && runtime.security ? runtime.security : null,
+        migrationStatus: runtime && runtime.migrationStatus ? runtime.migrationStatus : null,
+        perfSnapshot: runtime && runtime.perfSnapshot ? runtime.perfSnapshot : null,
         negotiation: runtime && runtime.negotiation ? runtime.negotiation : null,
         serverCaps: runtime && runtime.serverCaps ? runtime.serverCaps : null
       };
@@ -232,7 +255,11 @@
           agentState: null,
           selectedCategories: [],
           availableCategories: [],
-          recentDiffItems: []
+          recentDiffItems: [],
+          classification: null,
+          categoryRecommendations: null,
+          domHash: null,
+          classificationStale: false
         };
       }
       const resolvedTabId = (tabId === null || tabId === undefined)
@@ -248,7 +275,11 @@
           agentState: null,
           selectedCategories: [],
           availableCategories: [],
-          recentDiffItems: []
+          recentDiffItems: [],
+          classification: null,
+          categoryRecommendations: null,
+          domHash: null,
+          classificationStale: false
         };
       }
       const active = await this.translationJobStore.getActiveJob(resolvedTabId);
@@ -291,6 +322,16 @@
           currentBatchId: fallback.currentBatchId || null,
           selectedCategories: Array.isArray(fallback.selectedCategories) ? fallback.selectedCategories.slice(0, 24) : [],
           availableCategories: Array.isArray(fallback.availableCategories) ? fallback.availableCategories.slice(0, 24) : [],
+          classification: fallback.classification && typeof fallback.classification === 'object'
+            ? fallback.classification
+            : null,
+          domHash: fallback.domHash || null,
+          classificationStale: fallback.classificationStale === true,
+          categoryRecommendations: fallback.agentState
+            && fallback.agentState.categoryRecommendations
+            && typeof fallback.agentState.categoryRecommendations === 'object'
+            ? fallback.agentState.categoryRecommendations
+            : null,
           runtime: fallback.runtime && typeof fallback.runtime === 'object'
             ? {
               status: fallback.runtime.status || null,
@@ -343,7 +384,17 @@
         agentState: fallback.agentState || null,
         selectedCategories: Array.isArray(fallback.selectedCategories) ? fallback.selectedCategories.slice(0, 24) : [],
         availableCategories: Array.isArray(fallback.availableCategories) ? fallback.availableCategories.slice(0, 24) : [],
-        recentDiffItems: Array.isArray(fallback.recentDiffItems) ? fallback.recentDiffItems.slice(-20) : []
+        recentDiffItems: Array.isArray(fallback.recentDiffItems) ? fallback.recentDiffItems.slice(-20) : [],
+        classification: fallback.classification && typeof fallback.classification === 'object'
+          ? fallback.classification
+          : null,
+        categoryRecommendations: fallback.agentState
+          && fallback.agentState.categoryRecommendations
+          && typeof fallback.agentState.categoryRecommendations === 'object'
+          ? fallback.agentState.categoryRecommendations
+          : null,
+        domHash: fallback.domHash || null,
+        classificationStale: fallback.classificationStale === true
       };
     }
 

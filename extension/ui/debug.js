@@ -92,6 +92,7 @@
         settings: null,
         agentState: null,
         selectedCategories: [],
+        availableCategories: [],
         recentDiffItems: [],
         toolset: null,
         effectiveToolPolicy: {},
@@ -113,10 +114,16 @@
           selectedBlockId: null,
           selectedPatchSeq: null
         },
+        classifier: {
+          category: 'all',
+          rule: ''
+        },
         sessionsOnlyActive: false,
         autotune: {
           selectedProposalId: null
-        }
+        },
+        perfSnapshot: null,
+        perfExportStatus: '—'
       };
       this.fields = {};
       this.pendingLoadOlderRequestId = null;
@@ -254,10 +261,23 @@
       this.fields.diffRendered = this.doc.querySelector('[data-field="diff-rendered"]');
       this.fields.patchTimeline = this.doc.querySelector('[data-field="patch-timeline"]');
       this.fields.patchDetails = this.doc.querySelector('[data-field="patch-details"]');
+      this.fields.classifierSummary = this.doc.querySelector('[data-field="classifier-summary"]');
+      this.fields.classifierBlocks = this.doc.querySelector('[data-field="classifier-blocks"]');
+      this.fields.classifierCategoryFilter = this.doc.querySelector('[data-field="classifier-category-filter"]');
+      this.fields.classifierRuleFilter = this.doc.querySelector('[data-field="classifier-rule-filter"]');
+      this.fields.classifierReclassifyForce = this.doc.querySelector('[data-action="classifier-reclassify-force"]');
+      this.fields.framesSummary = this.doc.querySelector('[data-field="frames-summary"]');
+      this.fields.framesTable = this.doc.querySelector('[data-field="frames-table"]');
+      this.fields.shadowSummary = this.doc.querySelector('[data-field="shadow-summary"]');
+      this.fields.compareHighlightsSupported = this.doc.querySelector('[data-field="compare-highlights-supported"]');
+      this.fields.compareModeActive = this.doc.querySelector('[data-field="compare-mode-active"]');
+      this.fields.compareHighlightsCounters = this.doc.querySelector('[data-field="compare-highlights-counters"]');
+      this.fields.recomputeHighlights = this.doc.querySelector('[data-action="recompute-highlights"]');
       this.fields.exportTextMode = this.doc.querySelector('[data-field="export-text-mode"]');
       this.fields.exportJson = this.doc.querySelector('[data-action="export-json"]');
       this.fields.exportHtml = this.doc.querySelector('[data-action="export-html"]');
       this.fields.exportCopy = this.doc.querySelector('[data-action="export-copy"]');
+      this.fields.copyDiagnostics = this.doc.querySelector('[data-action="copy-diagnostics"]');
       this.fields.exportStatus = this.doc.querySelector('[data-field="export-status"]');
       this.fields.securityAuditButton = this.doc.querySelector('[data-action="security-audit"]');
       this.fields.securityCredentials = this.doc.querySelector('[data-field="security-credentials"]');
@@ -280,6 +300,11 @@
       this.fields.kickScheduler = this.doc.querySelector('[data-action="kick-scheduler"]');
       this.fields.pauseOtherTabs = this.doc.querySelector('[data-action="pause-other-tabs"]');
       this.fields.sessionsOnlyActive = this.doc.querySelector('[data-field="sessions-only-active"]');
+      this.fields.perfSummary = this.doc.querySelector('[data-field="perf-summary"]');
+      this.fields.perfGlobalTable = this.doc.querySelector('[data-field="perf-global-table"]');
+      this.fields.perfJobsTable = this.doc.querySelector('[data-field="perf-jobs-table"]');
+      this.fields.perfExportStatus = this.doc.querySelector('[data-field="perf-export-status"]');
+      this.fields.exportPerfSnapshot = this.doc.querySelector('[data-action="export-perf-snapshot"]');
     }
 
     readQuery() {
@@ -353,6 +378,9 @@
       if (Object.prototype.hasOwnProperty.call(payload, 'selectedCategories')) {
         this.state.selectedCategories = Array.isArray(payload.selectedCategories) ? payload.selectedCategories : [];
       }
+      if (Object.prototype.hasOwnProperty.call(payload, 'availableCategories')) {
+        this.state.availableCategories = Array.isArray(payload.availableCategories) ? payload.availableCategories : [];
+      }
       if (Object.prototype.hasOwnProperty.call(payload, 'recentDiffItems')) {
         this.state.recentDiffItems = Array.isArray(payload.recentDiffItems) ? payload.recentDiffItems : [];
       }
@@ -373,6 +401,18 @@
           && typeof this.state.serverCaps.schedulerRuntime === 'object'
           ? this.state.serverCaps.schedulerRuntime
           : null;
+        if (
+          this.state.serverCaps
+          && this.state.serverCaps.perf
+          && typeof this.state.serverCaps.perf === 'object'
+        ) {
+          this.state.perfSnapshot = this.state.serverCaps.perf;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'perfSnapshot')) {
+        this.state.perfSnapshot = payload.perfSnapshot && typeof payload.perfSnapshot === 'object'
+          ? payload.perfSnapshot
+          : this.state.perfSnapshot;
       }
       if (Object.prototype.hasOwnProperty.call(payload, 'negotiation')) {
         this.state.negotiation = payload.negotiation && typeof payload.negotiation === 'object'
@@ -398,6 +438,9 @@
         }
         if (Array.isArray(this.state.status.selectedCategories) && this.state.status.selectedCategories.length) {
           this.state.selectedCategories = this.state.status.selectedCategories;
+        }
+        if (Array.isArray(this.state.status.availableCategories) && this.state.status.availableCategories.length) {
+          this.state.availableCategories = this.state.status.availableCategories;
         }
         if (Array.isArray(this.state.status.recentDiffItems) && this.state.status.recentDiffItems.length) {
           this.state.recentDiffItems = this.state.status.recentDiffItems;
@@ -462,6 +505,9 @@
       if (Object.prototype.hasOwnProperty.call(mergedPatch, 'selectedCategories')) {
         this.state.selectedCategories = Array.isArray(mergedPatch.selectedCategories) ? mergedPatch.selectedCategories : [];
       }
+      if (Object.prototype.hasOwnProperty.call(mergedPatch, 'availableCategories')) {
+        this.state.availableCategories = Array.isArray(mergedPatch.availableCategories) ? mergedPatch.availableCategories : [];
+      }
       if (Object.prototype.hasOwnProperty.call(mergedPatch, 'recentDiffItems')) {
         this.state.recentDiffItems = Array.isArray(mergedPatch.recentDiffItems) ? mergedPatch.recentDiffItems : [];
       }
@@ -484,6 +530,18 @@
           && typeof this.state.serverCaps.schedulerRuntime === 'object'
           ? this.state.serverCaps.schedulerRuntime
           : this.state.schedulerRuntime;
+        if (
+          this.state.serverCaps
+          && this.state.serverCaps.perf
+          && typeof this.state.serverCaps.perf === 'object'
+        ) {
+          this.state.perfSnapshot = this.state.serverCaps.perf;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(mergedPatch, 'perfSnapshot')) {
+        this.state.perfSnapshot = mergedPatch.perfSnapshot && typeof mergedPatch.perfSnapshot === 'object'
+          ? mergedPatch.perfSnapshot
+          : this.state.perfSnapshot;
       }
       if (Object.prototype.hasOwnProperty.call(mergedPatch, 'negotiation')) {
         this.state.negotiation = mergedPatch.negotiation && typeof mergedPatch.negotiation === 'object'
@@ -524,6 +582,9 @@
         }
         if (Array.isArray(this.state.status.selectedCategories) && this.state.status.selectedCategories.length) {
           this.state.selectedCategories = this.state.status.selectedCategories;
+        }
+        if (Array.isArray(this.state.status.availableCategories) && this.state.status.availableCategories.length) {
+          this.state.availableCategories = this.state.status.availableCategories;
         }
         if (Array.isArray(this.state.status.recentDiffItems) && this.state.status.recentDiffItems.length) {
           this.state.recentDiffItems = this.state.status.recentDiffItems;
@@ -569,6 +630,10 @@
       this.renderStatus();
       this.renderRuntimeTooling();
       this.renderTranslationJob();
+      this.renderFramesShadow();
+      this.renderCompareRendering();
+      this.renderPerf();
+      this.renderClassifier();
       this.renderAgent();
       this.renderSettingsSummary();
       this.renderMemory();
@@ -672,6 +737,63 @@
           this.renderCompareAndPatches();
         });
       }
+      if (this.fields.classifierCategoryFilter) {
+        this.fields.classifierCategoryFilter.addEventListener('change', () => {
+          this.state.classifier.category = this.fields.classifierCategoryFilter.value || 'all';
+          this.renderClassifier();
+        });
+      }
+      if (this.fields.classifierRuleFilter) {
+        this.fields.classifierRuleFilter.addEventListener('input', () => {
+          this.state.classifier.rule = this.fields.classifierRuleFilter.value || '';
+          this.renderClassifier();
+        });
+      }
+      if (this.fields.classifierReclassifyForce) {
+        this.fields.classifierReclassifyForce.addEventListener('click', () => {
+          const tabIdCandidate = Number.isFinite(Number(this.state.tabId))
+            ? Number(this.state.tabId)
+            : (this.state.translationJob && Number.isFinite(Number(this.state.translationJob.tabId))
+              ? Number(this.state.translationJob.tabId)
+              : null);
+          if (!Number.isFinite(tabIdCandidate)) {
+            return;
+          }
+          const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+          const command = UiProtocol && UiProtocol.Commands
+            ? UiProtocol.Commands.RECLASSIFY_BLOCKS
+            : 'RECLASSIFY_BLOCKS';
+          const jobId = this.state.translationJob && this.state.translationJob.id
+            ? this.state.translationJob.id
+            : null;
+          this.ui.sendUiCommand(command, {
+            tabId: tabIdCandidate,
+            jobId,
+            force: true
+          });
+        });
+      }
+      if (this.fields.recomputeHighlights) {
+        this.fields.recomputeHighlights.addEventListener('click', () => {
+          const tabIdCandidate = Number.isFinite(Number(this.state.tabId))
+            ? Number(this.state.tabId)
+            : (this.state.translationJob && Number.isFinite(Number(this.state.translationJob.tabId))
+              ? Number(this.state.translationJob.tabId)
+              : null);
+          if (!Number.isFinite(tabIdCandidate)) {
+            return;
+          }
+          const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+          const command = UiProtocol && UiProtocol.Commands
+            ? UiProtocol.Commands.SET_TRANSLATION_VISIBILITY
+            : 'SET_TRANSLATION_VISIBILITY';
+          this.ui.sendUiCommand(command, {
+            tabId: tabIdCandidate,
+            mode: 'compare',
+            visible: true
+          });
+        });
+      }
       if (this.fields.compareBlocks) {
         this.fields.compareBlocks.addEventListener('click', (event) => {
           const target = event && event.target && typeof event.target.closest === 'function'
@@ -740,6 +862,16 @@
       if (this.fields.exportCopy) {
         this.fields.exportCopy.addEventListener('click', () => this.exportReport('copy'));
       }
+      if (this.fields.copyDiagnostics) {
+        this.fields.copyDiagnostics.addEventListener('click', () => {
+          this.copyDiagnostics();
+        });
+      }
+      if (this.fields.exportPerfSnapshot) {
+        this.fields.exportPerfSnapshot.addEventListener('click', () => {
+          this.exportPerfSnapshot();
+        });
+      }
       if (this.fields.securityAuditButton) {
         this.fields.securityAuditButton.addEventListener('click', () => {
           if (typeof this.ui.runSecurityAudit === 'function') {
@@ -773,6 +905,10 @@
       this.renderStatus();
       this.renderRuntimeTooling();
       this.renderTranslationJob();
+      this.renderFramesShadow();
+      this.renderCompareRendering();
+      this.renderPerf();
+      this.renderClassifier();
       this.renderAgent();
       this.renderSettingsSummary();
       this.renderMemory();
@@ -1068,6 +1204,438 @@
           return `${name}: ${errMessage}`;
         });
       }
+    }
+
+    renderFramesShadow() {
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const frameMetrics = job && job.frameMetrics && typeof job.frameMetrics === 'object'
+        ? job.frameMetrics
+        : {};
+      const frames = frameMetrics.frames && typeof frameMetrics.frames === 'object'
+        ? frameMetrics.frames
+        : {};
+      const byFrame = frames.byFrame && typeof frames.byFrame === 'object'
+        ? frames.byFrame
+        : {};
+      if (this.fields.framesSummary) {
+        const totalSeen = Number.isFinite(Number(frames.totalSeen)) ? Number(frames.totalSeen) : 0;
+        const injectedOk = Number.isFinite(Number(frames.injectedOk)) ? Number(frames.injectedOk) : 0;
+        const skippedNoPerm = Number.isFinite(Number(frames.skippedNoPerm)) ? Number(frames.skippedNoPerm) : 0;
+        const scannedOk = Number.isFinite(Number(frames.scannedOk)) ? Number(frames.scannedOk) : 0;
+        const applyOk = Number.isFinite(Number(frames.applyOk)) ? Number(frames.applyOk) : 0;
+        this.fields.framesSummary.textContent = `total=${totalSeen} | injectedOk=${injectedOk} | skippedNoPerm=${skippedNoPerm} | scannedOk=${scannedOk} | applyOk=${applyOk}`;
+      }
+      if (this.fields.framesTable) {
+        this.fields.framesTable.innerHTML = '';
+        const rows = Object.keys(byFrame)
+          .map((key) => byFrame[key])
+          .filter((row) => row && typeof row === 'object')
+          .sort((left, right) => {
+            const a = Number.isFinite(Number(left.frameId)) ? Number(left.frameId) : Number.POSITIVE_INFINITY;
+            const b = Number.isFinite(Number(right.frameId)) ? Number(right.frameId) : Number.POSITIVE_INFINITY;
+            if (a !== b) {
+              return a - b;
+            }
+            const leftUrl = left.frameUrl ? String(left.frameUrl) : '';
+            const rightUrl = right.frameUrl ? String(right.frameUrl) : '';
+            return leftUrl.localeCompare(rightUrl);
+          });
+        if (!rows.length) {
+          const tr = this.doc.createElement('tr');
+          const td = this.doc.createElement('td');
+          td.colSpan = 5;
+          td.textContent = '—';
+          tr.appendChild(td);
+          this.fields.framesTable.appendChild(tr);
+        } else {
+          rows.forEach((row) => {
+            const tr = this.doc.createElement('tr');
+            const values = [
+              Number.isFinite(Number(row.frameId)) ? String(Number(row.frameId)) : '—',
+              row.frameUrl ? String(row.frameUrl).slice(0, 140) : '—',
+              row.injected === false ? 'no' : 'yes',
+              Number.isFinite(Number(row.scannedBlocksCount)) ? String(Number(row.scannedBlocksCount)) : '0',
+              row.skippedReason ? String(row.skippedReason) : '—'
+            ];
+            values.forEach((value) => {
+              const td = this.doc.createElement('td');
+              td.textContent = value;
+              tr.appendChild(td);
+            });
+            this.fields.framesTable.appendChild(tr);
+          });
+        }
+      }
+      if (this.fields.shadowSummary) {
+        const shadow = frameMetrics.shadowDom && typeof frameMetrics.shadowDom === 'object'
+          ? frameMetrics.shadowDom
+          : {};
+        const openRootsVisited = Number.isFinite(Number(shadow.openRootsVisited))
+          ? Number(shadow.openRootsVisited)
+          : 0;
+        const textNodesFromShadow = Number.isFinite(Number(shadow.textNodesFromShadow))
+          ? Number(shadow.textNodesFromShadow)
+          : 0;
+        this.fields.shadowSummary.textContent = `openRootsVisited=${openRootsVisited} | textNodesFromShadow=${textNodesFromShadow}`;
+      }
+    }
+
+    renderCompareRendering() {
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const frameMetrics = job && job.frameMetrics && typeof job.frameMetrics === 'object'
+        ? job.frameMetrics
+        : {};
+      const highlights = frameMetrics.highlights && typeof frameMetrics.highlights === 'object'
+        ? frameMetrics.highlights
+        : {};
+      if (this.fields.compareHighlightsSupported) {
+        if (typeof highlights.supported === 'boolean') {
+          this.fields.compareHighlightsSupported.textContent = highlights.supported ? 'yes' : 'no';
+        } else {
+          this.fields.compareHighlightsSupported.textContent = '—';
+        }
+      }
+      if (this.fields.compareModeActive) {
+        const mode = job && typeof job.compareRendering === 'string'
+          ? job.compareRendering
+          : (typeof highlights.mode === 'string' ? highlights.mode : 'auto');
+        this.fields.compareModeActive.textContent = mode || 'auto';
+      }
+      if (this.fields.compareHighlightsCounters) {
+        const appliedCount = Number.isFinite(Number(highlights.appliedCount))
+          ? Number(highlights.appliedCount)
+          : 0;
+        const fallbackCount = Number.isFinite(Number(highlights.fallbackCount))
+          ? Number(highlights.fallbackCount)
+          : 0;
+        this.fields.compareHighlightsCounters.textContent = `highlightsApplied=${appliedCount} | fallbacks=${fallbackCount}`;
+      }
+      if (this.fields.recomputeHighlights) {
+        this.fields.recomputeHighlights.disabled = !job;
+      }
+    }
+
+    renderPerf() {
+      const snapshot = this.state.perfSnapshot && typeof this.state.perfSnapshot === 'object'
+        ? this.state.perfSnapshot
+        : null;
+      const globalMetrics = snapshot && snapshot.global && snapshot.global.totals && typeof snapshot.global.totals === 'object'
+        ? snapshot.global.totals
+        : {};
+      const ring = snapshot && snapshot.global && Array.isArray(snapshot.global.ring)
+        ? snapshot.global.ring
+        : [];
+      const offenders = snapshot && Array.isArray(snapshot.topOffenders)
+        ? snapshot.topOffenders
+        : [];
+      const jobs = snapshot && Array.isArray(snapshot.jobs)
+        ? snapshot.jobs
+        : [];
+      if (this.fields.perfSummary) {
+        const updatedAt = snapshot && Number.isFinite(Number(snapshot.updatedAt))
+          ? this.formatTs(Number(snapshot.updatedAt))
+          : '—';
+        this.fields.perfSummary.textContent = `updated=${updatedAt} | jobs=${jobs.length} | offenders=${offenders.length} | ring=${ring.length}`;
+      }
+      if (this.fields.perfGlobalTable) {
+        this.fields.perfGlobalTable.innerHTML = '';
+        const rows = [
+          ['applyDeltaCount', Number.isFinite(Number(globalMetrics.applyDeltaCount)) ? Number(globalMetrics.applyDeltaCount) : 0],
+          ['coalescedCount', Number.isFinite(Number(globalMetrics.coalescedCount)) ? Number(globalMetrics.coalescedCount) : 0],
+          ['rebindAttempts', Number.isFinite(Number(globalMetrics.rebindAttempts)) ? Number(globalMetrics.rebindAttempts) : 0],
+          ['offscreenBytesOut', Number.isFinite(Number(globalMetrics.offscreenBytesOut)) ? Number(globalMetrics.offscreenBytesOut) : 0],
+          ['offscreenBytesIn', Number.isFinite(Number(globalMetrics.offscreenBytesIn)) ? Number(globalMetrics.offscreenBytesIn) : 0],
+          ['storageBytesEstimate', Number.isFinite(Number(globalMetrics.storageBytesEstimate)) ? Number(globalMetrics.storageBytesEstimate) : 0]
+        ];
+        rows.forEach((row) => {
+          const tr = this.doc.createElement('tr');
+          tr.appendChild(this.cell(String(row[0])));
+          tr.appendChild(this.cell(String(row[1])));
+          this.fields.perfGlobalTable.appendChild(tr);
+        });
+      }
+      if (this.fields.perfJobsTable) {
+        this.fields.perfJobsTable.innerHTML = '';
+        if (!offenders.length) {
+          const tr = this.doc.createElement('tr');
+          const td = this.doc.createElement('td');
+          td.colSpan = 7;
+          td.textContent = '—';
+          tr.appendChild(td);
+          this.fields.perfJobsTable.appendChild(tr);
+        } else {
+          offenders.slice(0, 20).forEach((item) => {
+            const metrics = item && item.metrics && typeof item.metrics === 'object'
+              ? item.metrics
+              : {};
+            const tr = this.doc.createElement('tr');
+            const values = [
+              item && item.jobId ? String(item.jobId).slice(0, 24) : '—',
+              item && item.status ? String(item.status) : '—',
+              Number.isFinite(Number(item && item.score)) ? Number(item.score).toFixed(2) : '0.00',
+              Number.isFinite(Number(metrics.scanTimeMs)) ? String(Number(metrics.scanTimeMs)) : '0',
+              Number.isFinite(Number(metrics.classifyTimeMs)) ? String(Number(metrics.classifyTimeMs)) : '0',
+              Number.isFinite(Number(metrics.applyDeltaCount)) ? String(Number(metrics.applyDeltaCount)) : '0',
+              Number.isFinite(Number(metrics.avgDeltaLatencyMs)) ? Number(metrics.avgDeltaLatencyMs).toFixed(2) : '0.00'
+            ];
+            values.forEach((value) => {
+              const td = this.doc.createElement('td');
+              td.textContent = value;
+              tr.appendChild(td);
+            });
+            this.fields.perfJobsTable.appendChild(tr);
+          });
+        }
+      }
+      if (this.fields.perfExportStatus) {
+        this.fields.perfExportStatus.textContent = this.state.perfExportStatus || '—';
+      }
+    }
+
+    async _sendUiCommandWithResponse(name, payload = {}) {
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const MessageEnvelope = global.NT && global.NT.MessageEnvelope ? global.NT.MessageEnvelope : null;
+      if (!global.chrome || !global.chrome.runtime || typeof global.chrome.runtime.sendMessage !== 'function') {
+        return { ok: false, error: { code: 'RUNTIME_UNAVAILABLE', message: 'chrome.runtime unavailable' } };
+      }
+      const requestId = MessageEnvelope && typeof MessageEnvelope.newId === 'function'
+        ? MessageEnvelope.newId()
+        : `debug-${Date.now()}`;
+      const tabIdCandidate = Number.isFinite(Number(this.state.tabId))
+        ? Number(this.state.tabId)
+        : (this.state.translationJob && Number.isFinite(Number(this.state.translationJob.tabId))
+          ? Number(this.state.translationJob.tabId)
+          : null);
+      const type = UiProtocol && UiProtocol.UI_COMMAND ? UiProtocol.UI_COMMAND : 'ui:command';
+      const meta = {
+        source: 'debug',
+        tabId: Number.isFinite(Number(tabIdCandidate)) ? Number(tabIdCandidate) : null,
+        requestId
+      };
+      const envelope = MessageEnvelope && typeof MessageEnvelope.wrap === 'function'
+        ? MessageEnvelope.wrap(type, { name, payload }, meta)
+        : {
+          v: 1,
+          id: requestId,
+          type,
+          ts: Date.now(),
+          meta,
+          payload: { name, payload }
+        };
+      return new Promise((resolve) => {
+        try {
+          global.chrome.runtime.sendMessage(envelope, (response) => {
+            const lastError = global.chrome && global.chrome.runtime ? global.chrome.runtime.lastError : null;
+            if (lastError) {
+              resolve({
+                ok: false,
+                error: {
+                  code: 'RUNTIME_SEND_FAILED',
+                  message: lastError.message || 'sendMessage failed'
+                }
+              });
+              return;
+            }
+            resolve(response || { ok: false, error: { code: 'EMPTY_RESPONSE', message: 'No response' } });
+          });
+        } catch (error) {
+          resolve({
+            ok: false,
+            error: {
+              code: 'RUNTIME_SEND_FAILED',
+              message: error && error.message ? error.message : 'sendMessage failed'
+            }
+          });
+        }
+      });
+    }
+
+    async exportPerfSnapshot() {
+      const UiProtocol = global.NT && global.NT.UiProtocol ? global.NT.UiProtocol : null;
+      const command = UiProtocol && UiProtocol.Commands
+        ? UiProtocol.Commands.EXPORT_PERF_SNAPSHOT
+        : 'EXPORT_PERF_SNAPSHOT';
+      if (this.fields.exportPerfSnapshot) {
+        this.fields.exportPerfSnapshot.disabled = true;
+      }
+      this.state.perfExportStatus = 'requesting...';
+      this.renderPerf();
+      const response = await this._sendUiCommandWithResponse(command, {});
+      if (!response || response.ok !== true || !response.snapshot || typeof response.snapshot !== 'object') {
+        const message = response && response.error && response.error.message
+          ? response.error.message
+          : 'export failed';
+        this.state.perfExportStatus = `error: ${message}`;
+        if (this.fields.exportPerfSnapshot) {
+          this.fields.exportPerfSnapshot.disabled = false;
+        }
+        this.renderPerf();
+        return;
+      }
+      this.state.perfSnapshot = response.snapshot;
+      const payload = JSON.stringify(response.snapshot, null, 2);
+      try {
+        await this.copyText(payload);
+        this.state.perfExportStatus = `copied to clipboard (${payload.length} chars)`;
+      } catch (_) {
+        this.state.perfExportStatus = `snapshot ready (${payload.length} chars)`;
+      }
+      if (this.fields.exportPerfSnapshot) {
+        this.fields.exportPerfSnapshot.disabled = false;
+      }
+      this.renderPerf();
+    }
+
+    renderClassifier() {
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const classification = job && job.classification && typeof job.classification === 'object'
+        ? job.classification
+        : null;
+      const summary = classification && classification.summary && typeof classification.summary === 'object'
+        ? classification.summary
+        : null;
+      const countsByCategory = summary && summary.countsByCategory && typeof summary.countsByCategory === 'object'
+        ? summary.countsByCategory
+        : {};
+      const confidenceByCategory = summary
+        && summary.confidenceStats
+        && summary.confidenceStats.byCategory
+        && typeof summary.confidenceStats.byCategory === 'object'
+        ? summary.confidenceStats.byCategory
+        : {};
+      const byBlockId = classification && classification.byBlockId && typeof classification.byBlockId === 'object'
+        ? classification.byBlockId
+        : {};
+
+      if (this.fields.classifierReclassifyForce) {
+        this.fields.classifierReclassifyForce.disabled = !job;
+      }
+
+      const categoryKeys = Array.from(new Set(
+        Object.keys(countsByCategory)
+          .concat(Object.keys(byBlockId).map((blockId) => {
+            const row = byBlockId[blockId] && typeof byBlockId[blockId] === 'object' ? byBlockId[blockId] : {};
+            return row.category ? String(row.category) : '';
+          }))
+          .filter(Boolean)
+      ));
+      categoryKeys.sort();
+
+      if (this.fields.classifierCategoryFilter) {
+        const current = this.state.classifier && this.state.classifier.category
+          ? this.state.classifier.category
+          : 'all';
+        this.fields.classifierCategoryFilter.innerHTML = '';
+        const allOption = this.doc.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = 'Category: all';
+        this.fields.classifierCategoryFilter.appendChild(allOption);
+        categoryKeys.forEach((category) => {
+          const option = this.doc.createElement('option');
+          option.value = category;
+          option.textContent = `Category: ${category}`;
+          this.fields.classifierCategoryFilter.appendChild(option);
+        });
+        this.fields.classifierCategoryFilter.value = categoryKeys.includes(current) ? current : 'all';
+        this.state.classifier.category = this.fields.classifierCategoryFilter.value;
+      }
+      if (this.fields.classifierRuleFilter) {
+        const currentRule = this.state.classifier && typeof this.state.classifier.rule === 'string'
+          ? this.state.classifier.rule
+          : '';
+        if (this.fields.classifierRuleFilter.value !== currentRule) {
+          this.fields.classifierRuleFilter.value = currentRule;
+        }
+      }
+
+      const summaryRows = categoryKeys.map((category) => {
+        const count = Number.isFinite(Number(countsByCategory[category])) ? Number(countsByCategory[category]) : 0;
+        const confRow = confidenceByCategory[category] && typeof confidenceByCategory[category] === 'object'
+          ? confidenceByCategory[category]
+          : {};
+        const avg = Number.isFinite(Number(confRow.avg)) ? Number(confRow.avg) : 0;
+        return `${category} | count=${count} | avgConf=${avg.toFixed(3)}`;
+      });
+      const stale = job && job.classificationStale === true ? 'stale=yes' : 'stale=no';
+      const classifierVersion = classification && classification.classifierVersion
+        ? String(classification.classifierVersion)
+        : 'n/a';
+      const domHash = classification && classification.domHash
+        ? String(classification.domHash)
+        : (job && job.domHash ? String(job.domHash) : 'n/a');
+      const headerRow = `version=${classifierVersion} | domHash=${domHash} | ${stale}`;
+      this.renderList(this.fields.classifierSummary, [headerRow].concat(summaryRows), (item) => String(item || ''));
+
+      const blockRows = this._collectClassifierRows({
+        job,
+        byBlockId
+      });
+      const categoryFilter = this.state.classifier && typeof this.state.classifier.category === 'string'
+        ? this.state.classifier.category
+        : 'all';
+      const ruleFilter = this.state.classifier && typeof this.state.classifier.rule === 'string'
+        ? this.state.classifier.rule.trim().toLowerCase()
+        : '';
+      const filtered = blockRows.filter((row) => {
+        if (categoryFilter !== 'all' && row.category !== categoryFilter) {
+          return false;
+        }
+        if (!ruleFilter) {
+          return true;
+        }
+        return row.reasons.some((reason) => String(reason || '').toLowerCase().includes(ruleFilter));
+      });
+      this.renderList(this.fields.classifierBlocks, filtered.slice(0, 500), (row) => {
+        const reasonText = row.reasons.length ? row.reasons.join(',') : '-';
+        return `${row.blockId} | ${row.category} | c=${row.confidence.toFixed(3)} | ${reasonText} | ${row.preview}`;
+      });
+    }
+
+    _collectClassifierRows({ job, byBlockId } = {}) {
+      const rows = [];
+      const classified = byBlockId && typeof byBlockId === 'object' ? byBlockId : {};
+      const blocksById = job && job.blocksById && typeof job.blocksById === 'object'
+        ? job.blocksById
+        : {};
+      const fromSummary = job && Array.isArray(job.blockSummaries) ? job.blockSummaries : [];
+      const fallbackPreviewById = {};
+      fromSummary.forEach((item) => {
+        if (!item || !item.blockId) {
+          return;
+        }
+        fallbackPreviewById[item.blockId] = item.originalSnippet || '';
+      });
+      Object.keys(classified).forEach((blockId) => {
+        const row = classified[blockId] && typeof classified[blockId] === 'object'
+          ? classified[blockId]
+          : {};
+        const block = blocksById[blockId] && typeof blocksById[blockId] === 'object'
+          ? blocksById[blockId]
+          : null;
+        const previewText = block && typeof block.originalText === 'string'
+          ? block.originalText
+          : (fallbackPreviewById[blockId] || '');
+        rows.push({
+          blockId,
+          category: row.category ? String(row.category) : 'unknown',
+          confidence: Number.isFinite(Number(row.confidence)) ? Math.max(0, Math.min(1, Number(row.confidence))) : 0,
+          reasons: Array.isArray(row.reasons) ? row.reasons.slice(0, 8).map((item) => String(item || '')).filter(Boolean) : [],
+          preview: String(previewText || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+        });
+      });
+      rows.sort((left, right) => {
+        if (left.category !== right.category) {
+          return left.category.localeCompare(right.category);
+        }
+        return left.blockId.localeCompare(right.blockId);
+      });
+      return rows;
     }
 
     _resolveLastErrorDebugPayload() {
@@ -1634,7 +2202,7 @@
       if (fromJob.length) {
         return fromJob.map((item) => ({
           blockId: item.blockId || 'block',
-          category: item.category || 'other',
+          category: item.category || 'unknown',
           status: item.status || 'PENDING',
           qualityTag: item.qualityTag || 'raw',
           originalLength: Number(item.originalLength || 0),
@@ -1646,7 +2214,7 @@
       const diffItems = Array.isArray(this.state.recentDiffItems) ? this.state.recentDiffItems : [];
       return diffItems.map((item) => ({
         blockId: item && item.blockId ? item.blockId : 'block',
-        category: item && item.category ? item.category : 'other',
+        category: item && item.category ? item.category : 'unknown',
         status: 'DONE',
         qualityTag: item && item.qualityTag ? item.qualityTag : 'raw',
         originalLength: item && item.before ? String(item.before).length : 0,
@@ -1732,6 +2300,198 @@
       }
     }
 
+    async copyDiagnostics() {
+      const payload = this._buildDiagnosticsPayload();
+      const redaction = global.NT
+        && global.NT.Redaction
+        && typeof global.NT.Redaction.redactDeep === 'function'
+        ? global.NT.Redaction.redactDeep.bind(global.NT.Redaction)
+        : (global.NT && typeof global.NT.redactDeep === 'function' ? global.NT.redactDeep : ((value) => value));
+      const redacted = redaction(payload, {});
+      const serialized = JSON.stringify(redacted, null, 2);
+      await this.copyText(serialized);
+      this._setExportStatus(`Diagnostics copied (${serialized.length} chars)`);
+    }
+
+    _buildDiagnosticsPayload() {
+      const snapshot = this._buildExportSnapshot();
+      const status = this.state.status && typeof this.state.status === 'object'
+        ? this.state.status
+        : {};
+      const job = this.state.translationJob && typeof this.state.translationJob === 'object'
+        ? this.state.translationJob
+        : null;
+      const runtime = status.runtime && typeof status.runtime === 'object'
+        ? status.runtime
+        : (job && job.runtime && typeof job.runtime === 'object' ? job.runtime : {});
+      const agent = this._resolveAgentState();
+      const trace = agent && Array.isArray(agent.toolExecutionTrace)
+        ? agent.toolExecutionTrace
+        : [];
+      const reports = agent && Array.isArray(agent.reports) ? agent.reports : [];
+      const checklist = agent && Array.isArray(agent.checklist) ? agent.checklist : [];
+      const eventItems = this.state.eventLog && Array.isArray(this.state.eventLog.items)
+        ? this.state.eventLog.items
+        : [];
+      const errorEvents = eventItems
+        .filter((item) => item && String(item.level || '').toLowerCase() === 'error')
+        .slice(-20)
+        .map((item) => ({
+          seq: Number.isFinite(Number(item.seq)) ? Number(item.seq) : null,
+          ts: Number.isFinite(Number(item.ts)) ? Number(item.ts) : null,
+          tag: item.tag ? String(item.tag) : null,
+          message: this._clipString(item.message, 260),
+          meta: this._jsonPreview(item.meta, 360)
+        }));
+      const frameMetrics = job && job.frameMetrics && typeof job.frameMetrics === 'object'
+        ? job.frameMetrics
+        : {};
+      const classification = job && job.classification && typeof job.classification === 'object'
+        ? job.classification
+        : {};
+      const summary = classification.summary && typeof classification.summary === 'object'
+        ? classification.summary
+        : {};
+      const toolTraceLast50 = trace.slice(-50).map((item) => this._compactToolTrace(item));
+      const perfTotals = this.state.perfSnapshot
+        && this.state.perfSnapshot.global
+        && this.state.perfSnapshot.global.totals
+        && typeof this.state.perfSnapshot.global.totals === 'object'
+        ? this.state.perfSnapshot.global.totals
+        : {};
+
+      return {
+        kind: 'nt_diagnostics',
+        generatedAt: Date.now(),
+        meta: {
+          tabId: Number.isFinite(Number(this.state.tabId)) ? Number(this.state.tabId) : null,
+          origin: this.state.origin || null,
+          url: this.state.url || null,
+          status: status.status || null,
+          message: this._clipString(status.message || (job ? job.message : ''), 220)
+        },
+        snapshot: {
+          status: snapshot.status || null,
+          translationJob: snapshot.translationJob || null,
+          schedulerRuntime: snapshot.status && snapshot.status.runtime ? snapshot.status.runtime : null,
+          security: snapshot.security || null,
+          selectedCategories: snapshot.selectedCategories || [],
+          availableCategories: snapshot.availableCategories || []
+        },
+        keyMetrics: {
+          progress: Number.isFinite(Number(this.state.translationProgress)) ? Number(this.state.translationProgress) : 0,
+          failedBlocks: Number.isFinite(Number(this.state.failedBlocksCount)) ? Number(this.state.failedBlocksCount) : 0,
+          totalBlocks: job && Number.isFinite(Number(job.totalBlocks)) ? Number(job.totalBlocks) : 0,
+          completedBlocks: job && Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0,
+          pendingBlocks: job && Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : null,
+          frameMetrics,
+          classifierSummary: summary,
+          perf: {
+            scanTimeMs: Number.isFinite(Number(perfTotals.scanTimeMs)) ? Number(perfTotals.scanTimeMs) : null,
+            classifyTimeMs: Number.isFinite(Number(perfTotals.classifyTimeMs)) ? Number(perfTotals.classifyTimeMs) : null,
+            applyDeltaCount: Number.isFinite(Number(perfTotals.applyDeltaCount)) ? Number(perfTotals.applyDeltaCount) : null,
+            coalescedCount: Number.isFinite(Number(perfTotals.coalescedCount)) ? Number(perfTotals.coalescedCount) : null,
+            avgDeltaLatencyMs: Number.isFinite(Number(perfTotals.avgDeltaLatencyMs)) ? Number(perfTotals.avgDeltaLatencyMs) : null,
+            rebindAttempts: Number.isFinite(Number(perfTotals.rebindAttempts)) ? Number(perfTotals.rebindAttempts) : null,
+            memoryCacheHitRate: Number.isFinite(Number(perfTotals.memoryCacheHitRate)) ? Number(perfTotals.memoryCacheHitRate) : null,
+            storageBytesEstimate: Number.isFinite(Number(perfTotals.storageBytesEstimate)) ? Number(perfTotals.storageBytesEstimate) : null
+          },
+          agent: {
+            phase: agent && agent.phase ? String(agent.phase) : null,
+            reportsCount: reports.length,
+            checklistCount: checklist.length,
+            traceCount: trace.length
+          }
+        },
+        errors: {
+          stateLastError: this._compactError(this.state.lastError),
+          statusLastError: this._compactError(status.lastError),
+          jobLastError: this._compactError(job && job.lastError ? job.lastError : null),
+          runtimeRetryLastError: this._compactError(runtime && runtime.retry ? runtime.retry.lastError : null),
+          recentErrorEvents: errorEvents
+        },
+        toolTraceLast50,
+        diagnosticsHint: this._clipString(job && job.message ? job.message : status.message, 240)
+      };
+    }
+
+    _resolveAgentState() {
+      const fallback = this.state.status && this.state.status.agentState && typeof this.state.status.agentState === 'object'
+        ? this.state.status.agentState
+        : null;
+      return this.state.agentState && typeof this.state.agentState === 'object'
+        ? this.state.agentState
+        : fallback;
+    }
+
+    _compactToolTrace(item) {
+      const row = item && typeof item === 'object' ? item : {};
+      const meta = row.meta && typeof row.meta === 'object' ? row.meta : {};
+      return {
+        ts: Number.isFinite(Number(row.ts)) ? Number(row.ts) : null,
+        tool: row.tool ? String(row.tool) : null,
+        status: row.status ? String(row.status) : null,
+        mode: row.mode ? String(row.mode) : null,
+        forced: row.forced === true,
+        message: this._clipString(row.message, 220),
+        meta: {
+          callId: meta.callId ? String(meta.callId) : null,
+          args: this._jsonPreview(meta.args, 420),
+          output: this._jsonPreview(meta.output, 420),
+          qos: meta.qos ? this._jsonPreview(meta.qos, 220) : null
+        }
+      };
+    }
+
+    _compactError(errorValue) {
+      if (!errorValue || typeof errorValue !== 'object') {
+        return null;
+      }
+      const debug = errorValue.debug && typeof errorValue.debug === 'object'
+        ? errorValue.debug
+        : (errorValue.error && errorValue.error.debug && typeof errorValue.error.debug === 'object'
+          ? errorValue.error.debug
+          : null);
+      return {
+        code: errorValue.code ? String(errorValue.code) : null,
+        message: this._clipString(errorValue.message, 320),
+        ts: Number.isFinite(Number(errorValue.ts)) ? Number(errorValue.ts) : null,
+        debug: debug ? this._jsonPreview(debug, 480) : null
+      };
+    }
+
+    _clipString(value, limit = 200) {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      const text = String(value).replace(/\s+/g, ' ').trim();
+      const max = Number.isFinite(Number(limit)) ? Math.max(40, Number(limit)) : 200;
+      if (!text.length) {
+        return '';
+      }
+      if (text.length <= max) {
+        return text;
+      }
+      return `${text.slice(0, max)}...`;
+    }
+
+    _jsonPreview(value, limit = 260) {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      let serialized = '';
+      try {
+        serialized = JSON.stringify(value);
+      } catch (_) {
+        serialized = String(value);
+      }
+      const max = Number.isFinite(Number(limit)) ? Math.max(80, Number(limit)) : 260;
+      if (serialized.length <= max) {
+        return serialized;
+      }
+      return `${serialized.slice(0, max)}...`;
+    }
+
     _buildExportSnapshot() {
       return {
         tabId: this.state.tabId,
@@ -1754,6 +2514,7 @@
         toolset: this.state.toolset,
         effectiveToolPolicy: this.state.effectiveToolPolicy,
         serverCaps: this.state.serverCaps,
+        perfSnapshot: this.state.perfSnapshot,
         negotiation: this.state.negotiation,
         security: this.state.security
       };

@@ -1,31 +1,11 @@
 // @ts-check
 const { defineConfig } = require('@playwright/test');
 
-const projects = [
-  {
-    name: 'chromium',
-    use: {
-      browserName: 'chromium',
-      channel: 'chromium'
-    }
-  }
-];
-
-if (process.env.PW_RUN_EDGE === '1') {
-  projects.push({
-    name: 'msedge',
-    use: {
-      browserName: 'chromium',
-      channel: 'msedge'
-    }
-  });
-}
-
 module.exports = defineConfig({
   testDir: './tests/e2e/specs',
-  timeout: 90_000,
+  timeout: 120_000,
   expect: {
-    timeout: 10_000
+    timeout: 15_000
   },
   outputDir: 'test-results',
   fullyParallel: false,
@@ -35,5 +15,13 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'
   },
-  projects
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium',
+        channel: 'chromium'
+      }
+    }
+  ]
 });

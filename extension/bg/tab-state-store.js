@@ -20,18 +20,59 @@
   class TabStateStore extends NT.ChromeLocalStoreBase {
     constructor({ chromeApi } = {}) {
       super({ chromeApi });
+      this.KEY = 'nt.tabs.v1';
+      this.LEGACY_KEYS = {
+        status: 'translationStatusByTab',
+        visibility: 'translationVisibilityByTab',
+        displayMode: 'translationDisplayModeByTab'
+      };
+      this.STATE_VERSION = 1;
     }
 
     async getAllStatus() {
-      const data = await this.storageGet({ translationStatusByTab: {} });
-      return data.translationStatusByTab || {};
+      const state = await this._readState();
+      return state.translationStatusByTab || {};
+    }
+
+    async ensureCanonicalSnapshot({ force = false, pruneLegacy = false } = {}) {
+      const raw = await this.storageGet({
+        [this.KEY]: null,
+        [this.LEGACY_KEYS.status]: {},
+        [this.LEGACY_KEYS.visibility]: {},
+        [this.LEGACY_KEYS.displayMode]: {}
+      });
+      const hasCanonical = Boolean(raw && raw[this.KEY] && typeof raw[this.KEY] === 'object' && !Array.isArray(raw[this.KEY]));
+      const state = hasCanonical
+        ? this._normalizeState(raw[this.KEY])
+        : this._normalizeState({
+          translationStatusByTab: raw[this.LEGACY_KEYS.status],
+          translationVisibilityByTab: raw[this.LEGACY_KEYS.visibility],
+          translationDisplayModeByTab: raw[this.LEGACY_KEYS.displayMode]
+        });
+      if (force || !hasCanonical) {
+        await this._writeState(state, { pruneLegacy });
+      }
+      return {
+        ok: true,
+        migrated: Boolean(force || !hasCanonical),
+        state
+      };
+    }
+
+    async getVisibilitySnapshot() {
+      const state = await this._readState();
+      return {
+        translationVisibilityByTab: { ...(state.translationVisibilityByTab || {}) },
+        translationDisplayModeByTab: { ...(state.translationDisplayModeByTab || {}) }
+      };
     }
 
     async upsertModelDecision(tabId, payload) {
       if (tabId === null || tabId === undefined) {
         return;
       }
-      const statusByTab = await this.getAllStatus();
+      const state = await this._readState();
+      const statusByTab = state.translationStatusByTab || {};
       const current = statusByTab[tabId] || {};
       statusByTab[tabId] = {
         ...current,
@@ -50,35 +91,34 @@
           updatedAt: payload && typeof payload.updatedAt === 'number' ? payload.updatedAt : Date.now()
         }
       };
-      await this.storageSet({ translationStatusByTab: statusByTab });
+      state.translationStatusByTab = statusByTab;
+      await this._writeState(state);
     }
 
     async upsertStatusPatch(tabId, patch) {
       if (tabId === null || tabId === undefined || !patch || typeof patch !== 'object') {
         return;
       }
-      const statusByTab = await this.getAllStatus();
+      const state = await this._readState();
+      const statusByTab = state.translationStatusByTab || {};
       const current = statusByTab[tabId] || {};
       statusByTab[tabId] = { ...current, ...patch };
-      await this.storageSet({ translationStatusByTab: statusByTab });
+      state.translationStatusByTab = statusByTab;
+      await this._writeState(state);
     }
 
     async upsertVisibility(tabId, visible) {
       if (tabId === null || tabId === undefined) {
         return;
       }
-      const data = await this.storageGet({
-        translationVisibilityByTab: {},
-        translationDisplayModeByTab: {}
-      });
-      const map = { ...(data.translationVisibilityByTab || {}) };
-      const modeMap = { ...(data.translationDisplayModeByTab || {}) };
+      const state = await this._readState();
+      const map = { ...(state.translationVisibilityByTab || {}) };
+      const modeMap = { ...(state.translationDisplayModeByTab || {}) };
       map[tabId] = Boolean(visible);
       modeMap[tabId] = visible ? 'translated' : 'original';
-      await this.storageSet({
-        translationVisibilityByTab: map,
-        translationDisplayModeByTab: modeMap
-      });
+      state.translationVisibilityByTab = map;
+      state.translationDisplayModeByTab = modeMap;
+      await this._writeState(state);
     }
 
     async getVisibility(tabId) {
@@ -86,12 +126,9 @@
         return true;
       }
       try {
-        const data = await this.storageGet({
-          translationVisibilityByTab: {},
-          translationDisplayModeByTab: {}
-        });
-        const modeMap = data && data.translationDisplayModeByTab && typeof data.translationDisplayModeByTab === 'object'
-          ? data.translationDisplayModeByTab
+        const state = await this._readState();
+        const modeMap = state && state.translationDisplayModeByTab && typeof state.translationDisplayModeByTab === 'object'
+          ? state.translationDisplayModeByTab
           : {};
         const modeKey = String(tabId);
         if (Object.prototype.hasOwnProperty.call(modeMap, modeKey)) {
@@ -100,8 +137,8 @@
         if (Object.prototype.hasOwnProperty.call(modeMap, tabId)) {
           return modeMap[tabId] !== 'original';
         }
-        const map = data && data.translationVisibilityByTab && typeof data.translationVisibilityByTab === 'object'
-          ? data.translationVisibilityByTab
+        const map = state && state.translationVisibilityByTab && typeof state.translationVisibilityByTab === 'object'
+          ? state.translationVisibilityByTab
           : {};
         const key = String(tabId);
         if (Object.prototype.hasOwnProperty.call(map, key)) {
@@ -123,18 +160,14 @@
       const normalizedMode = mode === 'original' || mode === 'compare'
         ? mode
         : 'translated';
-      const data = await this.storageGet({
-        translationDisplayModeByTab: {},
-        translationVisibilityByTab: {}
-      });
-      const modeMap = { ...(data.translationDisplayModeByTab || {}) };
-      const visibilityMap = { ...(data.translationVisibilityByTab || {}) };
+      const state = await this._readState();
+      const modeMap = { ...(state.translationDisplayModeByTab || {}) };
+      const visibilityMap = { ...(state.translationVisibilityByTab || {}) };
       modeMap[tabId] = normalizedMode;
       visibilityMap[tabId] = normalizedMode !== 'original';
-      await this.storageSet({
-        translationDisplayModeByTab: modeMap,
-        translationVisibilityByTab: visibilityMap
-      });
+      state.translationDisplayModeByTab = modeMap;
+      state.translationVisibilityByTab = visibilityMap;
+      await this._writeState(state);
     }
 
     async getDisplayMode(tabId) {
@@ -142,12 +175,9 @@
         return 'translated';
       }
       try {
-        const data = await this.storageGet({
-          translationDisplayModeByTab: {},
-          translationVisibilityByTab: {}
-        });
-        const modeMap = data && data.translationDisplayModeByTab && typeof data.translationDisplayModeByTab === 'object'
-          ? data.translationDisplayModeByTab
+        const state = await this._readState();
+        const modeMap = state && state.translationDisplayModeByTab && typeof state.translationDisplayModeByTab === 'object'
+          ? state.translationDisplayModeByTab
           : {};
         const key = String(tabId);
         if (Object.prototype.hasOwnProperty.call(modeMap, key)) {
@@ -188,7 +218,74 @@
         lastModelSpec: modelSpec,
         lastModelSpecAt: Date.now()
       };
-      await this.storageSet({ translationStatusByTab: statusByTab });
+      const state = await this._readState();
+      state.translationStatusByTab = statusByTab;
+      await this._writeState(state);
+    }
+
+    async _readState() {
+      const data = await this.storageGet({
+        [this.KEY]: null,
+        [this.LEGACY_KEYS.status]: {},
+        [this.LEGACY_KEYS.visibility]: {},
+        [this.LEGACY_KEYS.displayMode]: {}
+      });
+      const canonical = data && data[this.KEY] && typeof data[this.KEY] === 'object' && !Array.isArray(data[this.KEY])
+        ? data[this.KEY]
+        : null;
+      if (canonical) {
+        return this._normalizeState(canonical);
+      }
+      const legacy = this._normalizeState({
+        translationStatusByTab: data ? data[this.LEGACY_KEYS.status] : {},
+        translationVisibilityByTab: data ? data[this.LEGACY_KEYS.visibility] : {},
+        translationDisplayModeByTab: data ? data[this.LEGACY_KEYS.displayMode] : {}
+      });
+      await this._writeState(legacy);
+      return legacy;
+    }
+
+    async _writeState(state, { pruneLegacy = false } = {}) {
+      const normalized = this._normalizeState(state);
+      const payload = {
+        [this.KEY]: normalized,
+        [this.LEGACY_KEYS.status]: normalized.translationStatusByTab,
+        [this.LEGACY_KEYS.visibility]: normalized.translationVisibilityByTab,
+        [this.LEGACY_KEYS.displayMode]: normalized.translationDisplayModeByTab
+      };
+      await this.storageSet(payload);
+      if (
+        pruneLegacy
+        && this.chromeApi
+        && this.chromeApi.storage
+        && this.chromeApi.storage.local
+        && typeof this.chromeApi.storage.local.remove === 'function'
+      ) {
+        await new Promise((resolve) => {
+          this.chromeApi.storage.local.remove([
+            this.LEGACY_KEYS.status,
+            this.LEGACY_KEYS.visibility,
+            this.LEGACY_KEYS.displayMode
+          ], () => resolve());
+        });
+      }
+      return normalized;
+    }
+
+    _normalizeState(raw) {
+      const src = raw && typeof raw === 'object' ? raw : {};
+      return {
+        v: this.STATE_VERSION,
+        translationStatusByTab: src.translationStatusByTab && typeof src.translationStatusByTab === 'object'
+          ? { ...src.translationStatusByTab }
+          : {},
+        translationVisibilityByTab: src.translationVisibilityByTab && typeof src.translationVisibilityByTab === 'object'
+          ? { ...src.translationVisibilityByTab }
+          : {},
+        translationDisplayModeByTab: src.translationDisplayModeByTab && typeof src.translationDisplayModeByTab === 'object'
+          ? { ...src.translationDisplayModeByTab }
+          : {}
+      };
     }
   }
 

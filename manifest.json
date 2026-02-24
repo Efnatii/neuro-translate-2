@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Neuro Translate",
   "description": "Edge extension for translation workflow control and model benchmarking.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "permissions": [
     "activeTab",
     "alarms",
@@ -18,6 +18,29 @@
   "action": {
     "default_popup": "extension/ui/popup.html"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "extension/core/nt-namespace.js",
+        "extension/core/message-envelope.js",
+        "extension/core/translation-protocol.js",
+        "extension/content/dom-indexer.js",
+        "extension/content/dom-classifier.js",
+        "extension/content/diff-highlighter.js",
+        "extension/content/highlight-engine.js",
+        "extension/content/dom-applier.js",
+        "extension/content/content-runtime.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.openai.com https://* http://localhost:* http://127.0.0.1:*;"
   },

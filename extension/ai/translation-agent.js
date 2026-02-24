@@ -13,17 +13,17 @@
   const NT = global.NT || (global.NT = {});
 
   const KNOWN_CATEGORIES = Object.freeze([
-    'heading',
-    'paragraph',
-    'list',
-    'button',
-    'label',
+    'main_content',
+    'headings',
     'navigation',
-    'meta',
+    'ui_controls',
+    'tables',
     'code',
-    'quote',
-    'table',
-    'other'
+    'captions',
+    'footer',
+    'legal',
+    'ads',
+    'unknown'
   ]);
 
   const TOOL_KEYS = Object.freeze({
@@ -105,17 +105,32 @@
 
   const CATEGORY_GROUPS = Object.freeze({
     all: KNOWN_CATEGORIES,
-    content: ['heading', 'paragraph', 'list', 'quote', 'table', 'code'],
-    interface: ['button', 'label', 'navigation'],
-    meta: ['meta']
+    content: ['main_content', 'headings', 'tables', 'code', 'captions'],
+    interface: ['ui_controls', 'navigation'],
+    meta: ['footer', 'legal', 'ads']
   });
 
   class TranslationAgent {
-    constructor({ runLlmRequest, eventFactory, eventLogFn, persistJobState } = {}) {
+    constructor({
+      runLlmRequest,
+      eventFactory,
+      eventLogFn,
+      persistJobState,
+      classifyBlocksForJob,
+      getCategorySummaryForJob,
+      setSelectedCategories,
+      setAgentCategoryRecommendations
+    } = {}) {
       this.runLlmRequest = typeof runLlmRequest === 'function' ? runLlmRequest : null;
       this.eventFactory = eventFactory || null;
       this.eventLogFn = typeof eventLogFn === 'function' ? eventLogFn : null;
       this.persistJobState = typeof persistJobState === 'function' ? persistJobState : null;
+      this.classifyBlocksForJob = typeof classifyBlocksForJob === 'function' ? classifyBlocksForJob : null;
+      this.getCategorySummaryForJob = typeof getCategorySummaryForJob === 'function' ? getCategorySummaryForJob : null;
+      this.setSelectedCategories = typeof setSelectedCategories === 'function' ? setSelectedCategories : null;
+      this.setAgentCategoryRecommendations = typeof setAgentCategoryRecommendations === 'function'
+        ? setAgentCategoryRecommendations
+        : null;
 
       this.MAX_TOOL_LOG = 140;
       this.MAX_TOOL_TRACE = 320;
@@ -127,6 +142,26 @@
       this.MANDATORY_AUDIT_INTERVAL_MS = 1000;
       this.COMPRESS_COOLDOWN_MS = 1200;
       this.CONTEXT_FOOTPRINT_LIMIT = 9000;
+    }
+
+    setPlanningCallbacks({
+      classifyBlocksForJob,
+      getCategorySummaryForJob,
+      setSelectedCategories,
+      setAgentCategoryRecommendations
+    } = {}) {
+      if (typeof classifyBlocksForJob === 'function') {
+        this.classifyBlocksForJob = classifyBlocksForJob;
+      }
+      if (typeof getCategorySummaryForJob === 'function') {
+        this.getCategorySummaryForJob = getCategorySummaryForJob;
+      }
+      if (typeof setSelectedCategories === 'function') {
+        this.setSelectedCategories = setSelectedCategories;
+      }
+      if (typeof setAgentCategoryRecommendations === 'function') {
+        this.setAgentCategoryRecommendations = setAgentCategoryRecommendations;
+      }
     }
 
     static previewResolvedSettings({ settings, pageStats, blocks } = {}) {
@@ -212,8 +247,8 @@
             requestedMode,
             effectiveMode,
             reason: requestedMode === 'auto'
-              ? 'Автополитика (резервный режим)'
-              : (requestedMode === 'on' ? 'Настроено пользователем/профилем: ВКЛ' : 'Настроено пользователем/профилем: ВЫКЛ')
+              ? 'Р С’Р Р†РЎвЂљР С•Р С—Р С•Р В»Р С‘РЎвЂљР С‘Р С”Р В° (РЎР‚Р ВµР В·Р ВµРЎР‚Р Р†Р Р…РЎвЂ№Р в„– РЎР‚Р ВµР В¶Р С‘Р С)'
+              : (requestedMode === 'on' ? 'Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…Р С• Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР С/Р С—РЎР‚Р С•РЎвЂћР С‘Р В»Р ВµР С: Р вЂ™Р С™Р вЂє' : 'Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…Р С• Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР С/Р С—РЎР‚Р С•РЎвЂћР С‘Р В»Р ВµР С: Р вЂ™Р В«Р С™Р вЂє')
           });
         });
         return {
@@ -397,25 +432,6 @@
       if (resolved.profile === 'auto' && !this._isToolEnabled(effectiveToolConfig[TOOL_KEYS.PAGE_ANALYZER])) {
         effectiveResolvedProfile = { ...PROFILE_PRESETS.balanced };
       }
-      const categorySelectorEnabled = this._isToolEnabled(effectiveToolConfig[TOOL_KEYS.CATEGORY_SELECTOR]);
-      const settingsSelectedCategories = this._selectCategories({
-        mode: categorySelectorEnabled ? resolved.categoryMode : 'all',
-        custom: categorySelectorEnabled ? resolved.categoryList : [],
-        blocks: inputBlocks,
-        categoryStats
-      });
-      const settingsFilteredBlocks = inputBlocks.filter((item) => settingsSelectedCategories.includes(this._normalizeCategory(item.category) || 'other'));
-      const settingsEffectiveBlocks = settingsFilteredBlocks.length ? settingsFilteredBlocks : inputBlocks.slice();
-      const settingsGlossary = this._buildGlossary(settingsEffectiveBlocks);
-      const fallbackPlan = this._buildFallbackPlan({
-        blocks: settingsEffectiveBlocks,
-        profile: resolved.profile,
-        resolvedProfile: effectiveResolvedProfile,
-        selectedCategories: settingsSelectedCategories,
-        categoryStats,
-        glossary: settingsGlossary
-      });
-
       const existingAgentState = safeJob.agentState && typeof safeJob.agentState === 'object'
         ? safeJob.agentState
         : null;
@@ -444,62 +460,77 @@
       agentState.toolAutoDecisions = Array.isArray(agentState.toolAutoDecisions)
         ? agentState.toolAutoDecisions
         : (resolvedTools.decisions || []);
-      agentState.selectedCategories = Array.isArray(agentState.selectedCategories)
-        ? agentState.selectedCategories
-        : settingsSelectedCategories.slice();
+      // Planning always starts from pre-analysis snapshot, without preselected categories/plan.
+      agentState.selectedCategories = [];
       agentState.categoryMode = resolved.categoryMode;
-      agentState.glossary = Array.isArray(agentState.glossary) ? agentState.glossary : settingsGlossary.slice();
-      agentState.plan = agentState.plan && typeof agentState.plan === 'object' ? agentState.plan : null;
-      agentState.planningMarkers = agentState.planningMarkers && typeof agentState.planningMarkers === 'object'
-        ? agentState.planningMarkers
-        : {};
-      if (typeof agentState.planningMarkers.planSetByTool !== 'boolean') {
-        agentState.planningMarkers.planSetByTool = false;
-      }
-      if (typeof agentState.planningMarkers.recommendedCategoriesSetByTool !== 'boolean') {
-        agentState.planningMarkers.recommendedCategoriesSetByTool = false;
-      }
-      agentState.toolHistory = Array.isArray(agentState.toolHistory) ? agentState.toolHistory : [];
-      agentState.toolExecutionTrace = Array.isArray(agentState.toolExecutionTrace) ? agentState.toolExecutionTrace : [];
-      agentState.checklist = Array.isArray(agentState.checklist) ? agentState.checklist : this._buildInitialChecklist();
-      agentState.reports = Array.isArray(agentState.reports) ? agentState.reports : [];
-      agentState.audits = Array.isArray(agentState.audits) ? agentState.audits : [];
-      agentState.lastRateLimits = agentState.lastRateLimits && typeof agentState.lastRateLimits === 'object'
-        ? agentState.lastRateLimits
-        : null;
-      agentState.rateLimitHistory = Array.isArray(agentState.rateLimitHistory) ? agentState.rateLimitHistory : [];
-      agentState.contextSummary = typeof agentState.contextSummary === 'string' ? agentState.contextSummary : '';
-      agentState.compressedContextCount = Number(agentState.compressedContextCount || 0);
-      agentState.lastCompressionAt = agentState.lastCompressionAt || null;
-      agentState.seenBatchSignatures = Array.isArray(agentState.seenBatchSignatures) ? agentState.seenBatchSignatures : [];
-      agentState.processedBlockIds = Array.isArray(agentState.processedBlockIds) ? agentState.processedBlockIds : [];
-      agentState.repeatedBatchCount = Number(agentState.repeatedBatchCount || 0);
-      agentState.batchCounter = Number(agentState.batchCounter || 0);
-      agentState.lastAuditAt = agentState.lastAuditAt || null;
-      agentState.lastBatchAt = agentState.lastBatchAt || null;
-      agentState.execution = agentState.execution && typeof agentState.execution === 'object'
-        ? agentState.execution
-        : {
-          status: 'idle',
-          previousResponseId: null,
-          lastResponseId: null,
-          iteration: 0,
-          stepAttempt: 1,
-          updatedAt: null
-        };
+      agentState.glossary = [];
+      agentState.plan = null;
+      agentState.taxonomy = null;
+      agentState.pipeline = null;
+      agentState.userQuestion = null;
+      agentState.categoryOptions = [];
+      agentState.categoryRecommendations = null;
+      agentState.planningMarkers = {
+        planSetByTool: false,
+        recommendedCategoriesSetByTool: false,
+        classificationSetByTool: false,
+        categorySummarySetByTool: false,
+        preanalysisReadByTool: false,
+        taxonomySetByTool: false,
+        pipelineSetByTool: false,
+        finishAnalysisRequestedByTool: false,
+        finishAnalysisOk: false,
+        askUserCategoriesByTool: false
+      };
+      agentState.toolHistory = [];
+      agentState.toolExecutionTrace = [];
+      agentState.checklist = this._buildInitialChecklist();
+      agentState.reports = [];
+      agentState.audits = [];
+      agentState.lastRateLimits = null;
+      agentState.rateLimitHistory = [];
+      agentState.contextSummary = '';
+      agentState.compressedContextCount = 0;
+      agentState.lastCompressionAt = null;
+      agentState.seenBatchSignatures = [];
+      agentState.processedBlockIds = [];
+      agentState.repeatedBatchCount = 0;
+      agentState.batchCounter = 0;
+      agentState.lastAuditAt = null;
+      agentState.lastBatchAt = null;
+      agentState.execution = {
+        status: 'idle',
+        previousResponseId: null,
+        lastResponseId: null,
+        iteration: 0,
+        stepAttempt: 1,
+        updatedAt: null
+      };
       agentState.reportFormat = agentState.reportFormat && typeof agentState.reportFormat === 'object'
         ? agentState.reportFormat
         : this._defaultReportFormat();
-      agentState.recentDiffItems = Array.isArray(agentState.recentDiffItems) ? agentState.recentDiffItems : [];
-      agentState.patchHistory = Array.isArray(agentState.patchHistory) ? agentState.patchHistory : [];
-      agentState.patchSeq = Number.isFinite(Number(agentState.patchSeq)) ? Number(agentState.patchSeq) : 0;
+      agentState.recentDiffItems = [];
+      agentState.patchHistory = [];
+      agentState.patchSeq = 0;
       agentState.pageStats = pageStats;
       agentState.categoryStats = categoryStats;
       agentState.reuseStats = reuseStats;
+      agentState.preStats = safeJob.pageAnalysis && safeJob.pageAnalysis.stats && typeof safeJob.pageAnalysis.stats === 'object'
+        ? safeJob.pageAnalysis.stats
+        : {
+          blockCount: pageStats.blockCount,
+          totalChars: pageStats.totalChars,
+          byPreCategory: {},
+          rangeCount: 0
+        };
       agentState.createdAt = createdAt;
       agentState.updatedAt = Date.now();
-      this._updateChecklist(agentState.checklist, 'analyze_page', 'done', `блоков=${inputBlocks.length}`);
-      this._updateChecklist(agentState.checklist, 'scanned', 'done', `блоков=${inputBlocks.length}`);
+      const preRangeCount = Number.isFinite(Number(agentState.preStats && agentState.preStats.rangeCount))
+        ? Number(agentState.preStats.rangeCount)
+        : 0;
+      this._updateChecklist(agentState.checklist, 'analyze_page', 'done', `blocks=${inputBlocks.length}`);
+      this._updateChecklist(agentState.checklist, 'scanned', 'done', `blocks=${inputBlocks.length}`);
+      this._updateChecklist(agentState.checklist, 'preanalysis_ready', 'done', `blocks=${inputBlocks.length};ranges=${preRangeCount}`);
       this._recordToolExecution(agentState, {
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         mode: 'system',
@@ -529,246 +560,46 @@
           pageStats
         }
       });
-      this._pushToolLog(agentState.toolHistory, 'page.get_stats', 'system', 'ok', `Статистика страницы: блоки=${pageStats.blockCount}, символы=${pageStats.totalChars}`);
+      this._pushToolLog(agentState.toolHistory, 'page.get_stats', 'system', 'ok', `Р РЋРЎвЂљР В°РЎвЂљР С‘РЎРѓРЎвЂљР С‘Р С”Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№: Р В±Р В»Р С•Р С”Р С‘=${pageStats.blockCount}, РЎРѓР С‘Р СР Р†Р С•Р В»РЎвЂ№=${pageStats.totalChars}`);
       safeJob.agentState = agentState;
       await this._persistPlanningJob(safeJob, 'planning_init');
 
+      return {
+        blocks: inputBlocks.slice(),
+        blocksAll: inputBlocks.slice(),
+        agentState
+      };
+    }
+
+    async runPlanning({ job, blocks, settings } = {}) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const inputBlocks = Array.isArray(blocks) ? blocks.filter((item) => item && item.blockId) : [];
+      if (!this.runLlmRequest) {
+        const error = new Error('runLlmRequest is required');
+        error.code = 'PLANNING_LLM_UNAVAILABLE';
+        throw error;
+      }
       const toolRegistry = this._createPlanningToolRegistry();
       const runner = this._createPlanningRunner(toolRegistry);
-      let planningResult = null;
-      let planningError = null;
-      let fatalPlanningError = null;
-
-      if (runner && this.runLlmRequest) {
-        try {
-          planningResult = await runner.runPlanning({
-            job: safeJob,
-            blocks: inputBlocks,
-            settings,
-            runLlmRequest: this.runLlmRequest
-          });
-          if (planningResult && planningResult.guardStop) {
-            fatalPlanningError = planningResult.error || {
-              code: 'AGENT_LOOP_GUARD_STOP',
-              message: 'Планирование остановлено safety-guard'
-            };
-          }
-        } catch (error) {
-          planningError = {
-            code: error && error.code ? error.code : 'PLANNING_FAILED',
-            message: error && error.message ? error.message : 'Ошибка planning-loop'
-          };
-        }
-      } else {
-        planningError = {
-          code: 'PLANNING_LLM_UNAVAILABLE',
-          message: 'LLM для planning-loop недоступна; применён локальный fallback'
-        };
+      if (!toolRegistry || !runner) {
+        const error = new Error('planning runner is unavailable');
+        error.code = 'PLANNING_RUNNER_UNAVAILABLE';
+        throw error;
       }
-
-      if (fatalPlanningError) {
-        agentState.status = 'failed';
-        agentState.phase = 'failed';
-        agentState.updatedAt = Date.now();
-        agentState.planningLoop = agentState.planningLoop && typeof agentState.planningLoop === 'object'
-          ? agentState.planningLoop
-          : {};
-        agentState.planningLoop.status = 'guard_stop';
-        agentState.planningLoop.lastError = {
-          code: fatalPlanningError.code || 'AGENT_LOOP_GUARD_STOP',
-          message: fatalPlanningError.message || 'Planning loop guard stop'
-        };
-        await this._persistPlanningJob(safeJob, 'planning_guard_stop');
-        return {
-          blocks: inputBlocks.slice(),
-          selectedCategories: settingsSelectedCategories.slice(),
-          agentState,
-          fatalPlanningError: {
-            code: fatalPlanningError.code || 'AGENT_LOOP_GUARD_STOP',
-            message: fatalPlanningError.message || 'Planning loop guard stop'
-          }
-        };
-      }
-
-      let fallbackApplied = false;
-      const hasPlan = agentState.plan && typeof agentState.plan === 'object';
-      const hasSelectedCategories = Array.isArray(agentState.selectedCategories) && agentState.selectedCategories.length > 0;
-      if (!hasPlan || !hasSelectedCategories || planningError) {
-        fallbackApplied = true;
-        if (toolRegistry) {
-          await toolRegistry.execute({
-            name: 'agent.set_recommended_categories',
-            arguments: {
-              categories: settingsSelectedCategories,
-              reason: planningError ? `fallback:${planningError.code}` : 'fallback:missing_categories'
-            },
-            job: safeJob,
-            blocks: inputBlocks,
-            settings,
-            callId: `system:fallback:categories:${Date.now()}`,
-            source: 'system'
-          });
-          await toolRegistry.execute({
-            name: 'agent.set_plan',
-            arguments: {
-              plan: {
-                summary: typeof fallbackPlan.summary === 'string' ? fallbackPlan.summary : '',
-                style: typeof fallbackPlan.style === 'string' ? fallbackPlan.style : 'balanced',
-                batchSize: Number.isFinite(Number(fallbackPlan.batchSize))
-                  ? Math.max(1, Math.round(Number(fallbackPlan.batchSize)))
-                  : 1,
-                proofreadingPasses: Number.isFinite(Number(fallbackPlan.proofreadingPasses))
-                  ? Math.max(0, Math.round(Number(fallbackPlan.proofreadingPasses)))
-                  : 0,
-                categoryOrder: Array.isArray(fallbackPlan.categoryOrder)
-                  ? fallbackPlan.categoryOrder
-                    .map((item) => this._normalizeCategory(item))
-                    .filter(Boolean)
-                    .slice(0, 60)
-                  : [],
-                instructions: typeof fallbackPlan.instructions === 'string' ? fallbackPlan.instructions : '',
-                modelHints: fallbackPlan.modelHints && typeof fallbackPlan.modelHints === 'object'
-                  ? {
-                    strongFor: Array.isArray(fallbackPlan.modelHints.strongFor)
-                      ? fallbackPlan.modelHints.strongFor.slice(0, 40)
-                      : [],
-                    fastFor: Array.isArray(fallbackPlan.modelHints.fastFor)
-                      ? fallbackPlan.modelHints.fastFor.slice(0, 40)
-                      : []
-                  }
-                  : { strongFor: [], fastFor: [] }
-              },
-              recommendedCategories: settingsSelectedCategories.slice(0, 60)
-            },
-            job: safeJob,
-            blocks: inputBlocks,
-            settings,
-            callId: `system:fallback:plan:${Date.now()}`,
-            source: 'system'
-          });
-          await toolRegistry.execute({
-            name: 'agent.append_report',
-            arguments: {
-              type: planningError ? 'warning' : 'info',
-              title: planningError ? 'Fallback планирование' : 'Планирование завершено fallback-режимом',
-              body: planningError
-                ? `LLM planning unavailable (${planningError.code}); применён детерминированный fallback-план.`
-                : 'Модель не установила полный план; применён детерминированный fallback-план.',
-              meta: planningError ? { code: planningError.code } : {}
-            },
-            job: safeJob,
-            blocks: inputBlocks,
-            settings,
-            callId: `system:fallback:report:${Date.now()}`,
-            source: 'system'
-          });
-        } else {
-          agentState.plan = this._mergePlan(fallbackPlan, agentState.plan || {});
-          agentState.selectedCategories = settingsSelectedCategories.slice();
-          agentState.planningMarkers.planSetByTool = true;
-          agentState.planningMarkers.recommendedCategoriesSetByTool = true;
-          this._recordToolExecution(agentState, {
-            tool: 'agent.set_recommended_categories',
-            mode: 'system',
-            status: 'ok',
-            forced: true,
-            message: 'fallback categories applied',
-            meta: {
-              categories: settingsSelectedCategories.slice(0, 24)
-            }
-          });
-          this._recordToolExecution(agentState, {
-            tool: 'agent.set_plan',
-            mode: 'system',
-            status: 'ok',
-            forced: true,
-            message: 'fallback plan applied',
-            meta: {
-              plan: {
-                batchSize: fallbackPlan.batchSize,
-                style: fallbackPlan.style,
-                proofreadingPasses: fallbackPlan.proofreadingPasses
-              }
-            }
-          });
-        }
-      }
-
-      let selectedCategories = Array.isArray(agentState.selectedCategories)
-        ? agentState.selectedCategories.map((item) => this._normalizeCategory(item)).filter(Boolean)
-        : [];
-      if (!selectedCategories.length) {
-        selectedCategories = settingsSelectedCategories.slice();
-      }
-      const selectedUnique = [];
-      selectedCategories.forEach((item) => {
-        if (!selectedUnique.includes(item)) {
-          selectedUnique.push(item);
-        }
+      const result = await runner.runPlanning({
+        job: safeJob,
+        blocks: inputBlocks,
+        settings,
+        runLlmRequest: this.runLlmRequest
       });
-      selectedCategories = selectedUnique.length ? selectedUnique : ['other'];
-
-      const filteredBlocks = inputBlocks.filter((item) => selectedCategories.includes(this._normalizeCategory(item.category) || 'other'));
-      const effectiveBlocks = filteredBlocks.length ? filteredBlocks : inputBlocks.slice();
-      if (!filteredBlocks.length && inputBlocks.length) {
-        this._pushToolLog(agentState.toolHistory, 'agent.set_recommended_categories', 'system', 'warn', 'Рекомендованные категории дали пустой набор; использованы все блоки');
+      const state = safeJob.agentState && typeof safeJob.agentState === 'object'
+        ? safeJob.agentState
+        : null;
+      if (state) {
+        state.updatedAt = Date.now();
       }
-
-      const plan = agentState.plan && typeof agentState.plan === 'object'
-        ? agentState.plan
-        : this._mergePlan(fallbackPlan, {});
-      const glossary = Array.isArray(agentState.glossary) && agentState.glossary.length
-        ? agentState.glossary.slice()
-        : this._buildGlossary(effectiveBlocks);
-
-      agentState.plan = plan;
-      agentState.glossary = glossary;
-      agentState.selectedCategories = selectedCategories;
-      this._updateChecklist(agentState.checklist, 'select_categories', 'done', `выбрано=${selectedCategories.join(',')}`);
-      this._updateChecklist(agentState.checklist, 'categories_selected', 'done', `выбрано=${selectedCategories.join(',')}`);
-      this._updateChecklist(agentState.checklist, 'build_glossary', 'done', `терминов=${glossary.length}`);
-      this._updateChecklist(agentState.checklist, 'plan_pipeline', 'done', `размер_батча=${plan.batchSize}`);
-      this._updateChecklist(agentState.checklist, 'planned', 'done', `batch=${plan.batchSize}`);
-      agentState.systemPrompt = this._buildSystemPrompt({
-        profile: resolved.profile,
-        style: plan.style,
-        targetLang: safeJob.targetLang || 'ru',
-        toolConfig: agentState.toolConfig
-      });
-      agentState.status = 'ready';
-      agentState.phase = 'planned';
-      agentState.updatedAt = Date.now();
-      this._updateChecklist(agentState.checklist, 'agent_ready', 'done', `профиль=${resolved.profile}`);
-      if (agentState.planningLoop && typeof agentState.planningLoop === 'object') {
-        agentState.planningLoop.status = fallbackApplied ? 'fallback_done' : 'done';
-        if (planningError) {
-          agentState.planningLoop.lastError = planningError;
-        }
-        agentState.planningLoop.updatedAt = Date.now();
-      }
-      if (!Array.isArray(agentState.reports) || !agentState.reports.length) {
-        this._appendReportViaTool(agentState, {
-          type: 'plan',
-          title: 'План перевода сформирован',
-          body: plan.summary || 'План подготовлен',
-          meta: {
-            batchSize: plan.batchSize,
-            selectedCategories,
-            glossaryTerms: glossary.length
-          }
-        }, {
-          message: 'plan_report_created'
-        });
-      }
-
-      await this._persistPlanningJob(safeJob, 'planning_finalize');
-      return {
-        blocks: effectiveBlocks,
-        selectedCategories,
-        agentState,
-        planningResult,
-        planningError
-      };
+      await this._persistPlanningJob(safeJob, 'planning_complete');
+      return result;
     }
 
     _createPlanningToolRegistry() {
@@ -777,7 +608,19 @@
       }
       return new global.NT.AgentToolRegistry({
         translationAgent: this,
-        persistJobState: (job, meta) => this._persistPlanningJob(job, meta && meta.reason ? meta.reason : 'planning_tool')
+        persistJobState: (job, meta) => this._persistPlanningJob(job, meta && meta.reason ? meta.reason : 'planning_tool'),
+        classifyBlocksForJob: typeof this.classifyBlocksForJob === 'function'
+          ? this.classifyBlocksForJob
+          : null,
+        getCategorySummaryForJob: typeof this.getCategorySummaryForJob === 'function'
+          ? this.getCategorySummaryForJob
+          : null,
+        setSelectedCategories: typeof this.setSelectedCategories === 'function'
+          ? this.setSelectedCategories
+          : null,
+        setAgentCategoryRecommendations: typeof this.setAgentCategoryRecommendations === 'function'
+          ? this.setAgentCategoryRecommendations
+          : null
       });
     }
 
@@ -899,7 +742,7 @@
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         force: true,
         message: 'update_checklist_execute_batches',
-        action: () => this._updateChecklist(agentState.checklist, 'execute_batches', 'running', `батч#${agentState.batchCounter}`)
+        action: () => this._updateChecklist(agentState.checklist, 'execute_batches', 'running', `Р В±Р В°РЎвЂљРЎвЂЎ#${agentState.batchCounter}`)
       });
 
       const blocks = selected.blockIds
@@ -958,8 +801,8 @@
         modelRouterMode,
         modelRouterEnabled ? 'ok' : 'skip',
         modelRouterEnabled
-          ? `Выбран маршрут батча: ${routeHint || 'fast'}`
-          : (routeOverrideAllowed ? 'Маршрутизатор моделей отключён' : 'Переопределение маршрута запрещено политикой модели')
+          ? `Р вЂ™РЎвЂ№Р В±РЎР‚Р В°Р Р… Р СР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљ Р В±Р В°РЎвЂљРЎвЂЎР В°: ${routeHint || 'fast'}`
+          : (routeOverrideAllowed ? 'Р СљР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљР С‘Р В·Р В°РЎвЂљР С•РЎР‚ Р СР С•Р Т‘Р ВµР В»Р ВµР в„– Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎРЎвЂР Р…' : 'Р СџР ВµРЎР‚Р ВµР С•Р С—РЎР‚Р ВµР Т‘Р ВµР В»Р ВµР Р…Р С‘Р Вµ Р СР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљР В° Р В·Р В°Р С—РЎР‚Р ВµРЎвЂ°Р ВµР Р…Р С• Р С—Р С•Р В»Р С‘РЎвЂљР С‘Р С”Р С•Р в„– Р СР С•Р Т‘Р ВµР В»Р С‘')
       );
 
       return {
@@ -1037,7 +880,7 @@
           mode: resolvedMode,
           status: 'skip',
           forced: Boolean(force),
-          message: safeMessage || 'инструмент отключён',
+          message: safeMessage || 'Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљ Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎРЎвЂР Р…',
           meta: safeMeta
         });
           agentState.updatedAt = Date.now();
@@ -1096,11 +939,11 @@
             agentState.recentDiffItems = merged.slice(-this.MAX_DIFF_ITEMS);
           }
 
-          const summary = reportObj.summary || `Батч ${batch.index + 1} переведён: ${batch.blockIds.length} блоков`;
+          const summary = reportObj.summary || `Р вЂР В°РЎвЂљРЎвЂЎ ${batch.index + 1} Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘РЎвЂР Р…: ${batch.blockIds.length} Р В±Р В»Р С•Р С”Р С•Р Р†`;
           const reportMode = agentState.toolConfig ? agentState.toolConfig[TOOL_KEYS.REPORT_WRITER] : 'on';
           if (this._isToolEnabled(reportMode)) {
             const notesText = Array.isArray(reportObj.notes) && reportObj.notes.length
-              ? ` | примечания: ${reportObj.notes.join('; ')}`
+              ? ` | Р С—РЎР‚Р С‘Р СР ВµРЎвЂЎР В°Р Р…Р С‘РЎРЏ: ${reportObj.notes.join('; ')}`
               : '';
             const reportMeta = reportObj && reportObj.meta && typeof reportObj.meta === 'object'
               ? reportObj.meta
@@ -1113,7 +956,7 @@
               : null;
             this._appendReportViaTool(agentState, {
               type: 'batch',
-              title: `Батч ${batch.index + 1}`,
+              title: `Р вЂР В°РЎвЂљРЎвЂЎ ${batch.index + 1}`,
               body: `${summary}${notesText}`.slice(0, 600),
               meta: {
                 batchId: batch.batchId,
@@ -1127,14 +970,14 @@
               message: 'batch_report_written'
             });
             const toolMsg = [
-              `Отчёт батча сохранён (${batch.blockIds.length} блоков)`,
-              `модель=${reportMeta.chosenModelSpec || 'н/д'}`,
-              `токены=${usageMeta && usageMeta.totalTokens !== undefined && usageMeta.totalTokens !== null ? usageMeta.totalTokens : 'н/д'}`,
-              `остатокRPM=${rateMeta && rateMeta.remainingRequests !== undefined && rateMeta.remainingRequests !== null ? rateMeta.remainingRequests : 'н/д'} остатокTPM=${rateMeta && rateMeta.remainingTokens !== undefined && rateMeta.remainingTokens !== null ? rateMeta.remainingTokens : 'н/д'}${reportMeta.cached ? ' | кэш' : ''}`
+              `Р С›РЎвЂљРЎвЂЎРЎвЂРЎвЂљ Р В±Р В°РЎвЂљРЎвЂЎР В° РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р… (${batch.blockIds.length} Р В±Р В»Р С•Р С”Р С•Р Р†)`,
+              `Р СР С•Р Т‘Р ВµР В»РЎРЉ=${reportMeta.chosenModelSpec || 'Р Р…/Р Т‘'}`,
+              `РЎвЂљР С•Р С”Р ВµР Р…РЎвЂ№=${usageMeta && usageMeta.totalTokens !== undefined && usageMeta.totalTokens !== null ? usageMeta.totalTokens : 'Р Р…/Р Т‘'}`,
+              `Р С•РЎРѓРЎвЂљР В°РЎвЂљР С•Р С”RPM=${rateMeta && rateMeta.remainingRequests !== undefined && rateMeta.remainingRequests !== null ? rateMeta.remainingRequests : 'Р Р…/Р Т‘'} Р С•РЎРѓРЎвЂљР В°РЎвЂљР С•Р С”TPM=${rateMeta && rateMeta.remainingTokens !== undefined && rateMeta.remainingTokens !== null ? rateMeta.remainingTokens : 'Р Р…/Р Т‘'}${reportMeta.cached ? ' | Р С”РЎРЊРЎв‚¬' : ''}`
             ].join(' | ').slice(0, 320);
             this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'ok', toolMsg);
           } else {
-            this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'skip', 'Запись отчётов отключена');
+            this._pushToolLog(agentState.toolHistory, TOOL_KEYS.REPORT_WRITER, reportMode, 'skip', 'Р вЂ”Р В°Р С—Р С‘РЎРѓРЎРЉ Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљР С•Р Р† Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р В°');
           }
           this.runProgressAuditTool({ job, reason: 'batch_success' });
           this.runContextCompressionTool({ job, force: false, reason: 'batch_success' });
@@ -1156,8 +999,8 @@
           const safeError = error && typeof error === 'object' ? error : {};
           this._appendReportViaTool(agentState, {
             type: 'batch_error',
-            title: `Ошибка батча${batch && Number.isFinite(Number(batch.index)) ? ` #${Number(batch.index) + 1}` : ''}`,
-            body: safeError.message || 'Неизвестная ошибка батча',
+            title: `Р С›РЎв‚¬Р С‘Р В±Р С”Р В° Р В±Р В°РЎвЂљРЎвЂЎР В°${batch && Number.isFinite(Number(batch.index)) ? ` #${Number(batch.index) + 1}` : ''}`,
+            body: safeError.message || 'Р СњР ВµР С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР Р…Р В°РЎРЏ Р С•РЎв‚¬Р С‘Р В±Р С”Р В° Р В±Р В°РЎвЂљРЎвЂЎР В°',
             meta: {
               code: safeError.code || 'BATCH_FAILED',
               batchId: batch && batch.batchId ? batch.batchId : null
@@ -1165,7 +1008,7 @@
           }, {
             message: 'batch_error_report_written'
           });
-          this._pushToolLog(agentState.toolHistory, TOOL_KEYS.PROGRESS_AUDITOR, agentState.toolConfig[TOOL_KEYS.PROGRESS_AUDITOR], 'warn', safeError.message || 'Ошибка батча');
+          this._pushToolLog(agentState.toolHistory, TOOL_KEYS.PROGRESS_AUDITOR, agentState.toolConfig[TOOL_KEYS.PROGRESS_AUDITOR], 'warn', safeError.message || 'Р С›РЎв‚¬Р С‘Р В±Р С”Р В° Р В±Р В°РЎвЂљРЎвЂЎР В°');
           this.runProgressAuditTool({ job, reason: 'batch_failure', force: true });
           this.runContextCompressionTool({ job, force: false, reason: 'batch_failure' });
         }
@@ -1213,10 +1056,10 @@
           ? 'attention'
           : 'running';
       const statusLabel = status === 'complete'
-        ? 'готово'
+        ? 'Р С–Р С•РЎвЂљР С•Р Р†Р С•'
         : status === 'attention'
-          ? 'требует внимания'
-          : 'в процессе';
+          ? 'РЎвЂљРЎР‚Р ВµР В±РЎС“Р ВµРЎвЂљ Р Р†Р Р…Р С‘Р СР В°Р Р…Р С‘РЎРЏ'
+          : 'Р Р† Р С—РЎР‚Р С•РЎвЂ Р ВµРЎРѓРЎРѓР Вµ';
 
       const auditEntry = {
         ts: now,
@@ -1243,14 +1086,14 @@
         TOOL_KEYS.PROGRESS_AUDITOR,
         logMode,
         mandatory && !modeEnabled ? 'warn' : 'ok',
-        `Аудит: статус=${statusLabel}, покрытие=${coverage}%${mandatory ? ' (обязательный)' : ''}`
+        `Р С’РЎС“Р Т‘Р С‘РЎвЂљ: РЎРѓРЎвЂљР В°РЎвЂљРЎС“РЎРѓ=${statusLabel}, Р С—Р С•Р С”РЎР‚РЎвЂ№РЎвЂљР С‘Р Вµ=${coverage}%${mandatory ? ' (Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…РЎвЂ№Р в„–)' : ''}`
       );
       this._executeToolSync({
         agentState,
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         force: true,
         message: 'update_checklist_run_audits',
-        action: () => this._updateChecklist(agentState.checklist, 'run_audits', pending === 0 ? 'done' : 'running', `покрытие=${coverage}%`)
+        action: () => this._updateChecklist(agentState.checklist, 'run_audits', pending === 0 ? 'done' : 'running', `Р С—Р С•Р С”РЎР‚РЎвЂ№РЎвЂљР С‘Р Вµ=${coverage}%`)
       });
 
       return auditEntry;
@@ -1290,12 +1133,12 @@
         .map((item) => `${item.id}:${item.status}`)
         .join(', ');
       const summary = [
-        `профиль=${agentState.profile}`,
-        `категории=${(agentState.selectedCategories || []).join(',') || 'нет'}`,
-        `аудиты=${recentAudits || 'н/д'}`,
-        `чеклист=${checklistDigest || 'всё_готово'}`,
-        `объём_контекста=${footprint}`,
-        `недавнее=${recentReports || 'н/д'}`
+        `Р С—РЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ=${agentState.profile}`,
+        `Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘=${(agentState.selectedCategories || []).join(',') || 'Р Р…Р ВµРЎвЂљ'}`,
+        `Р В°РЎС“Р Т‘Р С‘РЎвЂљРЎвЂ№=${recentAudits || 'Р Р…/Р Т‘'}`,
+        `РЎвЂЎР ВµР С”Р В»Р С‘РЎРѓРЎвЂљ=${checklistDigest || 'Р Р†РЎРѓРЎвЂ_Р С–Р С•РЎвЂљР С•Р Р†Р С•'}`,
+        `Р С•Р В±РЎР‰РЎвЂР С_Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В°=${footprint}`,
+        `Р Р…Р ВµР Т‘Р В°Р Р†Р Р…Р ВµР Вµ=${recentReports || 'Р Р…/Р Т‘'}`
       ].join(' ; ');
 
       agentState.contextSummary = summary.slice(0, 1600);
@@ -1311,7 +1154,7 @@
         TOOL_KEYS.CONTEXT_COMPRESSOR,
         logMode,
         mandatory && !modeEnabled ? 'warn' : 'ok',
-        `Контекст сжат (${reason}; объём=${footprint})`
+        `Р С™Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљ РЎРѓР В¶Р В°РЎвЂљ (${reason}; Р С•Р В±РЎР‰РЎвЂР С=${footprint})`
       );
       const pendingCount = Array.isArray(job.pendingBlockIds) ? job.pendingBlockIds.length : 0;
       const checklistStatus = pendingCount === 0 ? 'done' : 'running';
@@ -1320,7 +1163,7 @@
         tool: TOOL_KEYS.WORKFLOW_CONTROLLER,
         force: true,
         message: 'update_checklist_compress_context',
-        action: () => this._updateChecklist(agentState.checklist, 'compress_context', checklistStatus, `сжатий=${agentState.compressedContextCount}`)
+        action: () => this._updateChecklist(agentState.checklist, 'compress_context', checklistStatus, `РЎРѓР В¶Р В°РЎвЂљР С‘Р в„–=${agentState.compressedContextCount}`)
       });
       return agentState.contextSummary;
     }
@@ -1338,15 +1181,15 @@
         action: () => {
           this.runProgressAuditTool({ job, reason: 'finalize', force: true, mandatory: true });
           this.runContextCompressionTool({ job, force: true, mandatory: true, reason: 'finalize' });
-          this._updateChecklist(agentState.checklist, 'translating', 'done', 'перевод завершён');
-          this._updateChecklist(agentState.checklist, 'proofreading', 'done', 'финальная вычитка завершена');
-          this._updateChecklist(agentState.checklist, 'done', 'done', 'задача завершена');
-          this._updateChecklist(agentState.checklist, 'execute_batches', 'done', 'все батчи обработаны');
-          this._updateChecklist(agentState.checklist, 'proofread', 'done', 'финальная вычитка завершена');
-          this._updateChecklist(agentState.checklist, 'final_report', 'done', 'отчёт готов');
+          this._updateChecklist(agentState.checklist, 'translating', 'done', 'Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘ Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬РЎвЂР Р…');
+          this._updateChecklist(agentState.checklist, 'proofreading', 'done', 'РЎвЂћР С‘Р Р…Р В°Р В»РЎРЉР Р…Р В°РЎРЏ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р В° Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р В°');
+          this._updateChecklist(agentState.checklist, 'done', 'done', 'Р В·Р В°Р Т‘Р В°РЎвЂЎР В° Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р В°');
+          this._updateChecklist(agentState.checklist, 'execute_batches', 'done', 'Р Р†РЎРѓР Вµ Р В±Р В°РЎвЂљРЎвЂЎР С‘ Р С•Р В±РЎР‚Р В°Р В±Р С•РЎвЂљР В°Р Р…РЎвЂ№');
+          this._updateChecklist(agentState.checklist, 'proofread', 'done', 'РЎвЂћР С‘Р Р…Р В°Р В»РЎРЉР Р…Р В°РЎРЏ Р Р†РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р В° Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р В°');
+          this._updateChecklist(agentState.checklist, 'final_report', 'done', 'Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљ Р С–Р С•РЎвЂљР С•Р Р†');
           this._appendReportViaTool(agentState, {
             type: 'final',
-            title: 'Перевод завершён',
+            title: 'Р СџР ВµРЎР‚Р ВµР Р†Р С•Р Т‘ Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬РЎвЂР Р…',
             body: this._buildFinalSummary(job),
             meta: {
               totalBlocks: job.totalBlocks || 0,
@@ -1377,15 +1220,15 @@
           const safeError = error && typeof error === 'object' ? error : {};
           this._appendReportViaTool(agentState, {
             type: 'error',
-            title: 'Перевод завершился ошибкой',
-            body: safeError.message || 'Неизвестная ошибка',
+            title: 'Р СџР ВµРЎР‚Р ВµР Р†Р С•Р Т‘ Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р С‘Р В»РЎРѓРЎРЏ Р С•РЎв‚¬Р С‘Р В±Р С”Р С•Р в„–',
+            body: safeError.message || 'Р СњР ВµР С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР Р…Р В°РЎРЏ Р С•РЎв‚¬Р С‘Р В±Р С”Р В°',
             meta: {
               code: safeError.code || 'TRANSLATION_FAILED'
             }
           }, {
             message: 'failure_report_written'
           });
-          this._updateChecklist(agentState.checklist, 'final_report', 'running', 'задача завершилась ошибкой; отчёт обновлён');
+          this._updateChecklist(agentState.checklist, 'final_report', 'running', 'Р В·Р В°Р Т‘Р В°РЎвЂЎР В° Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р С‘Р В»Р В°РЎРѓРЎРЉ Р С•РЎв‚¬Р С‘Р В±Р С”Р С•Р в„–; Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљ Р С•Р В±Р Р…Р С•Р Р†Р В»РЎвЂР Р…');
           this._updateChecklist(agentState.checklist, 'done', 'failed', safeError.code || 'failed');
           agentState.phase = 'failed';
           agentState.status = 'failed';
@@ -1616,11 +1459,26 @@
       if (KNOWN_CATEGORIES.includes(raw)) {
         return raw;
       }
-      if (raw.includes('h1') || raw.includes('h2') || raw.includes('h3')) {
-        return 'heading';
+      if (raw === 'heading') {
+        return 'headings';
       }
-      if (raw.includes('button')) {
-        return 'button';
+      if (raw === 'paragraph' || raw === 'list' || raw === 'quote') {
+        return 'main_content';
+      }
+      if (raw === 'button' || raw === 'label') {
+        return 'ui_controls';
+      }
+      if (raw === 'table') {
+        return 'tables';
+      }
+      if (raw === 'meta' || raw === 'other') {
+        return 'unknown';
+      }
+      if (raw.includes('h1') || raw.includes('h2') || raw.includes('h3')) {
+        return 'headings';
+      }
+      if (raw.includes('button') || raw.includes('label') || raw.includes('input') || raw.includes('form')) {
+        return 'ui_controls';
       }
       if (raw.includes('nav') || raw.includes('menu')) {
         return 'navigation';
@@ -1628,25 +1486,25 @@
       if (raw.includes('code') || raw.includes('pre')) {
         return 'code';
       }
-      if (raw.includes('meta') || raw.includes('title') || raw.includes('description')) {
-        return 'meta';
-      }
-      if (raw.includes('label')) {
-        return 'label';
-      }
-      if (raw.includes('li')) {
-        return 'list';
-      }
       if (raw.includes('table') || raw.includes('th') || raw.includes('td')) {
-        return 'table';
+        return 'tables';
       }
-      if (raw.includes('blockquote') || raw.includes('quote')) {
-        return 'quote';
+      if (raw.includes('caption') || raw.includes('figcaption')) {
+        return 'captions';
       }
-      if (raw.includes('p') || raw.includes('article')) {
-        return 'paragraph';
+      if (raw.includes('footer') || raw.includes('copyright') || raw.includes('meta')) {
+        return 'footer';
       }
-      return 'other';
+      if (raw.includes('cookie') || raw.includes('consent') || raw.includes('privacy') || raw.includes('terms') || raw.includes('legal')) {
+        return 'legal';
+      }
+      if (raw.includes('ad') || raw.includes('sponsored') || raw.includes('banner') || raw.includes('promo')) {
+        return 'ads';
+      }
+      if (raw.includes('content') || raw.includes('article') || raw.includes('paragraph') || raw.includes('text') || raw.includes('quote') || raw.includes('list')) {
+        return 'main_content';
+      }
+      return 'unknown';
     }
 
     _collectCategoryStats(blocks) {
@@ -1655,7 +1513,7 @@
         stats[category] = { count: 0, chars: 0 };
       });
       (blocks || []).forEach((item) => {
-        const category = this._normalizeCategory(item.category || item.pathHint) || 'other';
+        const category = this._normalizeCategory(item.category || item.pathHint) || 'unknown';
         const text = typeof item.originalText === 'string' ? item.originalText : '';
         stats[category] = stats[category] || { count: 0, chars: 0 };
         stats[category].count += 1;
@@ -1741,7 +1599,7 @@
           source: 'explicit',
           requestedMode,
           effectiveMode: requestedMode,
-          reason: requestedMode === 'on' ? 'Настроено пользователем/профилем: ВКЛ' : 'Настроено пользователем/профилем: ВЫКЛ'
+          reason: requestedMode === 'on' ? 'Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…Р С• Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР С/Р С—РЎР‚Р С•РЎвЂћР С‘Р В»Р ВµР С: Р вЂ™Р С™Р вЂє' : 'Р СњР В°РЎРѓРЎвЂљРЎР‚Р С•Р ВµР Р…Р С• Р С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљР ВµР В»Р ВµР С/Р С—РЎР‚Р С•РЎвЂћР С‘Р В»Р ВµР С: Р вЂ™Р В«Р С™Р вЂє'
         });
           return;
         }
@@ -1774,54 +1632,54 @@
       const style = typeof safe.style === 'string' ? safe.style : 'balanced';
 
       if (toolKey === TOOL_KEYS.PAGE_ANALYZER) {
-        return { mode: 'on', reason: 'Нужен для планирования и диагностики с учётом структуры страницы' };
+        return { mode: 'on', reason: 'Р СњРЎС“Р В¶Р ВµР Р… Р Т‘Р В»РЎРЏ Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘РЎРЏ Р С‘ Р Т‘Р С‘Р В°Р С–Р Р…Р С•РЎРѓРЎвЂљР С‘Р С”Р С‘ РЎРѓ РЎС“РЎвЂЎРЎвЂРЎвЂљР С•Р С РЎРѓРЎвЂљРЎР‚РЎС“Р С”РЎвЂљРЎС“РЎР‚РЎвЂ№ РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№' };
       }
       if (toolKey === TOOL_KEYS.CATEGORY_SELECTOR) {
         if (categoryCount > 1 || blockCount > 6) {
-          return { mode: 'on', reason: 'Обнаружено несколько категорий; селективный выбор полезен' };
+          return { mode: 'on', reason: 'Р С›Р В±Р Р…Р В°РЎР‚РЎС“Р В¶Р ВµР Р…Р С• Р Р…Р ВµРЎРѓР С”Р С•Р В»РЎРЉР С”Р С• Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„–; РЎРѓР ВµР В»Р ВµР С”РЎвЂљР С‘Р Р†Р Р…РЎвЂ№Р в„– Р Р†РЎвЂ№Р В±Р С•РЎР‚ Р С—Р С•Р В»Р ВµР В·Р ВµР Р…' };
         }
-        return { mode: 'off', reason: 'Одна категория или маленькая страница; лишняя селекция не нужна' };
+        return { mode: 'off', reason: 'Р С›Р Т‘Р Р…Р В° Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р С‘Р В»Р С‘ Р СР В°Р В»Р ВµР Р…РЎРЉР С”Р В°РЎРЏ РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р В°; Р В»Р С‘РЎв‚¬Р Р…РЎРЏРЎРЏ РЎРѓР ВµР В»Р ВµР С”РЎвЂ Р С‘РЎРЏ Р Р…Р Вµ Р Р…РЎС“Р В¶Р Р…Р В°' };
       }
       if (toolKey === TOOL_KEYS.GLOSSARY_BUILDER) {
         if (totalChars > 900 || duplicateRatio > 0.16 || codeRatio > 0.08 || style === 'technical') {
-          return { mode: 'on', reason: 'Высокий риск рассинхрона терминологии на этой странице' };
+          return { mode: 'on', reason: 'Р вЂ™РЎвЂ№РЎРѓР С•Р С”Р С‘Р в„– РЎР‚Р С‘РЎРѓР С” РЎР‚Р В°РЎРѓРЎРѓР С‘Р Р…РЎвЂ¦РЎР‚Р С•Р Р…Р В° РЎвЂљР ВµРЎР‚Р СР С‘Р Р…Р С•Р В»Р С•Р С–Р С‘Р С‘ Р Р…Р В° РЎРЊРЎвЂљР С•Р в„– РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р Вµ' };
         }
-        return { mode: 'off', reason: 'Низкий повтор терминов; шаг глоссария пропущен ради скорости' };
+        return { mode: 'off', reason: 'Р СњР С‘Р В·Р С”Р С‘Р в„– Р С—Р С•Р Р†РЎвЂљР С•РЎР‚ РЎвЂљР ВµРЎР‚Р СР С‘Р Р…Р С•Р Р†; РЎв‚¬Р В°Р С– Р С–Р В»Р С•РЎРѓРЎРѓР В°РЎР‚Р С‘РЎРЏ Р С—РЎР‚Р С•Р С—РЎС“РЎвЂ°Р ВµР Р… РЎР‚Р В°Р Т‘Р С‘ РЎРѓР С”Р С•РЎР‚Р С•РЎРѓРЎвЂљР С‘' };
       }
       if (toolKey === TOOL_KEYS.BATCH_PLANNER) {
         if (blockCount > 14 || categoryCount > 3 || style === 'technical' || style === 'readable') {
-          return { mode: 'on', reason: 'Сложной странице полезно явное планирование батчей' };
+          return { mode: 'on', reason: 'Р РЋР В»Р С•Р В¶Р Р…Р С•Р в„– РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р Вµ Р С—Р С•Р В»Р ВµР В·Р Р…Р С• РЎРЏР Р†Р Р…Р С•Р Вµ Р С—Р В»Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘Р Вµ Р В±Р В°РЎвЂљРЎвЂЎР ВµР в„–' };
         }
-        return { mode: 'off', reason: 'Для простой страницы достаточно детерминированного базового плана' };
+        return { mode: 'off', reason: 'Р вЂќР В»РЎРЏ Р С—РЎР‚Р С•РЎРѓРЎвЂљР С•Р в„– РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№ Р Т‘Р С•РЎРѓРЎвЂљР В°РЎвЂљР С•РЎвЂЎР Р…Р С• Р Т‘Р ВµРЎвЂљР ВµРЎР‚Р СР С‘Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р Р…Р С•Р С–Р С• Р В±Р В°Р В·Р С•Р Р†Р С•Р С–Р С• Р С—Р В»Р В°Р Р…Р В°' };
       }
       if (toolKey === TOOL_KEYS.MODEL_ROUTER) {
         if (style === 'technical' || style === 'literal' || codeRatio > 0.02 || headingRatio > 0.12 || blockCount > 4) {
-          return { mode: 'on', reason: 'Смешанный сложный контент требует маршрутизации модели по батчам' };
+          return { mode: 'on', reason: 'Р РЋР СР ВµРЎв‚¬Р В°Р Р…Р Р…РЎвЂ№Р в„– РЎРѓР В»Р С•Р В¶Р Р…РЎвЂ№Р в„– Р С”Р С•Р Р…РЎвЂљР ВµР Р…РЎвЂљ РЎвЂљРЎР‚Р ВµР В±РЎС“Р ВµРЎвЂљ Р СР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљР С‘Р В·Р В°РЎвЂ Р С‘Р С‘ Р СР С•Р Т‘Р ВµР В»Р С‘ Р С—Р С• Р В±Р В°РЎвЂљРЎвЂЎР В°Р С' };
         }
-        return { mode: 'off', reason: 'Однородному простому контенту не нужна динамическая маршрутизация' };
+        return { mode: 'off', reason: 'Р С›Р Т‘Р Р…Р С•РЎР‚Р С•Р Т‘Р Р…Р С•Р СРЎС“ Р С—РЎР‚Р С•РЎРѓРЎвЂљР С•Р СРЎС“ Р С”Р С•Р Р…РЎвЂљР ВµР Р…РЎвЂљРЎС“ Р Р…Р Вµ Р Р…РЎС“Р В¶Р Р…Р В° Р Т‘Р С‘Р Р…Р В°Р СР С‘РЎвЂЎР ВµРЎРѓР С”Р В°РЎРЏ Р СР В°РЎР‚РЎв‚¬РЎР‚РЎС“РЎвЂљР С‘Р В·Р В°РЎвЂ Р С‘РЎРЏ' };
       }
       if (toolKey === TOOL_KEYS.PROGRESS_AUDITOR) {
-        return { mode: 'on', reason: 'Периодический аудит обязателен для контроля плана и прогресса' };
+        return { mode: 'on', reason: 'Р СџР ВµРЎР‚Р С‘Р С•Р Т‘Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р в„– Р В°РЎС“Р Т‘Р С‘РЎвЂљ Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»Р ВµР Р… Р Т‘Р В»РЎРЏ Р С”Р С•Р Р…РЎвЂљРЎР‚Р С•Р В»РЎРЏ Р С—Р В»Р В°Р Р…Р В° Р С‘ Р С—РЎР‚Р С•Р С–РЎР‚Р ВµРЎРѓРЎРѓР В°' };
       }
       if (toolKey === TOOL_KEYS.ANTI_REPEAT_GUARD) {
-        return { mode: 'on', reason: 'Предотвращение дубликатов обязательно для стабильного выполнения' };
+        return { mode: 'on', reason: 'Р СџРЎР‚Р ВµР Т‘Р С•РЎвЂљР Р†РЎР‚Р В°РЎвЂ°Р ВµР Р…Р С‘Р Вµ Р Т‘РЎС“Р В±Р В»Р С‘Р С”Р В°РЎвЂљР С•Р Р† Р С•Р В±РЎРЏР В·Р В°РЎвЂљР ВµР В»РЎРЉР Р…Р С• Р Т‘Р В»РЎРЏ РЎРѓРЎвЂљР В°Р В±Р С‘Р В»РЎРЉР Р…Р С•Р С–Р С• Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ' };
       }
       if (toolKey === TOOL_KEYS.CONTEXT_COMPRESSOR) {
         if (blockCount > 45 || totalChars > 6000 || avgChars > 180) {
-          return { mode: 'on', reason: 'Большой объём контекста; нужно сжатие, чтобы избежать переполнения' };
+          return { mode: 'on', reason: 'Р вЂР С•Р В»РЎРЉРЎв‚¬Р С•Р в„– Р С•Р В±РЎР‰РЎвЂР С Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В°; Р Р…РЎС“Р В¶Р Р…Р С• РЎРѓР В¶Р В°РЎвЂљР С‘Р Вµ, РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ Р С‘Р В·Р В±Р ВµР В¶Р В°РЎвЂљРЎРЉ Р С—Р ВµРЎР‚Р ВµР С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ' };
         }
-        return { mode: 'off', reason: 'Контекст небольшой; сжатие отложено' };
+        return { mode: 'off', reason: 'Р С™Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљ Р Р…Р ВµР В±Р С•Р В»РЎРЉРЎв‚¬Р С•Р в„–; РЎРѓР В¶Р В°РЎвЂљР С‘Р Вµ Р С•РЎвЂљР В»Р С•Р В¶Р ВµР Р…Р С•' };
       }
       if (toolKey === TOOL_KEYS.REPORT_WRITER) {
-        return { mode: 'on', reason: 'Отчёты нужны для прозрачной отладки и трассировки' };
+        return { mode: 'on', reason: 'Р С›РЎвЂљРЎвЂЎРЎвЂРЎвЂљРЎвЂ№ Р Р…РЎС“Р В¶Р Р…РЎвЂ№ Р Т‘Р В»РЎРЏ Р С—РЎР‚Р С•Р В·РЎР‚Р В°РЎвЂЎР Р…Р С•Р в„– Р С•РЎвЂљР В»Р В°Р Т‘Р С”Р С‘ Р С‘ РЎвЂљРЎР‚Р В°РЎРѓРЎРѓР С‘РЎР‚Р С•Р Р†Р С”Р С‘' };
       }
       if (toolKey === TOOL_KEYS.PAGE_RUNTIME) {
-        return { mode: 'on', reason: 'Отслеживает runtime-действия контент-скрипта (apply/restore/rescan) для полной трассы' };
+        return { mode: 'on', reason: 'Р С›РЎвЂљРЎРѓР В»Р ВµР В¶Р С‘Р Р†Р В°Р ВµРЎвЂљ runtime-Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘РЎРЏ Р С”Р С•Р Р…РЎвЂљР ВµР Р…РЎвЂљ-РЎРѓР С”РЎР‚Р С‘Р С—РЎвЂљР В° (apply/restore/rescan) Р Т‘Р В»РЎРЏ Р С—Р С•Р В»Р Р…Р С•Р в„– РЎвЂљРЎР‚Р В°РЎРѓРЎРѓРЎвЂ№' };
       }
       if (toolKey === TOOL_KEYS.CACHE_MANAGER) {
-        return { mode: 'on', reason: 'Отслеживает решения по восстановлению/сохранению кэша для воспроизводимости' };
+        return { mode: 'on', reason: 'Р С›РЎвЂљРЎРѓР В»Р ВµР В¶Р С‘Р Р†Р В°Р ВµРЎвЂљ РЎР‚Р ВµРЎв‚¬Р ВµР Р…Р С‘РЎРЏ Р С—Р С• Р Р†Р С•РЎРѓРЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎР‹/РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…Р ВµР Р…Р С‘РЎР‹ Р С”РЎРЊРЎв‚¬Р В° Р Т‘Р В»РЎРЏ Р Р†Р С•РЎРѓР С—РЎР‚Р С•Р С‘Р В·Р Р†Р С•Р Т‘Р С‘Р СР С•РЎРѓРЎвЂљР С‘' };
       }
-      return { mode: 'on', reason: 'Политика авто по умолчанию' };
+      return { mode: 'on', reason: 'Р СџР С•Р В»Р С‘РЎвЂљР С‘Р С”Р В° Р В°Р Р†РЎвЂљР С• Р С—Р С• РЎС“Р СР С•Р В»РЎвЂЎР В°Р Р…Р С‘РЎР‹' };
     }
 
     _resolveBatchRouteHint({ agentState, batch } = {}) {
@@ -1870,7 +1728,7 @@
             item && typeof item === 'object'
               ? (item.category || item.pathHint)
               : ''
-          ) || 'other')
+          ) || 'unknown')
       );
       if (!availableSet.size) {
         Object.keys(safeCategoryStats).forEach((category) => {
@@ -1958,7 +1816,7 @@
         );
       }
       if (!selected.length) {
-        selected = ['other'];
+        selected = ['unknown'];
       }
       return selected;
     }
@@ -1997,7 +1855,7 @@
         : 'balanced';
       const passes = this._resolveProofreadingPasses(resolvedProfile, blockCount);
       const categoryOrder = this._buildCategoryOrder(blocks, selectedCategories);
-      const summary = `Профиль ${profile} -> стиль=${style}, размер_батча=${batchSize}, категории=${selectedCategories.join(', ')}`;
+      const summary = `Р СџРЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ ${profile} -> РЎРѓРЎвЂљР С‘Р В»РЎРЉ=${style}, РЎР‚Р В°Р В·Р СР ВµРЎР‚_Р В±Р В°РЎвЂљРЎвЂЎР В°=${batchSize}, Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘=${selectedCategories.join(', ')}`;
       return {
         style,
         batchSize,
@@ -2143,23 +2001,24 @@
     _buildInitialChecklist() {
       const now = Date.now();
       return [
-        { id: 'scanned', title: 'Страница просканирована', status: 'pending', details: '', updatedAt: now },
-        { id: 'planned', title: 'План сформирован', status: 'pending', details: '', updatedAt: now },
-        { id: 'categories_selected', title: 'Категории выбраны', status: 'pending', details: '', updatedAt: now },
-        { id: 'memory_restored', title: 'Восстановление из памяти', status: 'pending', details: '', updatedAt: now },
-        { id: 'translating', title: 'Перевод выполняется', status: 'pending', details: '', updatedAt: now },
-        { id: 'proofreading', title: 'Вычитка', status: 'pending', details: '', updatedAt: now },
-        { id: 'done', title: 'Готово', status: 'pending', details: '', updatedAt: now },
-        { id: 'analyze_page', title: 'Анализ текста страницы', status: 'pending', details: '', updatedAt: now },
-        { id: 'select_categories', title: 'Выбор категорий перевода', status: 'pending', details: '', updatedAt: now },
-        { id: 'build_glossary', title: 'Глоссарий / контекст', status: 'pending', details: '', updatedAt: now },
-        { id: 'plan_pipeline', title: 'План выполнения', status: 'pending', details: '', updatedAt: now },
-        { id: 'agent_ready', title: 'Агент готов', status: 'pending', details: '', updatedAt: now },
-        { id: 'execute_batches', title: 'Выполнение батчей', status: 'pending', details: '', updatedAt: now },
-        { id: 'run_audits', title: 'Периодические аудиты', status: 'pending', details: '', updatedAt: now },
-        { id: 'compress_context', title: 'Автосжатие контекста', status: 'pending', details: '', updatedAt: now },
-        { id: 'proofread', title: 'Вычитка / полировка', status: 'pending', details: '', updatedAt: now },
-        { id: 'final_report', title: 'Финальный отчёт', status: 'pending', details: '', updatedAt: now }
+        { id: 'scanned', title: 'Р РЋРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р В° Р С—РЎР‚Р С•РЎРѓР С”Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р В°', status: 'pending', details: '', updatedAt: now },
+        { id: 'preanalysis_ready', title: 'Pre-analysis ready', status: 'pending', details: '', updatedAt: now },
+        { id: 'planned', title: 'Р СџР В»Р В°Р Р… РЎРѓРЎвЂћР С•РЎР‚Р СР С‘РЎР‚Р С•Р Р†Р В°Р Р…', status: 'pending', details: '', updatedAt: now },
+        { id: 'categories_selected', title: 'Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р С‘ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…РЎвЂ№', status: 'pending', details: '', updatedAt: now },
+        { id: 'memory_restored', title: 'Р вЂ™Р С•РЎРѓРЎРѓРЎвЂљР В°Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘Р Вµ Р С‘Р В· Р С—Р В°Р СРЎРЏРЎвЂљР С‘', status: 'pending', details: '', updatedAt: now },
+        { id: 'translating', title: 'Р СџР ВµРЎР‚Р ВµР Р†Р С•Р Т‘ Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ', status: 'pending', details: '', updatedAt: now },
+        { id: 'proofreading', title: 'Р вЂ™РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р В°', status: 'pending', details: '', updatedAt: now },
+        { id: 'done', title: 'Р вЂњР С•РЎвЂљР С•Р Р†Р С•', status: 'pending', details: '', updatedAt: now },
+        { id: 'analyze_page', title: 'Р С’Р Р…Р В°Р В»Р С‘Р В· РЎвЂљР ВµР С”РЎРѓРЎвЂљР В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ РЎвЂ№', status: 'pending', details: '', updatedAt: now },
+        { id: 'select_categories', title: 'Р вЂ™РЎвЂ№Р В±Р С•РЎР‚ Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р в„– Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В°', status: 'pending', details: '', updatedAt: now },
+        { id: 'build_glossary', title: 'Р вЂњР В»Р С•РЎРѓРЎРѓР В°РЎР‚Р С‘Р в„– / Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљ', status: 'pending', details: '', updatedAt: now },
+        { id: 'plan_pipeline', title: 'Р СџР В»Р В°Р Р… Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С‘РЎРЏ', status: 'pending', details: '', updatedAt: now },
+        { id: 'agent_ready', title: 'Р С’Р С–Р ВµР Р…РЎвЂљ Р С–Р С•РЎвЂљР С•Р Р†', status: 'pending', details: '', updatedAt: now },
+        { id: 'execute_batches', title: 'Р вЂ™РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С‘Р Вµ Р В±Р В°РЎвЂљРЎвЂЎР ВµР в„–', status: 'pending', details: '', updatedAt: now },
+        { id: 'run_audits', title: 'Р СџР ВµРЎР‚Р С‘Р С•Р Т‘Р С‘РЎвЂЎР ВµРЎРѓР С”Р С‘Р Вµ Р В°РЎС“Р Т‘Р С‘РЎвЂљРЎвЂ№', status: 'pending', details: '', updatedAt: now },
+        { id: 'compress_context', title: 'Р С’Р Р†РЎвЂљР С•РЎРѓР В¶Р В°РЎвЂљР С‘Р Вµ Р С”Р С•Р Р…РЎвЂљР ВµР С”РЎРѓРЎвЂљР В°', status: 'pending', details: '', updatedAt: now },
+        { id: 'proofread', title: 'Р вЂ™РЎвЂ№РЎвЂЎР С‘РЎвЂљР С”Р В° / Р С—Р С•Р В»Р С‘РЎР‚Р С•Р Р†Р С”Р В°', status: 'pending', details: '', updatedAt: now },
+        { id: 'final_report', title: 'Р В¤Р С‘Р Р…Р В°Р В»РЎРЉР Р…РЎвЂ№Р в„– Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљ', status: 'pending', details: '', updatedAt: now }
       ];
     }
 
@@ -2196,8 +2055,8 @@
       return pending.slice().sort((a, b) => {
         const blockA = job.blocksById && job.blocksById[a] ? job.blocksById[a] : null;
         const blockB = job.blocksById && job.blocksById[b] ? job.blocksById[b] : null;
-        const catA = this._normalizeCategory(blockA ? blockA.category || blockA.pathHint : '') || 'other';
-        const catB = this._normalizeCategory(blockB ? blockB.category || blockB.pathHint : '') || 'other';
+        const catA = this._normalizeCategory(blockA ? blockA.category || blockA.pathHint : '') || 'unknown';
+        const catB = this._normalizeCategory(blockB ? blockB.category || blockB.pathHint : '') || 'unknown';
         const weightA = Object.prototype.hasOwnProperty.call(weightByCategory, catA) ? weightByCategory[catA] : 999;
         const weightB = Object.prototype.hasOwnProperty.call(weightByCategory, catB) ? weightByCategory[catB] : 999;
         if (weightA !== weightB) {
@@ -2211,7 +2070,7 @@
       const base = Array.isArray(selectedCategories) ? selectedCategories.slice() : [];
       const counts = {};
       (blocks || []).forEach((item) => {
-        const category = this._normalizeCategory(item.category || item.pathHint) || 'other';
+        const category = this._normalizeCategory(item.category || item.pathHint) || 'unknown';
         counts[category] = (counts[category] || 0) + 1;
       });
       return base.sort((a, b) => (counts[b] || 0) - (counts[a] || 0));
@@ -2220,7 +2079,7 @@
     _countBatchCategories(blocks) {
       const out = {};
       (blocks || []).forEach((item) => {
-        const category = this._normalizeCategory(item.category || item.pathHint) || 'other';
+        const category = this._normalizeCategory(item.category || item.pathHint) || 'unknown';
         out[category] = (out[category] || 0) + 1;
       });
       return out;
@@ -2255,7 +2114,7 @@
           }
           return {
             blockId: block.blockId,
-            category: this._normalizeCategory(block.category || block.pathHint) || 'other',
+            category: this._normalizeCategory(block.category || block.pathHint) || 'unknown',
             before: before.slice(0, 220),
             after: after.slice(0, 220)
           };
@@ -2286,9 +2145,9 @@
       const completed = Number.isFinite(Number(job.completedBlocks)) ? Number(job.completedBlocks) : 0;
       const failed = Array.isArray(job.failedBlockIds) ? job.failedBlockIds.length : 0;
       if (failed > 0) {
-        return `Завершено с проблемами: переведено ${completed}/${total}, ошибок ${failed}.`;
+        return `Р вЂ”Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р С• РЎРѓ Р С—РЎР‚Р С•Р В±Р В»Р ВµР СР В°Р СР С‘: Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘Р ВµР Р…Р С• ${completed}/${total}, Р С•РЎв‚¬Р С‘Р В±Р С•Р С” ${failed}.`;
       }
-      return `Успешно завершено: переведено ${completed}/${total}.`;
+      return `Р Р€РЎРѓР С—Р ВµРЎв‚¬Р Р…Р С• Р В·Р В°Р Р†Р ВµРЎР‚РЎв‚¬Р ВµР Р…Р С•: Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘Р ВµР Р…Р С• ${completed}/${total}.`;
     }
 
     _resolveBatchSize(resolvedProfile, blockCount) {
@@ -2404,7 +2263,7 @@
           mode: resolvedMode,
           status: 'skip',
           forced: force,
-          message: onDisabledMessage || message || 'инструмент отключён'
+          message: onDisabledMessage || message || 'Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљ Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎРЎвЂР Р…'
         });
         return disabledValue;
       }
@@ -2416,17 +2275,17 @@
           mode: resolvedMode,
           status: 'ok',
           forced: force,
-          message: message || 'действие инструмента выполнено'
+          message: message || 'Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘Р Вµ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР В° Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С•'
         });
         return out;
       } catch (error) {
-        const errMessage = error && error.message ? error.message : 'ошибка действия инструмента';
+        const errMessage = error && error.message ? error.message : 'Р С•РЎв‚¬Р С‘Р В±Р С”Р В° Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘РЎРЏ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР В°';
         this._recordToolExecution(agentState, {
           tool,
           mode: resolvedMode,
           status: 'error',
           forced: force,
-          message: `${message || 'действие инструмента'} | ${errMessage}`
+          message: `${message || 'Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘Р Вµ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР В°'} | ${errMessage}`
         });
         this._pushToolLog(agentState && agentState.toolHistory, tool, resolvedMode, 'error', errMessage);
         return disabledValue;
@@ -2454,7 +2313,7 @@
           mode: resolvedMode,
           status: 'skip',
           forced: force,
-          message: onDisabledMessage || message || 'инструмент отключён'
+          message: onDisabledMessage || message || 'Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљ Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎРЎвЂР Р…'
         });
         return fallbackValue;
       }
@@ -2467,17 +2326,17 @@
           mode: resolvedMode,
           status: 'ok',
           forced: force,
-          message: message || 'действие инструмента выполнено'
+          message: message || 'Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘Р Вµ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР В° Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…Р ВµР Р…Р С•'
         });
         return out;
       } catch (error) {
-        const errMessage = error && error.message ? error.message : 'ошибка действия инструмента';
+        const errMessage = error && error.message ? error.message : 'Р С•РЎв‚¬Р С‘Р В±Р С”Р В° Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘РЎРЏ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР В°';
         this._recordToolExecution(agentState, {
           tool,
           mode: resolvedMode,
           status: 'error',
           forced: force,
-          message: `${message || 'действие инструмента'} | ${errMessage}`
+          message: `${message || 'Р Т‘Р ВµР в„–РЎРѓРЎвЂљР Р†Р С‘Р Вµ Р С‘Р Р…РЎРѓРЎвЂљРЎР‚РЎС“Р СР ВµР Р…РЎвЂљР В°'} | ${errMessage}`
         });
         this._pushToolLog(agentState && agentState.toolHistory, tool, resolvedMode, 'error', errMessage);
         return fallbackValue;
@@ -2490,7 +2349,7 @@
         tool: TOOL_KEYS.REPORT_WRITER,
         force,
         message,
-        onDisabledMessage: 'Запись отчётов отключена',
+        onDisabledMessage: 'Р вЂ”Р В°Р С—Р С‘РЎРѓРЎРЉ Р С•РЎвЂљРЎвЂЎРЎвЂРЎвЂљР С•Р Р† Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р В°',
         disabledValue: null,
         action: () => this._appendReport(agentState, report)
       });
@@ -2527,7 +2386,7 @@
       const next = {
         ts: Date.now(),
         type: this._sanitizeReportToken(report && report.type ? report.type : 'note', 'note'),
-        title: this._sanitizeReportText(report && report.title ? report.title : 'Отчёт', 140),
+        title: this._sanitizeReportText(report && report.title ? report.title : 'Р С›РЎвЂљРЎвЂЎРЎвЂРЎвЂљ', 140),
         body: this._sanitizeReportText(report && report.body ? report.body : '', 1200),
         meta: this._sanitizeReportMeta(report && report.meta ? report.meta : {}),
         formatVersion: 'nt.agent.report.v1'
@@ -2545,7 +2404,7 @@
       const summaryRaw = typeof raw.summary === 'string' ? raw.summary.trim() : '';
       const summary = summaryRaw
         ? summaryRaw.slice(0, 320)
-        : `Батч ${Number.isFinite(Number(batch && batch.index)) ? Number(batch.index) + 1 : '?'} переведён: ${translatedCount}/${batchSize} блоков`;
+        : `Р вЂР В°РЎвЂљРЎвЂЎ ${Number.isFinite(Number(batch && batch.index)) ? Number(batch.index) + 1 : '?'} Р С—Р ВµРЎР‚Р ВµР Р†Р ВµР Т‘РЎвЂР Р…: ${translatedCount}/${batchSize} Р В±Р В»Р С•Р С”Р С•Р Р†`;
       const qualityRaw = typeof raw.quality === 'string' ? raw.quality.trim().toLowerCase() : '';
       const quality = qualityRaw === 'needs_review'
         || qualityRaw === 'review'
@@ -2701,3 +2560,4 @@
     KNOWN_CATEGORIES
   };
 })(globalThis);
+

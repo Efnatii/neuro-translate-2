@@ -197,7 +197,7 @@
 
         const parsed = this._extractToolCalls(raw);
         if (!parsed.calls.length) {
-          const missing = this._missingRequiredActions(safeState);
+          const missing = this._missingRequiredActions(safeState, safeJob);
           if (missing.length) {
             loop.pendingInputItems = [{
               role: 'user',
@@ -209,6 +209,19 @@
             loop.stepIndex += 1;
             loop.updatedAt = Date.now();
             await this._persist(safeJob, `planning:step:${loop.stepIndex}:missing_tools`);
+            continue;
+          }
+          if (!this._isPlanningAwaitingCategories(safeJob, safeState)) {
+            loop.pendingInputItems = [{
+              role: 'user',
+              content: [{
+                type: 'input_text',
+                text: 'Planning is not complete: call agent.ui.ask_user_categories after successful agent.plan.request_finish_analysis.'
+              }]
+            }];
+            loop.stepIndex += 1;
+            loop.updatedAt = Date.now();
+            await this._persist(safeJob, `planning:step:${loop.stepIndex}:awaiting_categories_required`);
             continue;
           }
           loop.status = 'done';
@@ -247,6 +260,13 @@
           await this._persist(safeJob, `planning:step:${loop.stepIndex}:tool:${toolCall.name}`);
         }
         loop.awaitingAckCallIds = nextPendingCallIds;
+        if (this._isPlanningAwaitingCategories(safeJob, safeState)) {
+          loop.status = 'done';
+          loop.updatedAt = Date.now();
+          safeState.updatedAt = Date.now();
+          await this._persist(safeJob, `planning:step:${loop.stepIndex}:awaiting_categories_done`);
+          return { ok: true, stepCount: loop.stepIndex + 1, summary: loop.lastModelSummary || '' };
+        }
         loop.pendingInputItems = nextInput;
         loop.stepIndex += 1;
         loop.updatedAt = Date.now();
@@ -896,21 +916,55 @@
       };
     }
 
-    _missingRequiredActions(agentState) {
+    _missingRequiredActions(agentState, job) {
       const missing = [];
       if (!agentState || typeof agentState !== 'object') {
-        return ['agent.set_plan', 'agent.set_recommended_categories'];
+        return [
+          'page.get_preanalysis',
+          'agent.plan.set_taxonomy',
+          'agent.plan.set_pipeline',
+          'agent.plan.request_finish_analysis',
+          'agent.ui.ask_user_categories'
+        ];
       }
       const markers = agentState.planningMarkers && typeof agentState.planningMarkers === 'object'
         ? agentState.planningMarkers
         : {};
-      if (!markers.planSetByTool || !agentState.plan || typeof agentState.plan !== 'object') {
-        missing.push('agent.set_plan');
+      if (!markers.preanalysisReadByTool) {
+        missing.push('page.get_preanalysis');
       }
-      if (!markers.recommendedCategoriesSetByTool || !Array.isArray(agentState.selectedCategories) || !agentState.selectedCategories.length) {
-        missing.push('agent.set_recommended_categories');
+      const taxonomy = agentState.taxonomy && typeof agentState.taxonomy === 'object'
+        ? agentState.taxonomy
+        : null;
+      if (!markers.taxonomySetByTool || !taxonomy || !Array.isArray(taxonomy.categories) || !taxonomy.categories.length) {
+        missing.push('agent.plan.set_taxonomy');
+      }
+      const pipeline = agentState.pipeline && typeof agentState.pipeline === 'object'
+        ? agentState.pipeline
+        : null;
+      if (!markers.pipelineSetByTool || !pipeline) {
+        missing.push('agent.plan.set_pipeline');
+      }
+      if (!markers.finishAnalysisRequestedByTool || markers.finishAnalysisOk !== true) {
+        missing.push('agent.plan.request_finish_analysis');
+      }
+      if (!markers.askUserCategoriesByTool || !this._isPlanningAwaitingCategories(job, agentState)) {
+        missing.push('agent.ui.ask_user_categories');
       }
       return missing;
+    }
+
+    _isPlanningAwaitingCategories(job, agentState) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const safeState = agentState && typeof agentState === 'object' ? agentState : {};
+      const status = typeof safeJob.status === 'string' ? safeJob.status.toLowerCase() : '';
+      if (status !== 'awaiting_categories') {
+        return false;
+      }
+      const markers = safeState.planningMarkers && typeof safeState.planningMarkers === 'object'
+        ? safeState.planningMarkers
+        : {};
+      return markers.askUserCategoriesByTool === true;
     }
 
     _extractToolCalls(raw) {
@@ -1159,7 +1213,7 @@
       const list = Array.isArray(blocks) ? blocks : [];
       const sample = list.slice(0, 12).map((item) => ({
         blockId: item.blockId,
-        category: item.category || item.pathHint || 'other',
+        category: item.category || item.pathHint || 'unknown',
         length: typeof item.originalText === 'string' ? item.originalText.length : 0,
         text: typeof item.originalText === 'string' ? item.originalText.slice(0, 220) : ''
       }));
@@ -1176,7 +1230,7 @@
         'When beneficial, call agent.propose_run_settings_patch, then apply or keep pending proposal via AutoTune tools.',
         'You may adjust tool modes via agent.propose_tool_policy.',
         'Never end planning by plain text.',
-        'Required before finish: call agent.set_plan and agent.set_recommended_categories.',
+        'Required flow: page.get_preanalysis -> (page.get_ranges/page.get_range_text as needed) -> agent.plan.set_taxonomy -> agent.plan.set_pipeline -> agent.plan.request_finish_analysis (until ok=true) -> agent.ui.ask_user_categories.',
         'After each key step call agent.append_report with short human-readable status.',
         'Do not invent hidden hard limits; choose strategy based on page context.'
       ].join(' ');
@@ -1208,7 +1262,7 @@
           }
           return {
             blockId,
-            category: item.category || item.pathHint || 'other',
+            category: item.category || item.pathHint || 'unknown',
             length: typeof item.originalText === 'string' ? item.originalText.length : 0,
             text: typeof item.originalText === 'string' ? item.originalText.slice(0, 180) : ''
           };
@@ -1216,6 +1270,9 @@
         .filter(Boolean);
       const plan = job && job.agentState && job.agentState.plan && typeof job.agentState.plan === 'object'
         ? job.agentState.plan
+        : {};
+      const pipeline = job && job.agentState && job.agentState.pipeline && typeof job.agentState.pipeline === 'object'
+        ? job.agentState.pipeline
         : {};
       const tuning = settings && settings.translationAgentTuning ? settings.translationAgentTuning : {};
       const systemText = [
@@ -1229,7 +1286,8 @@
         'Begin execution with agent.get_autotune_context(stage="execution").',
         'Periodically rebalance via agent.propose_run_settings_patch and apply if useful.',
         'You may adjust tool modes via agent.propose_tool_policy when needed.',
-        'Workflow: get_next_blocks -> translate_block_stream -> mark_block_done/failed -> audit -> repeat.',
+        'Workflow: job.get_next_units -> translator.translate_unit_stream -> job.mark_block_done/failed per block -> agent.audit_progress -> repeat.',
+        'Legacy fallback is allowed when needed: job.get_next_blocks -> translator.translate_block_stream -> job.mark_block_done/failed.',
         'Do not stop early. Finish only when pendingCount=0 and final report/checklist are written using tools.'
       ].join(' ');
       const userText = JSON.stringify({
@@ -1240,6 +1298,7 @@
         pendingCount: pendingIds.length,
         selectedCategories: Array.isArray(job && job.selectedCategories) ? job.selectedCategories : [],
         plan,
+        pipeline,
         tuning,
         pendingSample
       });
@@ -1266,7 +1325,7 @@
           }
           return {
             blockId,
-            category: item.category || item.pathHint || 'other',
+            category: item.category || item.pathHint || 'unknown',
             originalLength: typeof item.originalText === 'string' ? item.originalText.length : 0,
             translatedLength: typeof item.translatedText === 'string' ? item.translatedText.length : 0,
             originalText: typeof item.originalText === 'string' ? item.originalText.slice(0, 160) : '',

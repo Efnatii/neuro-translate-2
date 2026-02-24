@@ -66,11 +66,15 @@ async function run() {
   );
 
   const dumped = chromeApi._dump();
+  const root = dumped['nt.settings.v2'] && typeof dumped['nt.settings.v2'] === 'object'
+    ? dumped['nt.settings.v2']
+    : {};
   assert(
-    dumped.translationAgentSettingsV2 && typeof dumped.translationAgentSettingsV2 === 'object',
+    root.translationAgentSettingsV2 && typeof root.translationAgentSettingsV2 === 'object',
     'Migration must persist translationAgentSettingsV2'
   );
-  assert.strictEqual(dumped.settingsSchemaVersion, 2, 'Migration must persist schema version 2');
+  assert.strictEqual(root.settingsSchemaVersion, 2, 'Migration must persist schema version 2 in nt.settings.v2');
+  assert.strictEqual(dumped.settingsSchemaVersion, 2, 'Migration must keep legacy mirror schema version 2');
 
   console.log('PASS: settings migration v2');
 }

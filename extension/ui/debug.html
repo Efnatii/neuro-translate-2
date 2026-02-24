@@ -84,6 +84,101 @@
         </div>
       </details>
 
+      <details class="debug__section" data-section="troubleshooting" open>
+        <summary title="Быстрый разбор причин, почему перевод не стартует или зависает">Troubleshooting</summary>
+        <div class="debug__status">
+          <div class="debug__row">
+            <span>Не стартует</span>
+            <div class="debug__list">
+              <div class="debug__list-item">1) Проверьте активную вкладку и host permissions для текущего origin.</div>
+              <div class="debug__list-item">2) Убедитесь, что content script инжектирован и frame caps получены.</div>
+              <div class="debug__list-item">3) Если статус <code>awaiting_categories</code>, выберите категории в popup и запустите перевод.</div>
+              <div class="debug__list-item">4) Проверьте credentials/proxy в popup (BYOK/Proxy, test connection).</div>
+              <div class="debug__list-item">5) Проверьте last error и секцию Events (filter: level=error).</div>
+            </div>
+          </div>
+          <div class="debug__row">
+            <span>RUNNING долго</span>
+            <div class="debug__list">
+              <div class="debug__list-item">1) Сверьте lease/retry в секции "Задача перевода".</div>
+              <div class="debug__list-item">2) Проверьте состояние offscreen и scheduler queue.</div>
+              <div class="debug__list-item">3) Нажмите "Пнуть планировщик" и проверьте новые события.</div>
+              <div class="debug__list-item">4) При потере inflight/offscreen перезапустите задачу.</div>
+            </div>
+          </div>
+          <div class="debug__row">
+            <span>Iframe/Shadow</span>
+            <div class="debug__list">
+              <div class="debug__list-item">1) Проверьте Frames/Shadow DOM: injected/scanned/skippedReason.</div>
+              <div class="debug__list-item">2) Для недоступных origin/frame нужен permission; closed shadow root недоступен.</div>
+              <div class="debug__list-item">3) Если DOM изменился, выполните reclassify/rescan.</div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="classifier" open>
+        <summary title="Детерминированная классификация блоков: категории, confidence и сработавшие правила">
+          Classifier
+        </summary>
+        <div class="debug__status">
+          <div class="debug__row">
+            <span>Summary</span>
+            <div data-field="classifier-summary" class="debug__list"></div>
+          </div>
+          <div class="debug__controls">
+            <select data-field="classifier-category-filter" title="Фильтр по категории">
+              <option value="all">Category: all</option>
+            </select>
+            <input type="text" data-field="classifier-rule-filter" placeholder="rule-id filter (e.g. hidden)" title="Фильтр по id правила">
+            <button type="button" data-action="classifier-reclassify-force" title="Принудительно обновить классификацию (force=true)">
+              Reclassify (force)
+            </button>
+          </div>
+          <div class="debug__row">
+            <span>Blocks</span>
+            <div data-field="classifier-blocks" class="debug__list"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="frames-shadow" open>
+        <summary title="Диагностика фреймов и Open Shadow DOM для скана/применения">Frames/Shadow DOM</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Frames summary</span><span data-field="frames-summary">—</span></div>
+          <div class="debug__row">
+            <span>Frames</span>
+            <table class="debug__table">
+              <thead>
+                <tr>
+                  <th>frameId</th>
+                  <th>frameUrl</th>
+                  <th>injected</th>
+                  <th>scannedBlocks</th>
+                  <th>skippedReason</th>
+                </tr>
+              </thead>
+              <tbody data-field="frames-table"></tbody>
+            </table>
+          </div>
+          <div class="debug__row"><span>Shadow DOM</span><span data-field="shadow-summary">—</span></div>
+        </div>
+      </details>
+
+      <details class="debug__section" data-section="compare-rendering" open>
+        <summary title="Режим compare: CSS Highlights API или fallback wrappers">Compare Rendering</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Highlights supported</span><span data-field="compare-highlights-supported">—</span></div>
+          <div class="debug__row"><span>Active mode</span><span data-field="compare-mode-active">—</span></div>
+          <div class="debug__row"><span>Counters</span><span data-field="compare-highlights-counters">—</span></div>
+          <div class="debug__controls">
+            <button type="button" data-action="recompute-highlights" title="Повторно построить compare-подсветку для активной задачи">
+              Recompute highlights now
+            </button>
+          </div>
+        </div>
+      </details>
+
       <details class="debug__section" data-section="agent" open>
         <summary title="Подробное состояние переводчика-агента">Состояние агента</summary>
         <div class="debug__status">
@@ -141,6 +236,48 @@
         </div>
       </details>
 
+      <details class="debug__section" data-section="perf" open>
+        <summary title="Перфоманс-профиль: scan/classify/apply и топ тяжёлых задач">Performance</summary>
+        <div class="debug__status">
+          <div class="debug__row"><span>Summary</span><span data-field="perf-summary">—</span></div>
+          <div class="debug__row">
+            <span>Global totals</span>
+            <table class="debug__table">
+              <thead>
+                <tr>
+                  <th>metric</th>
+                  <th>value</th>
+                </tr>
+              </thead>
+              <tbody data-field="perf-global-table"></tbody>
+            </table>
+          </div>
+          <div class="debug__row">
+            <span>Top offenders (last 20 jobs)</span>
+            <table class="debug__table">
+              <thead>
+                <tr>
+                  <th>jobId</th>
+                  <th>status</th>
+                  <th>score</th>
+                  <th>scanMs</th>
+                  <th>classifyMs</th>
+                  <th>apply</th>
+                  <th>avgDeltaMs</th>
+                </tr>
+              </thead>
+              <tbody data-field="perf-jobs-table"></tbody>
+            </table>
+          </div>
+          <div class="debug__controls">
+            <button type="button" data-action="export-perf-snapshot" title="Экспортировать JSON perf snapshot (копия в буфер)">
+              Export perf snapshot
+            </button>
+          </div>
+          <div class="debug__row"><span>Export status</span><span data-field="perf-export-status">—</span></div>
+        </div>
+      </details>
+
       <details class="debug__section" data-section="compare" open>
         <summary title="Сравнение оригинала и перевода по блокам + история патчей">Сравнение и патчи</summary>
         <div class="debug__status">
@@ -174,6 +311,7 @@
             <button type="button" data-action="export-json" title="Скачать JSON отчёт">Экспорт JSON</button>
             <button type="button" data-action="export-html" title="Скачать HTML отчёт">Экспорт HTML</button>
             <button type="button" data-action="export-copy" title="Скопировать JSON отчёт в буфер">Копировать отчёт</button>
+            <button type="button" data-action="copy-diagnostics" title="Copy compact diagnostics snapshot (redacted)">Copy diagnostics</button>
           </div>
           <div class="debug__row"><span>Статус</span><span data-field="export-status">—</span></div>
         </div>
