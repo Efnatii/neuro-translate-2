@@ -789,6 +789,17 @@
       return all.filter((item) => item && planningNames.has(item.name));
     }
 
+    normalizeIncomingToolName(name) {
+      const key = typeof name === 'string' ? name.trim() : '';
+      if (!key) {
+        return '';
+      }
+      if (this.toolManifest && typeof this.toolManifest.fromWireToolName === 'function') {
+        return this.toolManifest.fromWireToolName(key);
+      }
+      return key;
+    }
+
     async execute({ name, arguments: rawArguments, job, blocks, settings, callId, source = 'model', requestId = null } = {}) {
       const safeJob = job && typeof job === 'object' ? job : {};
       const agentState = safeJob.agentState && typeof safeJob.agentState === 'object' ? safeJob.agentState : null;
@@ -1954,7 +1965,12 @@
       state.planningMarkers = state.planningMarkers && typeof state.planningMarkers === 'object'
         ? state.planningMarkers
         : {};
-      const rawCategories = Array.isArray(args.categories) ? args.categories : [];
+      const taxonomyInput = args && args.taxonomy && typeof args.taxonomy === 'object'
+        ? args.taxonomy
+        : null;
+      const rawCategories = Array.isArray(args.categories)
+        ? args.categories
+        : (taxonomyInput && Array.isArray(taxonomyInput.categories) ? taxonomyInput.categories : []);
       const categories = [];
       rawCategories.forEach((item) => {
         if (!item || typeof item !== 'object') {
@@ -1975,7 +1991,9 @@
       if (!categories.length) {
         throw this._toolError('BAD_TOOL_ARGS', 'categories must contain at least one valid id');
       }
-      const mapping = args.mapping && typeof args.mapping === 'object' ? args.mapping : {};
+      const mapping = args.mapping && typeof args.mapping === 'object'
+        ? args.mapping
+        : (taxonomyInput && taxonomyInput.mapping && typeof taxonomyInput.mapping === 'object' ? taxonomyInput.mapping : {});
       const blockToCategory = {};
       const rangeToCategory = {};
       const mapFromObject = (obj, target, idPrefix) => {
@@ -1999,6 +2017,10 @@
       };
       mapFromObject(mapping.blockToCategory, blockToCategory, '');
       mapFromObject(mapping.rangeToCategory, rangeToCategory, '');
+      mapFromObject(args.blockToCategory, blockToCategory, '');
+      mapFromObject(args.rangeToCategory, rangeToCategory, '');
+      mapFromObject(taxonomyInput && taxonomyInput.blockToCategory, blockToCategory, '');
+      mapFromObject(taxonomyInput && taxonomyInput.rangeToCategory, rangeToCategory, '');
       if (!Object.keys(blockToCategory).length && !Object.keys(rangeToCategory).length) {
         Object.keys(mapping).forEach((key) => {
           const normalizedId = this._normalizeCategory(mapping[key]);
@@ -2014,6 +2036,36 @@
           } else {
             blockToCategory[safeKey] = normalizedId;
           }
+        });
+      }
+      if (!Object.keys(blockToCategory).length && !Object.keys(rangeToCategory).length) {
+        const source = this._preanalysisSource(job);
+        const defaultCategory = (
+          categories.find((item) => item.defaultTranslate === true)
+          || categories.find((item) => item.id === 'main_content')
+          || categories[0]
+        ).id;
+        const categoryIds = new Set(categories.map((item) => item.id));
+        Object.keys(source.preRangesById || {}).forEach((rangeId) => {
+          const row = source.preRangesById[rangeId];
+          if (!row || typeof row !== 'object') {
+            return;
+          }
+          const mappedFromPre = this._normalizeCategory(row.preCategory || '');
+          const targetCategory = mappedFromPre && categoryIds.has(mappedFromPre)
+            ? mappedFromPre
+            : defaultCategory;
+          rangeToCategory[rangeId] = targetCategory;
+          const blockIds = Array.isArray(row.blockIds) ? row.blockIds : [];
+          blockIds.forEach((blockId) => {
+            const safeBlockId = String(blockId || '').trim();
+            if (!safeBlockId) {
+              return;
+            }
+            if (!blockToCategory[safeBlockId]) {
+              blockToCategory[safeBlockId] = targetCategory;
+            }
+          });
         });
       }
       state.taxonomy = {

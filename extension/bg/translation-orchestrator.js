@@ -31,7 +31,7 @@
     code: 'code',
     meta: 'footer',
     other: 'unknown'
-  ]);
+  });
 
   class TranslationOrchestrator {
     constructor({
@@ -7825,4 +7825,3 @@
 
   NT.TranslationOrchestrator = TranslationOrchestrator;
 })(globalThis);
-

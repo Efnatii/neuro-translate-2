@@ -514,6 +514,116 @@
         return finalize({ ok: true, hasMoreWork: true, reason }, 'scanning');
       }
 
+      if (job.status === 'planning') {
+        const orchestrator = this.translationOrchestrator;
+        const planningAgent = orchestrator && orchestrator.translationAgent && typeof orchestrator.translationAgent === 'object'
+          ? orchestrator.translationAgent
+          : null;
+        if (!planningAgent || typeof planningAgent.runPlanning !== 'function') {
+          const recovered = await this._handleRecovery(job, runtime, {
+            code: 'PLANNING_RUNNER_UNAVAILABLE',
+            message: 'Planning runner unavailable'
+          });
+          return finalize(recovered, 'planning');
+        }
+
+        const blocks = Object.keys(job.blocksById || {})
+          .map((id) => (job.blocksById ? job.blocksById[id] : null))
+          .filter((item) => item && item.blockId);
+        if (!blocks.length) {
+          const recovered = await this._handleRecovery(job, runtime, {
+            code: 'PLANNING_NO_BLOCKS',
+            message: 'Planning requires scanned blocks'
+          });
+          return finalize(recovered, 'planning');
+        }
+
+        let planningSettings = {};
+        if (orchestrator && typeof orchestrator._readAgentSettings === 'function') {
+          planningSettings = await orchestrator._readAgentSettings().catch(() => ({}));
+        }
+        planningSettings = {
+          ...(planningSettings && typeof planningSettings === 'object' ? planningSettings : {}),
+          translationCategoryMode: 'auto',
+          translationCategoryList: []
+        };
+        if (orchestrator && typeof orchestrator._ensureJobRunSettings === 'function') {
+          orchestrator._ensureJobRunSettings(job, { settings: planningSettings });
+        }
+
+        if ((!job.agentState || typeof job.agentState !== 'object') && orchestrator && typeof orchestrator._prepareAgentJob === 'function') {
+          const prepared = await orchestrator._prepareAgentJob({
+            job,
+            blocks,
+            settings: planningSettings
+          });
+          if (!prepared || !prepared.agentState) {
+            const recovered = await this._handleRecovery(job, runtime, {
+              code: 'PREPARE_AGENT_STATE_FAILED',
+              message: 'Failed to prepare planning agent state'
+            });
+            return finalize(recovered, 'planning');
+          }
+        }
+
+        let planningResult = null;
+        try {
+          planningResult = await planningAgent.runPlanning({
+            job,
+            blocks,
+            settings: planningSettings
+          });
+        } catch (error) {
+          const recovered = await this._handleRecovery(job, runtime, {
+            code: error && error.code ? error.code : 'PLANNING_FAILED',
+            message: error && error.message ? error.message : 'Planning loop failed'
+          });
+          return finalize(recovered, 'planning');
+        }
+
+        if (planningResult && planningResult.ok === false) {
+          const recovered = await this._handleRecovery(job, runtime, planningResult.error || {
+            code: 'PLANNING_FAILED',
+            message: 'Planning loop reported failure'
+          });
+          return finalize(recovered, 'planning');
+        }
+
+        const latest = await this.jobStore.getJob(job.id).catch(() => null);
+        if (!latest || this._isTerminalStatus(latest.status)) {
+          return finalize({ ok: true, hasMoreWork: false }, 'planning');
+        }
+        if (latest.status === 'awaiting_categories') {
+          const latestRuntime = this._normalizeRuntime(latest);
+          latestRuntime.status = 'IDLE';
+          latestRuntime.stage = 'awaiting_categories';
+          latestRuntime.lease = {
+            leaseUntilTs: null,
+            heartbeatTs: Date.now(),
+            op: null,
+            opId: null
+          };
+          await this._persist(latest, { setActive: true });
+          return finalize({ ok: true, hasMoreWork: false }, 'awaiting_categories');
+        }
+        if (latest.status === 'planning') {
+          const latestRuntime = this._normalizeRuntime(latest);
+          const renewNow = Date.now();
+          latestRuntime.status = 'RUNNING';
+          latestRuntime.stage = 'planning';
+          latestRuntime.lease = {
+            leaseUntilTs: renewNow + this.leaseMs,
+            heartbeatTs: renewNow,
+            op: 'planning',
+            opId: latest.id
+          };
+          await this._persist(latest, { setActive: true });
+          return finalize({ ok: true, hasMoreWork: true }, 'planning');
+        }
+
+        return finalize({ ok: true, hasMoreWork: false }, 'planning');
+      }
+
       return finalize({ ok: true, hasMoreWork: false }, runtime.stage);
     }
   }

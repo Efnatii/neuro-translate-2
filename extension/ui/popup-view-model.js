@@ -36,6 +36,10 @@
   }
 
   function resolveStage(job) {
+    const status = job && typeof job.status === 'string' ? job.status.trim().toLowerCase() : '';
+    if (status === 'awaiting_categories' || status === 'done' || status === 'failed' || status === 'cancelled') {
+      return status;
+    }
     const runtimeStage = job && job.runtime && typeof job.runtime.stage === 'string'
       ? job.runtime.stage.trim().toLowerCase()
       : '';
@@ -48,7 +52,6 @@
       }
       return runtimeStage;
     }
-    const status = job && typeof job.status === 'string' ? job.status.trim().toLowerCase() : '';
     return status || 'idle';
   }
 

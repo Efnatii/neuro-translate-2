@@ -52,16 +52,19 @@
 
     async generateMinimalPingRaw({ modelId, serviceTier, signal, meta } = {}) {
       const connection = await this._resolveConnectionContext({ stage: 'minimal_ping' });
+      const pingTemperature = this._normalizeTemperature({ modelId, value: 0 });
 
       const payload = {
         model: modelId,
         input: "Respond with a single '.'",
         max_output_tokens: 4,
-        temperature: 0,
         store: false,
         background: false,
-        service_tier: serviceTier || 'default'
+        service_tier: this._resolveServiceTier(serviceTier)
       };
+      if (pingTemperature !== null) {
+        payload.temperature = pingTemperature;
+      }
 
       return this.postResponseRaw({ connection, payload, signal, meta });
     }
@@ -407,29 +410,46 @@
 
           const normalizedHeaders = this.normalizeHeaders(offscreenResult && offscreenResult.headers ? offscreenResult.headers : {});
           if (!offscreenResult || !offscreenResult.ok) {
-            const errorCode = offscreenResult && offscreenResult.error && offscreenResult.error.code
-              ? offscreenResult.error.code
+            const explicitError = offscreenResult && offscreenResult.error && typeof offscreenResult.error === 'object'
+              ? offscreenResult.error
+              : null;
+            const apiJsonError = offscreenResult
+              && offscreenResult.json
+              && typeof offscreenResult.json === 'object'
+              && offscreenResult.json.error
+              && typeof offscreenResult.json.error === 'object'
+              ? offscreenResult.json.error
+              : null;
+            const errorCode = explicitError && explicitError.code
+              ? explicitError.code
               : 'RESPONSES_API_ERROR';
             if (errorCode === 'ABORTED' || errorCode === 'ABORT_ERR') {
-              throw this.createAbortError(offscreenResult && offscreenResult.error ? offscreenResult.error.message : null);
+              throw this.createAbortError(explicitError ? explicitError.message : null);
             }
             const error = new Error(
-              offscreenResult && offscreenResult.error && offscreenResult.error.message
-                ? offscreenResult.error.message
-                : 'Responses API request failed'
+              explicitError && explicitError.message
+                ? explicitError.message
+                : (apiJsonError && typeof apiJsonError.message === 'string' && apiJsonError.message.trim()
+                  ? apiJsonError.message.trim()
+                  : (offscreenResult && typeof offscreenResult.text === 'string' && offscreenResult.text.trim()
+                    ? offscreenResult.text.trim().slice(0, 240)
+                    : 'Responses API request failed'))
             );
             error.code = errorCode;
             error.status = offscreenResult && typeof offscreenResult.status === 'number' ? offscreenResult.status : null;
             error.headers = normalizedHeaders;
             error.retryAfterMs = this.resolveRetryAfterMs(normalizedHeaders);
             error.connection = connectionInfo;
-            if (offscreenResult && offscreenResult.error && typeof offscreenResult.error === 'object') {
-              if (offscreenResult.error.debug && typeof offscreenResult.error.debug === 'object') {
-                error.debug = offscreenResult.error.debug;
+            if (explicitError) {
+              if (explicitError.debug && typeof explicitError.debug === 'object') {
+                error.debug = explicitError.debug;
               }
-              if (offscreenResult.error.error && typeof offscreenResult.error.error === 'object') {
-                error.error = offscreenResult.error.error;
+              if (explicitError.error && typeof explicitError.error === 'object') {
+                error.error = explicitError.error;
               }
+            }
+            if (apiJsonError) {
+              error.apiError = apiJsonError;
             }
             throw error;
           }
@@ -537,7 +557,7 @@
         return null;
       }
       if (normalized === 'in_memory') {
-        return 'in-memory';
+        return 'in_memory';
       }
       if (normalized === 'extended') {
         return '24h';
@@ -545,8 +565,11 @@
       if (normalized === 'auto') {
         return null;
       }
-      if (normalized === 'in-memory' || normalized === '24h') {
-        return normalized;
+      if (normalized === 'in-memory' || normalized === 'in_memory') {
+        return 'in_memory';
+      }
+      if (normalized === '24h') {
+        return '24h';
       }
       return null;
     }
@@ -570,7 +593,16 @@
         out.previous_response_id = src.previous_response_id.trim();
       }
       if (src.reasoning && typeof src.reasoning === 'object') {
-        out.reasoning = this._cloneJson(src.reasoning);
+        const reasoning = this._cloneJson(src.reasoning);
+        // Reasoning fields are model-dependent in Responses API and may be
+        // rejected for selected routes; keep requests portable by omitting them.
+        if (reasoning && typeof reasoning === 'object') {
+          delete reasoning.effort;
+          delete reasoning.summary;
+        }
+        if (reasoning && typeof reasoning === 'object' && Object.keys(reasoning).length > 0) {
+          out.reasoning = reasoning;
+        }
       }
       if (src.text && typeof src.text === 'object') {
         out.text = this._cloneJson(src.text);
@@ -607,15 +639,18 @@
       meta,
       responsesOptions
     } = {}) {
+      const normalizedTemperature = this._normalizeTemperature({ modelId, value: temperature });
       const payload = {
         model: modelId,
         input: input || '',
         max_output_tokens: maxOutputTokens,
-        temperature,
-        store,
+        store: store !== false,
         background,
-        service_tier: serviceTier || 'default'
+        service_tier: this._resolveServiceTier(serviceTier)
       };
+      if (normalizedTemperature !== null) {
+        payload.temperature = normalizedTemperature;
+      }
       const promptCacheKey = this._normalizePromptCacheKey(meta && meta.promptCacheKey);
       if (promptCacheKey) {
         payload.prompt_cache_key = promptCacheKey;
@@ -628,7 +663,40 @@
       Object.keys(extra).forEach((key) => {
         payload[key] = extra[key];
       });
+      if (payload.previous_response_id && payload.store === false) {
+        // Responses API requires persisted items when chaining with previous_response_id.
+        payload.store = true;
+      }
       return payload;
+    }
+
+    _resolveServiceTier(value) {
+      const raw = typeof value === 'string' ? value.trim() : '';
+      const normalized = raw ? raw.toLowerCase() : '';
+      const AiCommon = global.NT && global.NT.AiCommon ? global.NT.AiCommon : null;
+      if (AiCommon && typeof AiCommon.mapServiceTier === 'function') {
+        const mapped = AiCommon.mapServiceTier(normalized || 'standard');
+        if (typeof mapped === 'string' && mapped.trim()) {
+          return mapped.trim();
+        }
+      }
+      if (normalized === 'priority' || normalized === 'flex' || normalized === 'default' || normalized === 'auto') {
+        return normalized;
+      }
+      return 'default';
+    }
+
+    _normalizeTemperature({ modelId, value } = {}) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return null;
+      }
+      const normalizedModel = String(modelId || '').trim().toLowerCase();
+      // gpt-5* currently rejects temperature in Responses API.
+      if (/^gpt-5(?:[.-]|$)/i.test(normalizedModel)) {
+        return null;
+      }
+      return Math.max(0, Math.min(2, numeric));
     }
 
     async _readResponseSse(response, { onEvent = null } = {}) {

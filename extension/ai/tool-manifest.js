@@ -110,6 +110,14 @@
     return out;
   }
 
+  function sanitizeToolNameForResponses(name, fallback = 'tool') {
+    const raw = String(name || '').trim();
+    const compact = raw
+      .replace(/[^a-zA-Z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return compact || String(fallback || 'tool');
+  }
+
   function defaultToolDefinitions() {
     return [
       {
@@ -201,13 +209,13 @@
         description: 'Persist planning taxonomy and block/range mapping.',
         parametersJsonSchema: {
           type: 'object',
-          additionalProperties: false,
+          additionalProperties: true,
           properties: {
             categories: {
               type: 'array',
               items: {
                 type: 'object',
-                additionalProperties: false,
+                additionalProperties: true,
                 properties: {
                   id: { type: 'string', minLength: 1, maxLength: 64 },
                   titleRu: { type: 'string', maxLength: 220 },
@@ -221,8 +229,7 @@
               maxItems: 120
             },
             mapping: { type: 'object', additionalProperties: true }
-          },
-          required: ['categories', 'mapping']
+          }
         },
         capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
         qos: { queueDepthLimit: 120 },
@@ -615,11 +622,7 @@
             mode: { type: 'string', enum: ['replace', 'add', 'remove'] },
             reason: { type: 'string', maxLength: 320 }
           },
-          required: ['mode'],
-          anyOf: [
-            { required: ['categories', 'mode'] },
-            { required: ['ids', 'mode'] }
-          ]
+          required: ['mode']
         },
         capabilitiesRequired: { content: [], offscreen: [], permissions: [] },
         qos: { queueDepthLimit: 120 },
@@ -946,7 +949,27 @@
         name: 'translator.translate_block_stream',
         toolVersion: '1.0.0',
         description: 'Translate one block and optionally stream deltas.',
-        parametersJsonSchema: { type: 'object', additionalProperties: false, properties: { blockId: { type: 'string' }, targetLang: { type: 'string' }, model: { type: 'string' }, route: { type: 'string' }, style: { type: 'string' }, glossary: { type: 'array' }, contextSummary: { type: 'string' }, batchGuidance: { type: 'string' } }, required: ['blockId'] },
+        parametersJsonSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            blockId: { type: 'string' },
+            targetLang: { type: 'string' },
+            model: { type: 'string' },
+            route: { type: 'string' },
+            style: { type: 'string' },
+            glossary: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: true
+              }
+            },
+            contextSummary: { type: 'string' },
+            batchGuidance: { type: 'string' }
+          },
+          required: ['blockId']
+        },
         capabilitiesRequired: { content: [], offscreen: ['stream'], permissions: [] },
         qos: { queueDepthLimit: 80 },
         idempotency: { mode: 'by_call_id' },
@@ -969,7 +992,13 @@
             model: { type: 'string', maxLength: 120 },
             style: { type: 'string', enum: ['auto', 'literal', 'readable', 'technical', 'balanced'] },
             contextStrategy: { type: 'object', additionalProperties: true },
-            glossary: { type: 'array' },
+            glossary: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: true
+              }
+            },
             contextSummary: { type: 'string', maxLength: 4000 },
             keepHistory: { type: 'string', enum: ['auto', 'on', 'off'] }
           },
@@ -1036,9 +1065,20 @@
       this.tools = Array.isArray(tools) && tools.length ? cloneJson(tools, []) : defaultToolDefinitions();
       this.compatStubs = compatStubs && typeof compatStubs === 'object' ? { ...compatStubs } : {};
       this.toolIndex = {};
+      this.toolNameAliasToCanonical = {};
+      this.toolNameCanonicalToAlias = {};
+      let aliasCounter = 0;
       this.tools.forEach((tool) => {
         if (tool && typeof tool.name === 'string' && tool.name) {
-          this.toolIndex[tool.name] = tool;
+          const canonicalName = tool.name;
+          this.toolIndex[canonicalName] = tool;
+          aliasCounter += 1;
+          let alias = sanitizeToolNameForResponses(canonicalName, `tool_${aliasCounter}`);
+          if (this.toolNameAliasToCanonical[alias] && this.toolNameAliasToCanonical[alias] !== canonicalName) {
+            alias = `${alias}_${sha256Hex(canonicalName).slice(0, 8)}`;
+          }
+          this.toolNameAliasToCanonical[alias] = canonicalName;
+          this.toolNameCanonicalToAlias[canonicalName] = alias;
         }
       });
       this.toolsetHash = this._buildToolsetHash();
@@ -1064,6 +1104,26 @@
       return key && this.toolIndex[key] ? this.toolIndex[key] : null;
     }
 
+    toWireToolName(name) {
+      const canonical = typeof name === 'string' ? name.trim() : '';
+      if (!canonical) {
+        return '';
+      }
+      return this.toolNameCanonicalToAlias[canonical]
+        || sanitizeToolNameForResponses(canonical, 'tool');
+    }
+
+    fromWireToolName(name) {
+      const wire = typeof name === 'string' ? name.trim() : '';
+      if (!wire) {
+        return '';
+      }
+      if (this.toolIndex[wire]) {
+        return wire;
+      }
+      return this.toolNameAliasToCanonical[wire] || wire;
+    }
+
     getResponsesTools({ scope = 'execution' } = {}) {
       const stage = scope === 'planning'
         ? 'planning'
@@ -1075,7 +1135,7 @@
         })
         .map((tool) => ({
           type: 'function',
-          name: tool.name,
+          name: this.toWireToolName(tool.name),
           description: tool.description || '',
           parameters: cloneJson(tool.parametersJsonSchema || { type: 'object', properties: {} }, { type: 'object', properties: {} })
         }));

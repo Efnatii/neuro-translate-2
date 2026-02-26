@@ -61,7 +61,7 @@ function redactValue(input, depth = 0) {
 }
 
 async function sendUiCommand(page, { command, payload = {}, tabId = null } = {}) {
-  return page.evaluate(async ({ commandName, commandPayload, resolvedTabId }) => {
+  return page.evaluate(async ({ commandName, commandPayload, resolvedTabId, timeoutMs }) => {
     const NT = globalThis.NT || {};
     const UiProtocol = NT.UiProtocol || {};
     const MessageEnvelope = NT.MessageEnvelope || {};
@@ -84,44 +84,104 @@ async function sendUiCommand(page, { command, payload = {}, tabId = null } = {})
         payload: body
       };
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(envelope, (response) => {
-        const runtimeError = chrome.runtime && chrome.runtime.lastError
-          ? chrome.runtime.lastError.message
-          : null;
-        if (runtimeError) {
-          resolve({ ok: false, error: { code: 'RUNTIME_MESSAGE_FAILED', message: runtimeError } });
+      let settled = false;
+      const finish = (value) => {
+        if (settled) {
           return;
         }
-        resolve(response || null);
-      });
+        settled = true;
+        resolve(value);
+      };
+      const timer = globalThis.setTimeout(() => {
+        finish({
+          ok: false,
+          error: {
+            code: 'RUNTIME_MESSAGE_TIMEOUT',
+            message: `Timeout waiting for runtime response: ${String(commandName || 'unknown')}`
+          }
+        });
+      }, Math.max(1000, Number(timeoutMs) || 12000));
+      try {
+        chrome.runtime.sendMessage(envelope, (response) => {
+          globalThis.clearTimeout(timer);
+          const runtimeError = chrome.runtime && chrome.runtime.lastError
+            ? chrome.runtime.lastError.message
+            : null;
+          if (runtimeError) {
+            finish({ ok: false, error: { code: 'RUNTIME_MESSAGE_FAILED', message: runtimeError } });
+            return;
+          }
+          finish(response || null);
+        });
+      } catch (error) {
+        globalThis.clearTimeout(timer);
+        finish({
+          ok: false,
+          error: {
+            code: 'RUNTIME_MESSAGE_THROWN',
+            message: error && error.message ? String(error.message) : String(error || 'runtime.sendMessage failed')
+          }
+        });
+      }
     });
   }, {
     commandName: command,
     commandPayload: payload,
-    resolvedTabId: tabId
+    resolvedTabId: tabId,
+    timeoutMs: 12000
   });
 }
 
 async function sendBgRuntimeMessage(page, { type, payload = {} } = {}) {
-  return page.evaluate(async ({ messageType, messagePayload }) => {
+  return page.evaluate(async ({ messageType, messagePayload, timeoutMs }) => {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({
-        type: messageType,
-        payload: messagePayload && typeof messagePayload === 'object' ? messagePayload : {}
-      }, (response) => {
-        const runtimeError = chrome.runtime && chrome.runtime.lastError
-          ? chrome.runtime.lastError.message
-          : null;
-        if (runtimeError) {
-          resolve({ ok: false, error: { code: 'RUNTIME_MESSAGE_FAILED', message: runtimeError } });
+      let settled = false;
+      const finish = (value) => {
+        if (settled) {
           return;
         }
-        resolve(response || null);
-      });
+        settled = true;
+        resolve(value);
+      };
+      const timer = globalThis.setTimeout(() => {
+        finish({
+          ok: false,
+          error: {
+            code: 'RUNTIME_MESSAGE_TIMEOUT',
+            message: `Timeout waiting for runtime response: ${String(messageType || 'unknown')}`
+          }
+        });
+      }, Math.max(1000, Number(timeoutMs) || 12000));
+      try {
+        chrome.runtime.sendMessage({
+          type: messageType,
+          payload: messagePayload && typeof messagePayload === 'object' ? messagePayload : {}
+        }, (response) => {
+          globalThis.clearTimeout(timer);
+          const runtimeError = chrome.runtime && chrome.runtime.lastError
+            ? chrome.runtime.lastError.message
+            : null;
+          if (runtimeError) {
+            finish({ ok: false, error: { code: 'RUNTIME_MESSAGE_FAILED', message: runtimeError } });
+            return;
+          }
+          finish(response || null);
+        });
+      } catch (error) {
+        globalThis.clearTimeout(timer);
+        finish({
+          ok: false,
+          error: {
+            code: 'RUNTIME_MESSAGE_THROWN',
+            message: error && error.message ? String(error.message) : String(error || 'runtime.sendMessage failed')
+          }
+        });
+      }
     });
   }, {
     messageType: type,
-    messagePayload: payload
+    messagePayload: payload,
+    timeoutMs: 12000
   });
 }
 
@@ -189,6 +249,7 @@ const test = base.extend({
       ? testInfo.project.use.headless !== false
       : true;
     const context = await chromium.launchPersistentContext(userDataDir, {
+      channel: 'chromium',
       headless,
       viewport: { width: 1440, height: 900 },
       args: [
@@ -383,15 +444,26 @@ const test = base.extend({
       },
 
       sendBgMessage: async (type, payload = {}) => {
+        const normalizedType = typeof type === 'string' ? String(type).trim() : '';
+        const normalizedPayload = payload && typeof payload === 'object' ? payload : {};
+        if (normalizedType.startsWith('BG_TEST_')) {
+          const tabId = Number.isFinite(Number(normalizedPayload.tabId))
+            ? Number(normalizedPayload.tabId)
+            : null;
+          const viaCommand = await app.sendCommand(normalizedType, normalizedPayload, tabId);
+          if (viaCommand && typeof viaCommand === 'object') {
+            return viaCommand;
+          }
+        }
         for (let attempt = 1; attempt <= 3; attempt += 1) {
           try {
             const helper = await ensureHelperPage();
             const result = await sendBgRuntimeMessage(helper, {
-              type: typeof type === 'string' ? type : '',
-              payload: payload && typeof payload === 'object' ? payload : {}
+              type: normalizedType,
+              payload: normalizedPayload
             });
             const code = result && result.error && result.error.code ? result.error.code : '';
-            if (code === 'RUNTIME_MESSAGE_FAILED' && attempt < 3) {
+            if ((code === 'RUNTIME_MESSAGE_FAILED' || code === 'RUNTIME_MESSAGE_TIMEOUT' || code === 'RUNTIME_MESSAGE_THROWN') && attempt < 3) {
               if (helperPage && !helperPage.isClosed()) {
                 await helperPage.close().catch(() => {});
               }
@@ -448,7 +520,7 @@ const test = base.extend({
             continue;
           }
           const code = result && result.error && result.error.code ? result.error.code : '';
-          if (code === 'RUNTIME_MESSAGE_FAILED' && attempt < 3) {
+          if ((code === 'RUNTIME_MESSAGE_FAILED' || code === 'RUNTIME_MESSAGE_TIMEOUT' || code === 'RUNTIME_MESSAGE_THROWN') && attempt < 3) {
             if (helperPage && !helperPage.isClosed()) {
               await helperPage.close().catch(() => {});
             }

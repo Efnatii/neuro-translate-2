@@ -11,7 +11,7 @@
     constructor({ toolRegistry, persistJobState } = {}) {
       this.toolRegistry = toolRegistry || null;
       this.persistJobState = typeof persistJobState === 'function' ? persistJobState : null;
-      this.DEFAULT_MAX_STEPS = 8;
+      this.DEFAULT_MAX_STEPS = 24;
       this.DEFAULT_MAX_STEP_ATTEMPTS = 2;
       this.DEFAULT_MAX_TOOL_CALLS = 36;
       this.DEFAULT_EXEC_MAX_ITERATIONS_PER_TICK = 20;
@@ -120,7 +120,9 @@
               input: requestInput,
               maxOutputTokens: this._plannerMaxTokens(settings),
               temperature: this._plannerTemperature(settings),
-              store: false,
+              // Chained tool loops rely on previous_response_id across steps.
+              // First response must be persisted, otherwise the chain breaks.
+              store: true,
               background: false,
               jobId: safeJob.id || `job-${Date.now()}`,
               blockId: `plan:${loop.stepIndex}`,
@@ -199,6 +201,32 @@
         if (!parsed.calls.length) {
           const missing = this._missingRequiredActions(safeState, safeJob);
           if (missing.length) {
+            if (loop.stepIndex >= this._planningFallbackStepThreshold(loop)) {
+              const fallback = await this._forcePlanningCompletion({
+                job: safeJob,
+                blocks,
+                settings,
+                loop,
+                missing
+              });
+              if (fallback && fallback.ok && this._isPlanningAwaitingCategories(safeJob, safeState)) {
+                loop.status = 'done';
+                loop.updatedAt = Date.now();
+                safeState.updatedAt = Date.now();
+                await this._persist(safeJob, `planning:step:${loop.stepIndex}:fallback_done`);
+                return { ok: true, stepCount: loop.stepIndex + 1, summary: 'fallback_planning_complete' };
+              }
+              if (fallback && fallback.ok !== true) {
+                loop.status = 'failed';
+                loop.lastError = fallback.error || {
+                  code: 'PLANNING_FALLBACK_FAILED',
+                  message: 'Planning fallback failed'
+                };
+                safeState.updatedAt = Date.now();
+                await this._persist(safeJob, `planning:step:${loop.stepIndex}:fallback_failed`);
+                return { ok: false, error: loop.lastError };
+              }
+            }
             loop.pendingInputItems = [{
               role: 'user',
               content: [{
@@ -260,6 +288,33 @@
           await this._persist(safeJob, `planning:step:${loop.stepIndex}:tool:${toolCall.name}`);
         }
         loop.awaitingAckCallIds = nextPendingCallIds;
+        const missingAfterCalls = this._missingRequiredActions(safeState, safeJob);
+        if (missingAfterCalls.length && loop.stepIndex >= this._planningFallbackStepThreshold(loop)) {
+          const fallback = await this._forcePlanningCompletion({
+            job: safeJob,
+            blocks,
+            settings,
+            loop,
+            missing: missingAfterCalls
+          });
+          if (fallback && fallback.ok && this._isPlanningAwaitingCategories(safeJob, safeState)) {
+            loop.status = 'done';
+            loop.updatedAt = Date.now();
+            safeState.updatedAt = Date.now();
+            await this._persist(safeJob, `planning:step:${loop.stepIndex}:fallback_done`);
+            return { ok: true, stepCount: loop.stepIndex + 1, summary: 'fallback_planning_complete' };
+          }
+          if (fallback && fallback.ok !== true) {
+            loop.status = 'failed';
+            loop.lastError = fallback.error || {
+              code: 'PLANNING_FALLBACK_FAILED',
+              message: 'Planning fallback failed'
+            };
+            safeState.updatedAt = Date.now();
+            await this._persist(safeJob, `planning:step:${loop.stepIndex}:fallback_failed`);
+            return { ok: false, error: loop.lastError };
+          }
+        }
         if (this._isPlanningAwaitingCategories(safeJob, safeState)) {
           loop.status = 'done';
           loop.updatedAt = Date.now();
@@ -428,7 +483,7 @@
               input: requestInput,
               maxOutputTokens: this._executionMaxTokens(settings),
               temperature: this._executionTemperature(settings),
-              store: false,
+              store: true,
               background: false,
               jobId: safeJob.id || `job-${Date.now()}`,
               blockId: `execute:${loop.iteration}`,
@@ -756,7 +811,7 @@
               input: requestInput,
               maxOutputTokens: this._proofreadingMaxTokens(settings),
               temperature: this._proofreadingTemperature(settings),
-              store: false,
+              store: true,
               background: false,
               jobId: safeJob.id || `job-${Date.now()}`,
               blockId: `proofread:${loop.iteration}`,
@@ -982,18 +1037,21 @@
             return;
           }
           seenCallIds.add(callId);
+          const rawName = String(item.name || '');
+          const normalizedName = this.toolRegistry && typeof this.toolRegistry.normalizeIncomingToolName === 'function'
+            ? this.toolRegistry.normalizeIncomingToolName(rawName)
+            : rawName;
           calls.push({
-            name: String(item.name || ''),
+            name: normalizedName,
             callId,
             arguments: item.arguments !== undefined ? item.arguments : '{}'
           });
           return;
         }
         if (item.type === 'reasoning') {
-          const clone = this._cloneJson(item);
-          if (clone) {
-            reasoningItems.push(clone);
-          }
+          // Responses API may return ephemeral reasoning item ids that cannot be
+          // safely echoed back as input across chained calls.
+          return;
         }
       });
       return { calls: calls.filter((row) => row.name), reasoningItems };
@@ -1634,6 +1692,294 @@
       return {};
     }
 
+    _planningFallbackStepThreshold(loop) {
+      const maxSteps = loop && Number.isFinite(Number(loop.maxSteps))
+        ? Math.max(1, Number(loop.maxSteps))
+        : this.DEFAULT_MAX_STEPS;
+      return Math.max(4, Math.min(6, maxSteps - 1));
+    }
+
+    _fallbackCategoryFromHint(value) {
+      const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (!raw) {
+        return 'main_content';
+      }
+      if (raw === 'heading' || raw === 'headings' || raw.includes('h1') || raw.includes('h2') || raw.includes('h3')) {
+        return 'headings';
+      }
+      if (raw === 'paragraph' || raw === 'list' || raw === 'quote') {
+        return 'main_content';
+      }
+      if (raw.includes('nav') || raw.includes('menu')) {
+        return 'navigation';
+      }
+      if (raw.includes('table')) {
+        return 'tables';
+      }
+      if (raw.includes('code') || raw.includes('pre')) {
+        return 'code';
+      }
+      if (raw.includes('button') || raw.includes('label') || raw.includes('input') || raw.includes('form')) {
+        return 'ui_controls';
+      }
+      return 'main_content';
+    }
+
+    _buildPlanningFallbackPayload({ job, blocks } = {}) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const list = Array.isArray(blocks) ? blocks : [];
+      const preRangesById = safeJob.pageAnalysis && safeJob.pageAnalysis.preRangesById && typeof safeJob.pageAnalysis.preRangesById === 'object'
+        ? safeJob.pageAnalysis.preRangesById
+        : {};
+      const blockMap = {};
+      const rangeMap = {};
+      const categorySet = new Set();
+
+      const assignCategory = (categoryId, rangeId, blockIds) => {
+        const safeCategory = this._fallbackCategoryFromHint(categoryId);
+        categorySet.add(safeCategory);
+        const safeRangeId = typeof rangeId === 'string' ? rangeId.trim() : '';
+        if (safeRangeId) {
+          rangeMap[safeRangeId] = safeCategory;
+        }
+        const ids = Array.isArray(blockIds) ? blockIds : [];
+        ids.forEach((blockId) => {
+          const safeBlockId = typeof blockId === 'string' ? blockId.trim() : '';
+          if (!safeBlockId) {
+            return;
+          }
+          blockMap[safeBlockId] = safeCategory;
+        });
+      };
+
+      Object.keys(preRangesById).forEach((rangeId) => {
+        const range = preRangesById[rangeId];
+        if (!range || typeof range !== 'object') {
+          return;
+        }
+        assignCategory(
+          range.preCategory || '',
+          rangeId,
+          Array.isArray(range.blockIds) ? range.blockIds : []
+        );
+      });
+
+      if (!Object.keys(blockMap).length) {
+        list.forEach((block) => {
+          if (!block || !block.blockId) {
+            return;
+          }
+          assignCategory(
+            block.category || block.pathHint || block.preCategory || '',
+            null,
+            [block.blockId]
+          );
+        });
+      }
+
+      if (!categorySet.size) {
+        categorySet.add('main_content');
+      }
+      if (!categorySet.has('headings') && Object.keys(rangeMap).some((rangeId) => {
+        const row = preRangesById[rangeId];
+        return row && typeof row.preCategory === 'string' && row.preCategory.toLowerCase().includes('heading');
+      })) {
+        categorySet.add('headings');
+      }
+
+      const categories = Array.from(categorySet).slice(0, 24).map((id) => ({
+        id,
+        titleRu: id,
+        descriptionRu: '',
+        criteriaRu: '',
+        defaultTranslate: id === 'main_content' || id === 'headings'
+      }));
+
+      const defaults = categories
+        .filter((item) => item.defaultTranslate === true)
+        .map((item) => item.id);
+      if (!defaults.length && categories.length) {
+        defaults.push(categories[0].id);
+      }
+
+      const modelRouting = {};
+      const batching = {};
+      categories.forEach((item) => {
+        modelRouting[item.id] = { route: 'fast' };
+        batching[item.id] = {
+          unit: item.id === 'headings' ? 'range' : 'block',
+          size: item.id === 'headings' ? 4 : 8
+        };
+      });
+
+      const questionCategories = categories.map((item) => ({
+        id: item.id,
+        titleRu: item.titleRu,
+        descriptionRu: item.descriptionRu,
+        countUnits: item.id === 'headings'
+          ? Object.values(rangeMap).filter((value) => value === item.id).length
+          : Object.values(blockMap).filter((value) => value === item.id).length
+      }));
+
+      return {
+        categories,
+        mapping: {
+          blockToCategory: blockMap,
+          rangeToCategory: rangeMap
+        },
+        pipeline: {
+          modelRouting,
+          batching,
+          context: {
+            strategy: 'balanced',
+            memory: 'auto',
+            glossary: true
+          },
+          qc: {
+            enabled: true,
+            level: 'standard'
+          }
+        },
+        ask: {
+          questionRu: 'Какие категории перевести сейчас?',
+          categories: questionCategories,
+          defaults
+        }
+      };
+    }
+
+    _parseToolOutput(output) {
+      if (output && typeof output === 'object') {
+        return output;
+      }
+      if (typeof output === 'string') {
+        try {
+          const parsed = JSON.parse(output);
+          return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    async _forcePlanningCompletion({ job, blocks, settings, loop, missing } = {}) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const payload = this._buildPlanningFallbackPayload({ job: safeJob, blocks });
+      const callRoot = `system:planning:fallback:${loop && Number.isFinite(Number(loop.stepIndex)) ? Number(loop.stepIndex) : 0}`;
+      try {
+        await this.toolRegistry.execute({
+          name: 'agent.append_report',
+          arguments: {
+            type: 'warning',
+            title: 'Planning fallback',
+            body: `Fallback completion triggered. Missing: ${(Array.isArray(missing) ? missing : []).join(', ') || 'unknown'}`,
+            meta: { code: 'PLANNING_FALLBACK' }
+          },
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:report`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const taxonomyOut = await this.toolRegistry.execute({
+          name: 'agent.plan.set_taxonomy',
+          arguments: {
+            categories: payload.categories,
+            mapping: payload.mapping
+          },
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:set_taxonomy`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const taxonomyParsed = this._parseToolOutput(taxonomyOut);
+        if (taxonomyParsed && taxonomyParsed.ok === false) {
+          return {
+            ok: false,
+            error: {
+              code: taxonomyParsed.error && taxonomyParsed.error.code ? taxonomyParsed.error.code : 'PLANNING_FALLBACK_TAXONOMY_FAILED',
+              message: taxonomyParsed.error && taxonomyParsed.error.message ? taxonomyParsed.error.message : 'Fallback taxonomy failed'
+            }
+          };
+        }
+        const pipelineOut = await this.toolRegistry.execute({
+          name: 'agent.plan.set_pipeline',
+          arguments: payload.pipeline,
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:set_pipeline`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const pipelineParsed = this._parseToolOutput(pipelineOut);
+        if (pipelineParsed && pipelineParsed.ok === false) {
+          return {
+            ok: false,
+            error: {
+              code: pipelineParsed.error && pipelineParsed.error.code ? pipelineParsed.error.code : 'PLANNING_FALLBACK_PIPELINE_FAILED',
+              message: pipelineParsed.error && pipelineParsed.error.message ? pipelineParsed.error.message : 'Fallback pipeline failed'
+            }
+          };
+        }
+        const finishOut = await this.toolRegistry.execute({
+          name: 'agent.plan.request_finish_analysis',
+          arguments: { reason: 'Fallback auto-complete planning' },
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:finish_analysis`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const finishParsed = this._parseToolOutput(finishOut);
+        if (!finishParsed || finishParsed.ok !== true) {
+          return {
+            ok: false,
+            error: {
+              code: 'PLANNING_FALLBACK_FINISH_INCOMPLETE',
+              message: finishParsed && Array.isArray(finishParsed.missing)
+                ? `Fallback finish_analysis missing: ${finishParsed.missing.join(', ')}`
+                : 'Fallback finish_analysis did not pass'
+            }
+          };
+        }
+        const askOut = await this.toolRegistry.execute({
+          name: 'agent.ui.ask_user_categories',
+          arguments: payload.ask,
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:ask_user_categories`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const askParsed = this._parseToolOutput(askOut);
+        if (askParsed && askParsed.ok === false) {
+          return {
+            ok: false,
+            error: {
+              code: askParsed.error && askParsed.error.code ? askParsed.error.code : 'PLANNING_FALLBACK_ASK_FAILED',
+              message: askParsed.error && askParsed.error.message ? askParsed.error.message : 'Fallback ask_user_categories failed'
+            }
+          };
+        }
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: error && error.code ? error.code : 'PLANNING_FALLBACK_ERROR',
+            message: error && error.message ? error.message : 'Planning fallback failed'
+          }
+        };
+      }
+    }
+
     _isToolStateMismatchError(error) {
       const status = Number(error && error.status);
       const code = String(error && (error.code || '') || '').toLowerCase();
@@ -1645,7 +1991,8 @@
         || message.includes('tool call')
         || message.includes('tool output')
         || message.includes('call_id')
-        || message.includes('previous_response_id');
+        || message.includes('previous_response_id')
+        || (message.includes('previous response') && message.includes('not found'));
     }
 
     _buildRecoveryInput({ mode, job, blocks, settings }) {

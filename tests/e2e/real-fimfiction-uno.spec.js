@@ -1,17 +1,51 @@
 const path = require('path');
 const fs = require('fs/promises');
+const fsSync = require('fs');
 const { test, expect } = require('./fixtures/extension-fixture');
 
-const TARGET_URL = 'https://www.fimfiction.net/story/586972/1/uno/uno';
+const DEFAULT_TARGET_URL = 'https://www.fimfiction.net/story/586972/1/uno/uno';
+const TEST_REAL_TARGET_URL = String(process.env.TEST_REAL_TARGET_URL || '').trim();
+const TEST_REAL_TARGET_PATH = String(process.env.TEST_REAL_TARGET_PATH || '').trim();
 const OPENAI_KEY = String(process.env.OPENAI_API_KEY || '').trim();
 const TEST_MODE = String(process.env.TEST_MODE || '').trim().toLowerCase();
 const IS_MOCK_MODE = TEST_MODE === 'mock';
+const TEST_REAL_VERBOSE = /^(1|true|yes)$/i.test(String(process.env.TEST_REAL_VERBOSE || '').trim());
 const RESULT_DIR = path.resolve(process.cwd(), 'test-results');
+const DEBUG_LOG_PATH = TEST_REAL_VERBOSE
+  ? path.resolve(process.cwd(), 'test-results', 'real-fimfiction-debug.log')
+  : '';
+
+if (TEST_REAL_VERBOSE && DEBUG_LOG_PATH) {
+  try {
+    fsSync.mkdirSync(path.dirname(DEBUG_LOG_PATH), { recursive: true });
+    fsSync.writeFileSync(DEBUG_LOG_PATH, `${new Date().toISOString()} [real-e2e] spec.loaded\n`, 'utf-8');
+  } catch (_) {
+    // best-effort local trace
+  }
+}
 
 const runtimeByTest = new Map();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function debugLog(message, extra = null) {
+  if (!TEST_REAL_VERBOSE) {
+    return;
+  }
+  const suffix = extra === null ? '' : ` ${JSON.stringify(extra)}`;
+  const line = `[real-e2e] ${message}${suffix}`;
+  // eslint-disable-next-line no-console
+  console.log(line);
+  if (DEBUG_LOG_PATH) {
+    try {
+      fsSync.mkdirSync(path.dirname(DEBUG_LOG_PATH), { recursive: true });
+      fsSync.appendFileSync(DEBUG_LOG_PATH, `${new Date().toISOString()} ${line}\n`, 'utf-8');
+    } catch (_) {
+      // best-effort local trace
+    }
+  }
 }
 
 function hasCyrillic(text) {
@@ -183,15 +217,22 @@ async function requireAndConfigureRealMode(app) {
     throw new Error('OPENAI_API_KEY is required for real fimfiction e2e');
   }
 
+  debugLog('realMode.enableTestCommands.start');
   const enableRes = await app.sendBgMessage('BG_TEST_ENABLE_COMMANDS', { enable: true });
+  debugLog('realMode.enableTestCommands.done', { ok: Boolean(enableRes && enableRes.ok), error: enableRes && enableRes.error ? enableRes.error.code : null });
   expect(enableRes && enableRes.ok).toBeTruthy();
 
+  debugLog('realMode.setByok.start');
   const byokRes = await app.sendBgMessage('BG_TEST_SET_BYOK_KEY_SESSION', { apiKey: OPENAI_KEY });
+  debugLog('realMode.setByok.done', { ok: Boolean(byokRes && byokRes.ok), error: byokRes && byokRes.error ? byokRes.error.code : null });
   expect(byokRes && byokRes.ok).toBeTruthy();
 
+  debugLog('realMode.setLang.start');
   const langRes = await app.sendBgMessage('BG_TEST_SET_TARGET_LANG', { lang: 'ru' });
+  debugLog('realMode.setLang.done', { ok: Boolean(langRes && langRes.ok), error: langRes && langRes.error ? langRes.error.code : null });
   expect(langRes && langRes.ok).toBeTruthy();
 
+  debugLog('realMode.patchSettings.start');
   const settingsRes = await app.sendCommand('SET_SETTINGS', {
     patch: {
       translationAgentProfile: 'fast',
@@ -202,12 +243,32 @@ async function requireAndConfigureRealMode(app) {
       }
     }
   });
+  debugLog('realMode.patchSettings.done', { ok: Boolean(settingsRes && settingsRes.ok), error: settingsRes && settingsRes.error ? settingsRes.error.code : null });
   expect(settingsRes && settingsRes.ok).toBeTruthy();
 }
 
-async function openTargetPage(context) {
+function resolveTargetUrl(app) {
+  if (TEST_REAL_TARGET_URL) {
+    return TEST_REAL_TARGET_URL;
+  }
+  if (TEST_REAL_TARGET_PATH) {
+    if (/^https?:\/\//i.test(TEST_REAL_TARGET_PATH)) {
+      return TEST_REAL_TARGET_PATH;
+    }
+    const base = app && typeof app.staticOrigin === 'string'
+      ? String(app.staticOrigin).trim()
+      : '';
+    if (base) {
+      return `${base}${TEST_REAL_TARGET_PATH.startsWith('/') ? '' : '/'}${TEST_REAL_TARGET_PATH}`;
+    }
+  }
+  return DEFAULT_TARGET_URL;
+}
+
+async function openTargetPage(app, context) {
+  const targetUrl = resolveTargetUrl(app);
   const page = await context.newPage();
-  await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => null);
   await dismissCookieBanners(page);
   return page;
@@ -261,8 +322,35 @@ async function assertPreanalysisGate(app, { jobId, tabId, popup, testInfo }) {
     rememberRuntime(testInfo, { tabId, jobId, lastState: state });
 
     const stage = normalizeStage(state);
+    const status = normalizeStatus(state);
+    const checklist = Array.isArray(state.checklist) ? state.checklist : [];
+    const preanalysisByChecklist = checklist.some((row) => {
+      const id = String(row && row.id ? row.id : '').trim().toLowerCase();
+      const markerStatus = String(row && row.status ? row.status : '').trim().toLowerCase();
+      if (!id) {
+        return false;
+      }
+      if (markerStatus !== 'done') {
+        return false;
+      }
+      return id === 'preanalysis_ready' || id === 'analyze_page' || id === 'scanned';
+    });
+    if (preanalysisByChecklist) {
+      sawPreanalysis = true;
+    }
+
     if (stage && !seenStages.includes(stage)) {
       seenStages.push(stage);
+      debugLog('gate.stage', {
+        stage,
+        status,
+        done: Number(state.done || state.doneCount || 0),
+        total: Number(state.total || state.totalCount || 0)
+      });
+    }
+
+    if (status === 'failed' || stage === 'failed') {
+      throw new Error(`Job failed before awaiting_categories: ${JSON.stringify(state.lastError || null)}`);
     }
 
     if (stage === 'awaiting_categories') {
@@ -280,12 +368,13 @@ async function assertPreanalysisGate(app, { jobId, tabId, popup, testInfo }) {
     if (stage === 'preanalysis' || stage === 'scan' || stage === 'scanning' || stage === 'planning') {
       const selected = Array.isArray(state.selectedCategories) ? state.selectedCategories : [];
       expect(selected.length).toBe(0);
-      expect(Boolean(state.planPresent)).toBeFalsy();
-      expect(Boolean(state.taxonomyPresent)).toBeFalsy();
-      expect(Boolean(state.glossaryPresent)).toBeFalsy();
       if (stage === 'planning') {
+        // In planning stage agent may already persist taxonomy/plan drafts.
         sawPlanning = true;
       } else {
+        expect(Boolean(state.planPresent)).toBeFalsy();
+        expect(Boolean(state.taxonomyPresent)).toBeFalsy();
+        expect(Boolean(state.glossaryPresent)).toBeFalsy();
         sawPreanalysis = true;
       }
     }
@@ -305,7 +394,12 @@ async function assertPreanalysisGate(app, { jobId, tabId, popup, testInfo }) {
 }
 
 async function selectRecommendedCategoriesAndRun(popup) {
-  await expect(popup.locator('[data-section="category-chooser"]')).toBeVisible({ timeout: 25000 });
+  const chooser = popup.locator('[data-section="category-chooser"]');
+  const categoriesToggle = popup.locator('[data-acc-toggle="categories"]');
+  if (!(await chooser.isVisible().catch(() => false))) {
+    await categoriesToggle.click({ force: true }).catch(() => null);
+  }
+  await expect(chooser).toBeVisible({ timeout: 25000 });
 
   const allEnabled = popup.locator('[data-section="category-chooser-list"] input[type="checkbox"]:not([disabled])');
   await expect.poll(async () => allEnabled.count(), { timeout: 20000 }).toBeGreaterThan(0);
@@ -329,6 +423,7 @@ async function selectRecommendedCategoriesAndRun(popup) {
   } else {
     await allEnabled.first().check({ force: true });
   }
+  debugLog('categories.selected', { allCount, recommendedCount });
 
   await popup.locator('[data-action="start-translation"]').click();
 }
@@ -338,14 +433,21 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
   let sawChangeBeforeDone = false;
   let sawCyr = false;
   let latestSnippet = originalSnippet;
+  let doneSeen = false;
+  let lastState = null;
+  let lastLogAt = 0;
 
   while ((Date.now() - startedAt) < timeoutMs) {
     latestSnippet = await readAnchorSnippet(page, anchor, 160);
     const stateRes = await app.sendBgMessage('BG_TEST_GET_JOB_STATE', { jobId, tabId });
     const state = toState(stateRes);
     if (state) {
+      lastState = state;
       rememberRuntime(testInfo, { tabId, jobId, lastState: state });
       const status = normalizeStatus(state);
+      if (status === 'done') {
+        doneSeen = true;
+      }
       if (latestSnippet && latestSnippet !== originalSnippet && status !== 'done') {
         sawChangeBeforeDone = true;
       }
@@ -355,19 +457,42 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
       if (sawChangeBeforeDone && sawCyr) {
         break;
       }
+      if (TEST_REAL_VERBOSE && (Date.now() - lastLogAt) >= 5000) {
+        lastLogAt = Date.now();
+        debugLog('streaming.poll', {
+          status,
+          stage: normalizeStage(state),
+          done: Number(state.done || state.doneCount || 0),
+          total: Number(state.total || state.totalCount || 0),
+          sawDomChange: sawChangeBeforeDone,
+          sawCyr,
+          doneSeen
+        });
+      }
     }
     await sleep(250);
   }
 
-  expect(sawChangeBeforeDone).toBeTruthy();
-  expect(sawCyr).toBeTruthy();
+  if (!sawChangeBeforeDone || !sawCyr) {
+    const stateSnapshot = lastState
+      ? {
+        status: normalizeStatus(lastState),
+        stage: normalizeStage(lastState),
+        done: Number(lastState.done || lastState.doneCount || 0),
+        total: Number(lastState.total || lastState.totalCount || 0),
+        leaseUntilTs: Number.isFinite(Number(lastState.leaseUntilTs)) ? Number(lastState.leaseUntilTs) : null
+      }
+      : null;
+    throw new Error(`Streaming change timeout: sawDomChange=${sawChangeBeforeDone} sawCyr=${sawCyr} doneSeen=${doneSeen} last=${JSON.stringify(stateSnapshot)} original="${String(originalSnippet || '').slice(0, 120)}" latest="${String(latestSnippet || '').slice(0, 120)}"`);
+  }
   return latestSnippet;
 }
 
 async function runToDone({ app, context, testInfo }) {
   await requireAndConfigureRealMode(app);
 
-  const page = await openTargetPage(context);
+  const page = await openTargetPage(app, context);
+  debugLog('target.opened', { url: page.url() });
   const anchor = await resolveAnchorParagraph(page);
   const originalSnippet = anchor.originalSnippet;
   const tabId = await app.resolveTabIdByUrl(page.url());
@@ -511,6 +636,7 @@ test.describe.serial('REAL fimfiction UNO total pipeline', () => {
 
   test('PIPELINE + STREAMING + DONE', async ({ app, context }, testInfo) => {
     test.setTimeout(420000);
+    debugLog('test.start', { name: 'PIPELINE + STREAMING + DONE' });
 
     const run = await runToDone({ app, context, testInfo });
     await run.popup.close().catch(() => null);
@@ -553,7 +679,7 @@ test.describe.serial('REAL fimfiction UNO total pipeline', () => {
     test.setTimeout(420000);
 
     await requireAndConfigureRealMode(app);
-    const page = await openTargetPage(context);
+    const page = await openTargetPage(app, context);
     const anchor = await resolveAnchorParagraph(page);
     const originalSnippet = anchor.originalSnippet;
     const tabId = await app.resolveTabIdByUrl(page.url());
@@ -620,7 +746,7 @@ test.describe.serial('REAL fimfiction UNO total pipeline', () => {
     test.setTimeout(420000);
 
     await requireAndConfigureRealMode(app);
-    const page = await openTargetPage(context);
+    const page = await openTargetPage(app, context);
     const anchor = await resolveAnchorParagraph(page);
     const originalSnippet = anchor.originalSnippet;
     const tabId = await app.resolveTabIdByUrl(page.url());

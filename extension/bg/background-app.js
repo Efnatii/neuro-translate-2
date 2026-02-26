@@ -76,6 +76,7 @@
       this._storageHardThresholdBytes = 9.4 * 1024 * 1024;
       this._listenersAttached = false;
       this._testTargetLang = null;
+      this._testCommandsEnabledOverride = null;
 
       this._onStorageChanged = this._onStorageChanged.bind(this);
       this._onRuntimeMessage = this._onRuntimeMessage.bind(this);
@@ -2799,6 +2800,9 @@
       if (!this._isBuildTestCommandsEnabled()) {
         return false;
       }
+      if (typeof this._testCommandsEnabledOverride === 'boolean') {
+        return this._testCommandsEnabledOverride;
+      }
       if (!this.settingsStore || typeof this.settingsStore.get !== 'function') {
         return false;
       }
@@ -2816,23 +2820,25 @@
           }
         };
       }
-      if (!this.settingsStore || typeof this.settingsStore.set !== 'function') {
-        return {
-          ok: false,
-          error: {
-            code: 'SETTINGS_STORE_UNAVAILABLE',
-            message: 'SettingsStore is unavailable'
-          }
-        };
-      }
       const source = payload && typeof payload === 'object' ? payload : {};
       const enable = source.enable === true;
-      await this.settingsStore.set({
-        debugAllowTestCommands: enable
-      });
+      this._testCommandsEnabledOverride = enable;
+      let persisted = false;
+      if (this.settingsStore && typeof this.settingsStore.set === 'function') {
+        const persistResult = await Promise.race([
+          this.settingsStore.set({
+            debugAllowTestCommands: enable
+          }).then(() => ({ ok: true })).catch((error) => ({ ok: false, error })),
+          new Promise((resolve) => {
+            global.setTimeout(() => resolve({ ok: false, timeout: true }), 1200);
+          })
+        ]);
+        persisted = Boolean(persistResult && persistResult.ok === true);
+      }
       return {
         ok: true,
-        enabled: enable
+        enabled: enable,
+        persisted
       };
     }
 
