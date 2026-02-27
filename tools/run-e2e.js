@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 const { spawnSync } = require('child_process');
 
 function parseArgs(argv) {

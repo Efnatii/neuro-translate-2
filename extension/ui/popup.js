@@ -110,6 +110,7 @@
       this.fields.categoryChooser = this.doc.querySelector('[data-section="category-chooser"]');
       this.fields.categoryChooserList = this.doc.querySelector('[data-section="category-chooser-list"]');
       this.fields.categoryQuestion = this.doc.querySelector('[data-field="category-question"]');
+      this.fields.reclassifyForceBtn = this.doc.querySelector('[data-field="reclassify-force-btn"]');
       this.fields.categoriesHiddenHint = this.doc.querySelector('[data-field="categories-hidden-hint"]');
 
       this.fields.profileSelect = this.doc.querySelector('[data-field="profile-select"]');
@@ -252,6 +253,16 @@
 
       if (action === 'start-selected-categories') {
         await this._applyCategorySelection();
+        return;
+      }
+
+      if (action === 'reclassify-force') {
+        await this._sendCommand(UiProtocol.Commands ? UiProtocol.Commands.RECLASSIFY_BLOCKS : 'RECLASSIFY_BLOCKS', {
+          tabId: this.vm.tabId,
+          jobId: this.vm.job && this.vm.job.id ? this.vm.job.id : null,
+          force: true
+        });
+        this.toasts.show('Классификация обновлена. Проверьте категории.', { tone: 'ok' });
         return;
       }
 
@@ -444,8 +455,16 @@
 
     _renderCategories() {
       const awaiting = this.vm.awaitingCategories === true;
+      const staleSelection = (
+        this.vm.job
+        && this.vm.job.classificationStale === true
+      ) || (
+        this.vm.lastError
+        && this.vm.lastError.code === 'CLASSIFICATION_STALE'
+      );
       Ui.setHidden(this.fields.categoryChooser, !awaiting);
       Ui.setHidden(this.fields.categoriesHiddenHint, awaiting);
+      Ui.setHidden(this.fields.reclassifyForceBtn, !(awaiting && staleSelection));
       if (!awaiting) {
         return;
       }
@@ -673,6 +692,7 @@
       const cancel = this.root.querySelector('[data-action="cancel-translation"]');
       const erase = this.root.querySelector('[data-action="clear-translation-data"]');
       const startSelected = this.root.querySelector('[data-action="start-selected-categories"]');
+      const reclassifyForce = this.root.querySelector('[data-action="reclassify-force"]');
       if (start) {
         start.disabled = !hasTab || busy;
       }
@@ -684,6 +704,9 @@
       }
       if (startSelected) {
         startSelected.disabled = !hasTab || !this.vm.awaitingCategories || this.categoryDraft.size === 0;
+      }
+      if (reclassifyForce) {
+        reclassifyForce.disabled = !hasTab || !this.vm.awaitingCategories;
       }
     }
 

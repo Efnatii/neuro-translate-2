@@ -567,6 +567,23 @@
 
         const parsed = this._extractToolCalls(raw);
         if (!parsed.calls.length) {
+          const forced = await this._forceExecutionProgress({
+            job: safeJob,
+            blocks,
+            settings,
+            loop,
+            reason: 'no_calls'
+          });
+          if (forced && forced.ok === true && forced.progressed === true) {
+            loop.noProgressIterations = 0;
+            loop.lastProgressAt = Date.now();
+            loop.pendingInputItems = parsed.reasoningItems.slice();
+            loop.iteration += 1;
+            iterationsThisTick += 1;
+            loop.updatedAt = Date.now();
+            await this._persist(safeJob, `execution:step:${loop.iteration}:forced_progress_no_calls`);
+            continue;
+          }
           loop.noProgressIterations += 1;
           if (loop.noProgressIterations >= loop.maxNoProgressIterations) {
             loop.status = 'failed';
@@ -647,6 +664,23 @@
           loop.noProgressIterations += 1;
         }
         if (loop.noProgressIterations >= loop.maxNoProgressIterations) {
+          const forced = await this._forceExecutionProgress({
+            job: safeJob,
+            blocks,
+            settings,
+            loop,
+            reason: 'no_progress_after_tools'
+          });
+          if (forced && forced.ok === true && forced.progressed === true) {
+            loop.noProgressIterations = 0;
+            loop.lastProgressAt = Date.now();
+            loop.pendingInputItems = nextInput;
+            loop.iteration += 1;
+            iterationsThisTick += 1;
+            loop.updatedAt = Date.now();
+            await this._persist(safeJob, `execution:step:${loop.iteration}:forced_progress_after_tools`);
+            continue;
+          }
           loop.status = 'failed';
           loop.lastError = {
             code: 'AGENT_NO_PROGRESS',
@@ -1975,6 +2009,64 @@
           error: {
             code: error && error.code ? error.code : 'PLANNING_FALLBACK_ERROR',
             message: error && error.message ? error.message : 'Planning fallback failed'
+          }
+        };
+      }
+    }
+
+    async _forceExecutionProgress({ job, blocks, settings, loop, reason = 'fallback' } = {}) {
+      const safeJob = job && typeof job === 'object' ? job : {};
+      const callRoot = `system:execution:${reason}:${loop && Number.isFinite(Number(loop.iteration)) ? Number(loop.iteration) : 0}`;
+      try {
+        const beforePending = Array.isArray(safeJob.pendingBlockIds) ? safeJob.pendingBlockIds.length : 0;
+        if (beforePending <= 0) {
+          return { ok: true, progressed: false, beforePending, afterPending: beforePending };
+        }
+        const unitsOut = await this.toolRegistry.execute({
+          name: 'job.get_next_units',
+          arguments: { limit: 1, prefer: 'mixed' },
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:get_next_units`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const unitsParsed = this._parseToolOutput(unitsOut);
+        const units = unitsParsed && Array.isArray(unitsParsed.units) ? unitsParsed.units : [];
+        const first = units.length ? units[0] : null;
+        if (!first || !first.id) {
+          return { ok: true, progressed: false, beforePending, afterPending: beforePending };
+        }
+        await this.toolRegistry.execute({
+          name: 'translator.translate_unit_stream',
+          arguments: {
+            unitType: first.unitType === 'range' ? 'range' : 'block',
+            id: String(first.id),
+            blockIds: Array.isArray(first.blockIds) ? first.blockIds.slice() : undefined,
+            categoryId: typeof first.categoryId === 'string' ? first.categoryId : undefined,
+            keepHistory: 'auto'
+          },
+          job: safeJob,
+          blocks,
+          settings,
+          callId: `${callRoot}:translate_unit`,
+          source: 'system',
+          requestId: loop && loop.lastResponseId ? loop.lastResponseId : null
+        });
+        const afterPending = Array.isArray(safeJob.pendingBlockIds) ? safeJob.pendingBlockIds.length : 0;
+        return {
+          ok: true,
+          progressed: afterPending < beforePending,
+          beforePending,
+          afterPending
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: error && error.code ? error.code : 'EXECUTION_FALLBACK_FAILED',
+            message: error && error.message ? error.message : 'Execution fallback failed'
           }
         };
       }

@@ -529,21 +529,29 @@
           description: 'Translate one unit (block/range) with streaming updates.',
           parameters: {
             type: 'object',
-            additionalProperties: false,
+            additionalProperties: true,
             properties: {
               unitType: { type: 'string', enum: ['block', 'range'] },
               id: { type: 'string' },
+              unitId: { type: 'string' },
+              blockId: { type: 'string' },
+              rangeId: { type: 'string' },
               blockIds: { type: 'array', items: { type: 'string' } },
               categoryId: { type: 'string' },
               targetLang: { type: 'string' },
               model: { type: 'string' },
               style: { type: 'string', enum: ['auto', 'literal', 'readable', 'technical', 'balanced'] },
               contextStrategy: { type: 'object', additionalProperties: true },
-              glossary: { type: 'array' },
+              glossary: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: true
+                }
+              },
               contextSummary: { type: 'string' },
               keepHistory: { type: 'string', enum: ['auto', 'on', 'off'] }
-            },
-            required: ['unitType', 'id']
+            }
           }
         },
         {
@@ -2933,8 +2941,44 @@
     }
 
     async _toolTranslateUnitStream(args, job, settings, { callId = null, source = 'model' } = {}) {
-      const unitType = args && args.unitType === 'range' ? 'range' : 'block';
-      const id = typeof args.id === 'string' ? args.id.trim() : '';
+      const input = args && typeof args === 'object' ? args : {};
+      let unitType = input.unitType === 'range' ? 'range' : 'block';
+      let id = typeof input.id === 'string' ? input.id.trim() : '';
+      if (!id && typeof input.unitId === 'string') {
+        id = input.unitId.trim();
+      }
+      if (!id && typeof input.blockId === 'string') {
+        id = input.blockId.trim();
+        unitType = 'block';
+      }
+      if (!id && typeof input.rangeId === 'string') {
+        id = input.rangeId.trim();
+        unitType = 'range';
+      }
+      if (!id && Array.isArray(input.blockIds) && input.blockIds.length === 1) {
+        id = String(input.blockIds[0] || '').trim();
+        unitType = 'block';
+      }
+      if (!id) {
+        const hintedCategory = this._normalizeCategory(input.categoryId || '') || undefined;
+        const nextUnits = this._toolGetNextUnits({
+          categoryId: hintedCategory,
+          limit: 1,
+          prefer: 'mixed'
+        }, job);
+        const firstUnit = nextUnits && Array.isArray(nextUnits.units) ? nextUnits.units[0] : null;
+        if (firstUnit && typeof firstUnit.id === 'string' && firstUnit.id.trim()) {
+          id = firstUnit.id.trim();
+          unitType = firstUnit.unitType === 'range' ? 'range' : 'block';
+          if (!Array.isArray(input.blockIds) || !input.blockIds.length) {
+            input.blockIds = Array.isArray(firstUnit.blockIds) ? firstUnit.blockIds.slice() : [];
+          }
+        }
+      }
+      if (!id && Array.isArray(job.pendingBlockIds) && job.pendingBlockIds.length) {
+        id = String(job.pendingBlockIds[0] || '').trim();
+        unitType = 'block';
+      }
       if (!id) {
         throw this._toolError('BAD_TOOL_ARGS', 'id is required');
       }
@@ -2942,8 +2986,8 @@
       let blockIds = [];
       if (unitType === 'block') {
         blockIds = [id];
-      } else if (Array.isArray(args.blockIds) && args.blockIds.length) {
-        blockIds = args.blockIds
+      } else if (Array.isArray(input.blockIds) && input.blockIds.length) {
+        blockIds = input.blockIds
           .map((value) => String(value || '').trim())
           .filter(Boolean);
       } else {
@@ -2961,11 +3005,11 @@
         throw this._toolError('BAD_TOOL_ARGS', 'No blockIds resolved for unit');
       }
 
-      const contextStrategy = args && args.contextStrategy && typeof args.contextStrategy === 'object'
-        ? args.contextStrategy
+      const contextStrategy = input.contextStrategy && typeof input.contextStrategy === 'object'
+        ? input.contextStrategy
         : {};
-      const keepHistory = args && (args.keepHistory === 'on' || args.keepHistory === 'off')
-        ? args.keepHistory
+      const keepHistory = input.keepHistory === 'on' || input.keepHistory === 'off'
+        ? input.keepHistory
         : 'auto';
       const contextGuidanceParts = [];
       const strategyKeys = Object.keys(contextStrategy);
@@ -2984,11 +3028,11 @@
         try {
           const translated = await this._toolTranslateBlockStream({
             blockId,
-            targetLang: args && typeof args.targetLang === 'string' ? args.targetLang : undefined,
-            model: args && typeof args.model === 'string' ? args.model : undefined,
-            style: args && typeof args.style === 'string' ? args.style : undefined,
-            glossary: Array.isArray(args && args.glossary) ? args.glossary : undefined,
-            contextSummary: args && typeof args.contextSummary === 'string' ? args.contextSummary : undefined,
+            targetLang: typeof input.targetLang === 'string' ? input.targetLang : undefined,
+            model: typeof input.model === 'string' ? input.model : undefined,
+            style: typeof input.style === 'string' ? input.style : undefined,
+            glossary: Array.isArray(input.glossary) ? input.glossary : undefined,
+            contextSummary: typeof input.contextSummary === 'string' ? input.contextSummary : undefined,
             batchGuidance
           }, job, settings, {
             callId: `${callId || 'unit'}:${id}:${blockId}`,
@@ -3009,6 +3053,15 @@
             routeUsed: translated && translated.routeUsed ? translated.routeUsed : null,
             skipped: translated && translated.skipped === true
           });
+          await this._markBlockDoneInternal({
+            blockId,
+            text: translated && typeof translated.text === 'string' ? translated.text : '',
+            modelUsed: translated && translated.modelUsed ? translated.modelUsed : null,
+            routeUsed: translated && translated.routeUsed ? translated.routeUsed : null
+          }, job, {
+            qualityTag: 'raw',
+            mode: 'execution'
+          });
         } catch (error) {
           errors.push({
             blockId,
@@ -3023,7 +3076,7 @@
         ok: errors.length === 0,
         unitType,
         id,
-        categoryId: this._normalizeCategory(args && args.categoryId ? args.categoryId : '') || null,
+        categoryId: this._normalizeCategory(input.categoryId ? input.categoryId : '') || null,
         blockIds: blockIds.slice(),
         results,
         text,

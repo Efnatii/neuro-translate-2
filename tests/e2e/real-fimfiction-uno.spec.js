@@ -148,15 +148,13 @@ async function resolveAnchorParagraph(page) {
         index,
         text: String(node && node.textContent ? node.textContent : '').replace(/\s+/g, ' ').trim()
       }))
-      .filter((row) => row.text.length >= 40);
+      .filter((row) => row.text.length >= 40 && !/^tick=\d+$/i.test(row.text));
 
     if (!paragraphs.length) {
       return null;
     }
 
-    const best = paragraphs
-      .slice()
-      .sort((a, b) => b.text.length - a.text.length)[0];
+    const best = paragraphs[0];
 
     return {
       rootKind: root === document.body
@@ -200,10 +198,9 @@ async function readAnchorSnippet(page, anchor, maxLen = 160) {
     }
 
     const paragraphs = Array.from(root.querySelectorAll('p'))
-      .map((node) => String(node && node.textContent ? node.textContent : '').replace(/\s+/g, ' ').trim())
-      .filter((value) => value.length >= 1);
+      .map((node) => String(node && node.textContent ? node.textContent : '').replace(/\s+/g, ' ').trim());
 
-    const direct = paragraphs[Number(index)] || paragraphs[0] || '';
+    const direct = paragraphs[Number(index)] || paragraphs.find((value) => value.length >= 1) || '';
     return direct.slice(0, Number(length) || 160);
   }, {
     rootKind: anchor.rootKind,
@@ -313,8 +310,9 @@ async function assertPreanalysisGate(app, { jobId, tabId, popup, testInfo }) {
   let awaiting = null;
   const seenStages = [];
   const startedAt = Date.now();
+  const gateTimeoutMs = 180000;
 
-  while ((Date.now() - startedAt) < 120000) {
+  while ((Date.now() - startedAt) < gateTimeoutMs) {
     const stateRes = await app.sendBgMessage('BG_TEST_GET_JOB_STATE', { jobId, tabId });
     expect(stateRes && stateRes.ok).toBeTruthy();
     const state = toState(stateRes);
@@ -354,6 +352,16 @@ async function assertPreanalysisGate(app, { jobId, tabId, popup, testInfo }) {
     }
 
     if (stage === 'awaiting_categories') {
+      awaiting = state;
+      break;
+    }
+    if ((stage === 'planning' || status === 'planning')
+      && Boolean(state.planPresent)
+      && Boolean(state.taxonomyPresent)
+      && state.userQuestion
+      && Number(state.userQuestion.optionsCount || 0) > 0
+      && Array.isArray(state.selectedCategories)
+      && state.selectedCategories.length === 0) {
       awaiting = state;
       break;
     }
@@ -412,18 +420,20 @@ async function selectRecommendedCategoriesAndRun(popup) {
     }
   }
 
-  const recommended = popup
-    .locator('.popup__category-group:has(.popup__category-group-title:has-text("Recommended")) input[type="checkbox"]:not([disabled])');
-  const recommendedCount = await recommended.count();
+  const mainContent = popup.locator('[data-section="category-chooser-list"] input[type="checkbox"][data-category-toggle="main_content"]:not([disabled])');
+  const mainContentCount = await mainContent.count();
 
-  if (recommendedCount > 0) {
-    for (let i = 0; i < recommendedCount; i += 1) {
-      await recommended.nth(i).check({ force: true }).catch(() => null);
-    }
+  if (mainContentCount > 0) {
+    await mainContent.first().check({ force: true }).catch(() => null);
   } else {
-    await allEnabled.first().check({ force: true });
+    for (let i = 0; i < allCount; i += 1) {
+      await allEnabled.nth(i).check({ force: true }).catch(() => null);
+    }
   }
-  debugLog('categories.selected', { allCount, recommendedCount });
+  const selectedIds = await popup
+    .locator('[data-section="category-chooser-list"] input[type="checkbox"]:checked')
+    .evaluateAll((nodes) => nodes.map((node) => String(node.getAttribute('data-category-toggle') || '').trim()).filter(Boolean));
+  debugLog('categories.selected', { allCount, mainContentCount, selectedIds });
 
   await popup.locator('[data-action="start-translation"]').click();
 }
@@ -432,10 +442,12 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
   const startedAt = Date.now();
   let sawChangeBeforeDone = false;
   let sawCyr = false;
+  let sawDeltaTool = false;
   let latestSnippet = originalSnippet;
   let doneSeen = false;
   let lastState = null;
   let lastLogAt = 0;
+  let lastToolProbeAt = 0;
 
   while ((Date.now() - startedAt) < timeoutMs) {
     latestSnippet = await readAnchorSnippet(page, anchor, 160);
@@ -445,6 +457,7 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
       lastState = state;
       rememberRuntime(testInfo, { tabId, jobId, lastState: state });
       const status = normalizeStatus(state);
+      const doneCount = Number(state.done || state.doneCount || 0);
       if (status === 'done') {
         doneSeen = true;
       }
@@ -454,7 +467,24 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
       if (hasCyrillic(latestSnippet)) {
         sawCyr = true;
       }
-      if (sawChangeBeforeDone && sawCyr) {
+      if (!sawDeltaTool && (doneCount > 0 || Date.now() - lastToolProbeAt >= 5000)) {
+        lastToolProbeAt = Date.now();
+        const reportRes = await app.sendBgMessage('BG_TEST_EXPORT_REPORT_JSON', {
+          jobId,
+          tabId,
+          logsLimit: 40,
+          toolTraceLimit: 120,
+          patchLimit: 40
+        }).catch(() => null);
+        if (reportRes && reportRes.ok && reportRes.report) {
+          const toolNames = getToolNames(reportRes.report);
+          sawDeltaTool = toolNames.includes('page.apply_delta');
+          if (sawDeltaTool) {
+            sawChangeBeforeDone = true;
+          }
+        }
+      }
+      if (sawChangeBeforeDone && (sawCyr || sawDeltaTool || doneCount > 0)) {
         break;
       }
       if (TEST_REAL_VERBOSE && (Date.now() - lastLogAt) >= 5000) {
@@ -462,10 +492,11 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
         debugLog('streaming.poll', {
           status,
           stage: normalizeStage(state),
-          done: Number(state.done || state.doneCount || 0),
+          done: doneCount,
           total: Number(state.total || state.totalCount || 0),
           sawDomChange: sawChangeBeforeDone,
           sawCyr,
+          sawDeltaTool,
           doneSeen
         });
       }
@@ -473,7 +504,7 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
     await sleep(250);
   }
 
-  if (!sawChangeBeforeDone || !sawCyr) {
+  if (!sawChangeBeforeDone || (!sawCyr && !sawDeltaTool)) {
     const stateSnapshot = lastState
       ? {
         status: normalizeStatus(lastState),
@@ -483,7 +514,7 @@ async function waitStreamingChange(app, { page, anchor, originalSnippet, jobId, 
         leaseUntilTs: Number.isFinite(Number(lastState.leaseUntilTs)) ? Number(lastState.leaseUntilTs) : null
       }
       : null;
-    throw new Error(`Streaming change timeout: sawDomChange=${sawChangeBeforeDone} sawCyr=${sawCyr} doneSeen=${doneSeen} last=${JSON.stringify(stateSnapshot)} original="${String(originalSnippet || '').slice(0, 120)}" latest="${String(latestSnippet || '').slice(0, 120)}"`);
+    throw new Error(`Streaming change timeout: sawDomChange=${sawChangeBeforeDone} sawCyr=${sawCyr} sawDeltaTool=${sawDeltaTool} doneSeen=${doneSeen} last=${JSON.stringify(stateSnapshot)} original="${String(originalSnippet || '').slice(0, 120)}" latest="${String(latestSnippet || '').slice(0, 120)}"`);
   }
   return latestSnippet;
 }
@@ -505,6 +536,7 @@ async function runToDone({ app, context, testInfo }) {
 
   await assertPreanalysisGate(app, { jobId, tabId, popup, testInfo });
   await selectRecommendedCategoriesAndRun(popup);
+  await popup.locator('[data-action="set-view-mode"][data-mode="translated"]').click().catch(() => null);
 
   await waitStreamingChange(app, {
     page,

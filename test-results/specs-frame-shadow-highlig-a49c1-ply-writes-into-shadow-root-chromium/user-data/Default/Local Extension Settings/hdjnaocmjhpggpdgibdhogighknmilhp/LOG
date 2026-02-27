@@ -1,0 +1,32 @@
+2026/02/27-00:20:25.069 5cc3 Creating DB /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-frame-shadow-highlig-a49c1-ply-writes-into-shadow-root-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp since it was missing.
+2026/02/27-00:20:25.103 5cc3 Reusing MANIFEST /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-frame-shadow-highlig-a49c1-ply-writes-into-shadow-root-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp/MANIFEST-000001
+2026/02/27-00:20:27.142 5cc4 Level-0 table #5: started
+2026/02/27-00:20:27.159 5cc4 Level-0 table #5: 989747 bytes OK
+2026/02/27-00:20:27.165 5cc4 Delete type=0 #3
+2026/02/27-00:20:28.103 5cc4 Level-0 table #7: started
+2026/02/27-00:20:28.135 5cc4 Level-0 table #7: 823385 bytes OK
+2026/02/27-00:20:28.138 5cc4 Delete type=0 #4
+2026/02/27-00:20:28.249 5cc3 Compacting 1@1 + 1@2 files
+2026/02/27-00:20:28.260 5cc3 Generated table #8@1: 43 keys, 36174 bytes
+2026/02/27-00:20:28.260 5cc3 Compacted 1@1 + 1@2 files => 36174 bytes
+2026/02/27-00:20:28.264 5cc3 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/27-00:20:28.264 5cc3 Delete type=2 #5
+2026/02/27-00:20:28.264 5cc3 Delete type=2 #7
+2026/02/27-00:20:29.002 5cc3 Level-0 table #10: started
+2026/02/27-00:20:29.034 5cc3 Level-0 table #10: 787765 bytes OK
+2026/02/27-00:20:29.037 5cc3 Delete type=0 #6
+2026/02/27-00:20:29.151 5cc3 Compacting 1@1 + 1@2 files
+2026/02/27-00:20:29.159 5cc3 Generated table #11@1: 43 keys, 40658 bytes
+2026/02/27-00:20:29.159 5cc3 Compacted 1@1 + 1@2 files => 40658 bytes
+2026/02/27-00:20:29.162 5cc3 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/27-00:20:29.162 5cc3 Delete type=2 #10
+2026/02/27-00:20:29.162 5cc3 Delete type=2 #8
+2026/02/27-00:20:30.098 5cc4 Level-0 table #13: started
+2026/02/27-00:20:30.127 5cc4 Level-0 table #13: 946495 bytes OK
+2026/02/27-00:20:30.130 5cc4 Delete type=0 #9
+2026/02/27-00:20:30.774 5cc4 Compacting 1@1 + 1@2 files
+2026/02/27-00:20:30.789 5cc4 Generated table #14@1: 43 keys, 48254 bytes
+2026/02/27-00:20:30.789 5cc4 Compacted 1@1 + 1@2 files => 48254 bytes
+2026/02/27-00:20:30.794 5cc4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/27-00:20:30.795 5cc4 Delete type=2 #13
+2026/02/27-00:20:30.795 5cc4 Delete type=2 #11

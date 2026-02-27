@@ -5620,7 +5620,7 @@
             : { code: 'CLASSIFY_FAILED', message: 'Р С™Р В»Р В°РЎРѓРЎРѓР С‘РЎвЂћР С‘Р С”Р В°РЎвЂ Р С‘РЎРЏ Р Р†Р ВµРЎР‚Р Р…РЎС“Р В»Р В° Р С•РЎв‚¬Р С‘Р В±Р С”РЎС“' }
         };
       }
-      const byBlockId = response.byBlockId && typeof response.byBlockId === 'object'
+      let byBlockId = response.byBlockId && typeof response.byBlockId === 'object'
         ? response.byBlockId
         : {};
       const summary = response.summary && typeof response.summary === 'object'
@@ -5689,12 +5689,107 @@
       const rescannedBlocks = Array.isArray(response.blocks)
         ? this._normalizeBlocks(response.blocks)
         : [];
+      const parseFrameBlockId = (value) => {
+        const raw = typeof value === 'string' ? value.trim() : '';
+        const match = /^f(\d+):(.+)$/.exec(raw);
+        if (!match) {
+          return null;
+        }
+        return {
+          frameId: Number(match[1]),
+          localBlockId: match[2]
+        };
+      };
+      const aliasToCanonicalBlockId = {};
+      const registerAlias = (alias, canonical) => {
+        const aliasKey = typeof alias === 'string' ? alias.trim() : '';
+        const canonicalKey = typeof canonical === 'string' ? canonical.trim() : '';
+        if (!aliasKey || !canonicalKey || Object.prototype.hasOwnProperty.call(aliasToCanonicalBlockId, aliasKey)) {
+          return;
+        }
+        aliasToCanonicalBlockId[aliasKey] = canonicalKey;
+      };
+      const registerCanonicalBlockId = (value) => {
+        const canonical = typeof value === 'string' ? value.trim() : '';
+        if (!canonical) {
+          return;
+        }
+        registerAlias(canonical, canonical);
+        const parsed = parseFrameBlockId(canonical);
+        if (parsed && parsed.localBlockId) {
+          registerAlias(parsed.localBlockId, canonical);
+          return;
+        }
+        if (!canonical.includes(':')) {
+          registerAlias(`f0:${canonical}`, canonical);
+        }
+      };
+      rescannedBlocks.forEach((block) => {
+        registerCanonicalBlockId(block && block.blockId ? block.blockId : '');
+      });
+      const jobBlocksByIdRaw = job.blocksById && typeof job.blocksById === 'object'
+        ? job.blocksById
+        : {};
+      Object.keys(jobBlocksByIdRaw).forEach((blockId) => registerCanonicalBlockId(blockId));
+      const canonicalizeBlockId = (value) => {
+        const raw = typeof value === 'string' ? value.trim() : '';
+        if (!raw) {
+          return '';
+        }
+        if (Object.prototype.hasOwnProperty.call(aliasToCanonicalBlockId, raw)) {
+          return aliasToCanonicalBlockId[raw];
+        }
+        const parsed = parseFrameBlockId(raw);
+        if (parsed && parsed.localBlockId && Object.prototype.hasOwnProperty.call(aliasToCanonicalBlockId, parsed.localBlockId)) {
+          return aliasToCanonicalBlockId[parsed.localBlockId];
+        }
+        const prefixed = `f0:${raw}`;
+        if (Object.prototype.hasOwnProperty.call(aliasToCanonicalBlockId, prefixed)) {
+          return aliasToCanonicalBlockId[prefixed];
+        }
+        return raw;
+      };
+      byBlockId = Object.keys(byBlockId).reduce((acc, rawBlockId) => {
+        const canonicalBlockId = canonicalizeBlockId(rawBlockId);
+        if (!canonicalBlockId) {
+          return acc;
+        }
+        acc[canonicalBlockId] = byBlockId[rawBlockId];
+        return acc;
+      }, {});
+      const rescannedCanonicalBlocks = rescannedBlocks.map((row) => {
+        const block = row && typeof row === 'object' ? row : null;
+        if (!block || !block.blockId) {
+          return block;
+        }
+        const canonicalBlockId = canonicalizeBlockId(block.blockId);
+        if (!canonicalBlockId || canonicalBlockId === block.blockId) {
+          return block;
+        }
+        const parsedCanonical = parseFrameBlockId(canonicalBlockId);
+        return {
+          ...block,
+          blockId: canonicalBlockId,
+          localBlockId: parsedCanonical && parsedCanonical.localBlockId
+            ? parsedCanonical.localBlockId
+            : (block.localBlockId || canonicalBlockId)
+        };
+      }).filter(Boolean);
 
       let blocksById = job.blocksById && typeof job.blocksById === 'object' ? job.blocksById : {};
-      if (rescannedBlocks.length && (force === true || !Object.keys(blocksById).length)) {
+      if (rescannedCanonicalBlocks.length && (force === true || !Object.keys(blocksById).length)) {
+        const previousBlocksById = {};
+        Object.keys(blocksById).forEach((blockId) => {
+          const block = blocksById[blockId];
+          previousBlocksById[blockId] = block;
+          const canonicalBlockId = canonicalizeBlockId(blockId);
+          if (canonicalBlockId && !Object.prototype.hasOwnProperty.call(previousBlocksById, canonicalBlockId)) {
+            previousBlocksById[canonicalBlockId] = block;
+          }
+        });
         blocksById = this._mergeRescannedBlocksWithState({
-          previousBlocksById: blocksById,
-          rescannedBlocks,
+          previousBlocksById,
+          rescannedBlocks: rescannedCanonicalBlocks,
           classificationByBlockId: byBlockId
         });
         job.blocksById = blocksById;

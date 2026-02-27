@@ -1,0 +1,5388 @@
+{
+  "testMode": "mock",
+  "logs": {
+    "ok": true,
+    "seq": 149,
+    "logs": [
+      {
+        "ts": 1772141385723,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "UI hello",
+        "meta": {
+          "source": "debug",
+          "tabId": null,
+          "requestId": null,
+          "stage": "hello",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 1
+      },
+      {
+        "ts": 1772141385773,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "UI subscribed",
+        "meta": {
+          "source": "debug",
+          "tabId": null,
+          "requestId": null,
+          "stage": "subscribe",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 2
+      },
+      {
+        "ts": 1772141385815,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Создан alarm nt.tick",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 3
+      },
+      {
+        "ts": 1772141385816,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 4
+      },
+      {
+        "ts": 1772141385911,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 5
+      },
+      {
+        "ts": 1772141385919,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 6
+      },
+      {
+        "ts": 1772141385919,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Фоновый сервис запущен",
+        "meta": {
+          "source": "background",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 7
+      },
+      {
+        "ts": 1772141386033,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 8
+      },
+      {
+        "ts": 1772141386049,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 9
+      },
+      {
+        "ts": 1772141386162,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 10
+      },
+      {
+        "ts": 1772141386217,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 11
+      },
+      {
+        "ts": 1772141386294,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 12
+      },
+      {
+        "ts": 1772141386308,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 13
+      },
+      {
+        "ts": 1772141386371,
+        "level": "info",
+        "tag": "translation.start",
+        "message": "Р вЂ”Р В°Р Т‘Р В°РЎвЂЎР В° Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В° Р В·Р В°Р С—РЎС“РЎвЂ°Р ВµР Р…Р В°",
+        "meta": {
+          "source": "bg",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": "preparing",
+          "latencyMs": null
+        },
+        "seq": 14
+      },
+      {
+        "ts": 1772141386419,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 15
+      },
+      {
+        "ts": 1772141386513,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 16
+      },
+      {
+        "ts": 1772141386714,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 17
+      },
+      {
+        "ts": 1772141386715,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 18
+      },
+      {
+        "ts": 1772141386998,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 19
+      },
+      {
+        "ts": 1772141387000,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 20
+      },
+      {
+        "ts": 1772141387276,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 21
+      },
+      {
+        "ts": 1772141387277,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 22
+      },
+      {
+        "ts": 1772141387590,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 23
+      },
+      {
+        "ts": 1772141387591,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 24
+      },
+      {
+        "ts": 1772141400517,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick prebench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": null,
+          "status": 4,
+          "latencyMs": null
+        },
+        "seq": 25
+      },
+      {
+        "ts": 1772141400523,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 6,
+          "latencyMs": null
+        },
+        "seq": 26
+      },
+      {
+        "ts": 1772141400530,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick prebench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": null,
+          "status": 4,
+          "latencyMs": null
+        },
+        "seq": 27
+      },
+      {
+        "ts": 1772141400538,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 5,
+          "latencyMs": null
+        },
+        "seq": 28
+      },
+      {
+        "ts": 1772141400978,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": 200,
+          "latencyMs": 457
+        },
+        "seq": 29
+      },
+      {
+        "ts": 1772141400981,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick bench sample recorded",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": null,
+          "latencyMs": 457
+        },
+        "seq": 30
+      },
+      {
+        "ts": 1772141400985,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": 200,
+          "latencyMs": 455
+        },
+        "seq": 31
+      },
+      {
+        "ts": 1772141400998,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 455
+        },
+        "seq": 32
+      },
+      {
+        "ts": 1772141401006,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 472
+        },
+        "seq": 33
+      },
+      {
+        "ts": 1772141401008,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick bench sample recorded",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": null,
+          "latencyMs": 472
+        },
+        "seq": 34
+      },
+      {
+        "ts": 1772141401035,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 49
+        },
+        "seq": 35
+      },
+      {
+        "ts": 1772141401038,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick bench sample recorded",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": "o4-mini:standard",
+          "status": null,
+          "latencyMs": 50
+        },
+        "seq": 36
+      },
+      {
+        "ts": 1772141401039,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick prebench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": null,
+          "status": 4,
+          "latencyMs": null
+        },
+        "seq": 37
+      },
+      {
+        "ts": 1772141401046,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 38
+      },
+      {
+        "ts": 1772141401068,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 56
+        },
+        "seq": 39
+      },
+      {
+        "ts": 1772141401071,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick bench sample recorded",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": "gpt-5:standard",
+          "status": null,
+          "latencyMs": 56
+        },
+        "seq": 40
+      },
+      {
+        "ts": 1772141401071,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Quick prebench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "quick",
+          "modelSpec": null,
+          "status": 4,
+          "latencyMs": null
+        },
+        "seq": 41
+      },
+      {
+        "ts": 1772141401076,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 42
+      },
+      {
+        "ts": 1772141401105,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "throughput_bench",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": 200,
+          "latencyMs": 62
+        },
+        "seq": 43
+      },
+      {
+        "ts": 1772141401110,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "Throughput calibration sample",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "throughput",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": null,
+          "latencyMs": 63
+        },
+        "seq": 44
+      },
+      {
+        "ts": 1772141401118,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 66
+        },
+        "seq": 45
+      },
+      {
+        "ts": 1772141401122,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 72
+        },
+        "seq": 46
+      },
+      {
+        "ts": 1772141401128,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 661
+        },
+        "seq": 47
+      },
+      {
+        "ts": 1772141401136,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 55
+        },
+        "seq": 48
+      },
+      {
+        "ts": 1772141401360,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 59
+        },
+        "seq": 49
+      },
+      {
+        "ts": 1772141402600,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 2107
+        },
+        "seq": 50
+      },
+      {
+        "ts": 1772141407390,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "throughput_bench",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 6279
+        },
+        "seq": 51
+      },
+      {
+        "ts": 1772141408199,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "Throughput calibration sample",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "throughput",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": null,
+          "latencyMs": 6279
+        },
+        "seq": 52
+      },
+      {
+        "ts": 1772141410873,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 9640
+        },
+        "seq": 53
+      },
+      {
+        "ts": 1772141413137,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": 200,
+          "latencyMs": 11778
+        },
+        "seq": 54
+      },
+      {
+        "ts": 1772141413212,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 55
+      },
+      {
+        "ts": 1772141413245,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 56
+      },
+      {
+        "ts": 1772141413323,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 2,
+          "latencyMs": null
+        },
+        "seq": 57
+      },
+      {
+        "ts": 1772141413364,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 1,
+          "latencyMs": null
+        },
+        "seq": 58
+      },
+      {
+        "ts": 1772141413747,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 2519
+        },
+        "seq": 59
+      },
+      {
+        "ts": 1772141413757,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": null,
+          "latencyMs": 2521
+        },
+        "seq": 60
+      },
+      {
+        "ts": 1772141414347,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1120
+        },
+        "seq": 61
+      },
+      {
+        "ts": 1772141414352,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1133
+        },
+        "seq": 62
+      },
+      {
+        "ts": 1772141414368,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 1187
+        },
+        "seq": 63
+      },
+      {
+        "ts": 1772141414375,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 1027
+        },
+        "seq": 64
+      },
+      {
+        "ts": 1772141414677,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": 200,
+          "latencyMs": 1211
+        },
+        "seq": 65
+      },
+      {
+        "ts": 1772141416054,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-5-mini:standard",
+          "status": null,
+          "latencyMs": 1212
+        },
+        "seq": 66
+      },
+      {
+        "ts": 1772141416057,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 2801
+        },
+        "seq": 67
+      },
+      {
+        "ts": 1772141416063,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 2812
+        },
+        "seq": 68
+      },
+      {
+        "ts": 1772141416076,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 2850
+        },
+        "seq": 69
+      },
+      {
+        "ts": 1772141418153,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 4384
+        },
+        "seq": 70
+      },
+      {
+        "ts": 1772141419566,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 6175
+        },
+        "seq": 71
+      },
+      {
+        "ts": 1772141426266,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 11727
+        },
+        "seq": 72
+      },
+      {
+        "ts": 1772141427832,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 11756
+        },
+        "seq": 73
+      },
+      {
+        "ts": 1772141430264,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 74
+      },
+      {
+        "ts": 1772141430321,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 75
+      },
+      {
+        "ts": 1772141430364,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 76
+      },
+      {
+        "ts": 1772141430369,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 77
+      },
+      {
+        "ts": 1772141430403,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 78
+      },
+      {
+        "ts": 1772141430407,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 79
+      },
+      {
+        "ts": 1772141430664,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 12359
+        },
+        "seq": 80
+      },
+      {
+        "ts": 1772141431116,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 11326
+        },
+        "seq": 81
+      },
+      {
+        "ts": 1772141431137,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 852
+        },
+        "seq": 82
+      },
+      {
+        "ts": 1772141431147,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 874
+        },
+        "seq": 83
+      },
+      {
+        "ts": 1772141431147,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 604
+        },
+        "seq": 84
+      },
+      {
+        "ts": 1772141431161,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 4543
+        },
+        "seq": 85
+      },
+      {
+        "ts": 1772141431169,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 4553
+        },
+        "seq": 86
+      },
+      {
+        "ts": 1772141431182,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": null,
+          "latencyMs": 4556
+        },
+        "seq": 87
+      },
+      {
+        "ts": 1772141431184,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 351
+        },
+        "seq": 88
+      },
+      {
+        "ts": 1772141431986,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "o4-mini:standard",
+          "status": null,
+          "latencyMs": 4386
+        },
+        "seq": 89
+      },
+      {
+        "ts": 1772141431988,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1660
+        },
+        "seq": 90
+      },
+      {
+        "ts": 1772141432766,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1668
+        },
+        "seq": 91
+      },
+      {
+        "ts": 1772141432778,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 2465
+        },
+        "seq": 92
+      },
+      {
+        "ts": 1772141443784,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 12358
+        },
+        "seq": 93
+      },
+      {
+        "ts": 1772141445229,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "o3:standard",
+          "status": null,
+          "latencyMs": 11326
+        },
+        "seq": 94
+      },
+      {
+        "ts": 1772141445262,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 1,
+          "latencyMs": null
+        },
+        "seq": 95
+      },
+      {
+        "ts": 1772141445278,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": 200,
+          "latencyMs": 13852
+        },
+        "seq": 96
+      },
+      {
+        "ts": 1772141445304,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 97
+      },
+      {
+        "ts": 1772141445319,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-4o-mini:standard",
+          "status": null,
+          "latencyMs": 11757
+        },
+        "seq": 98
+      },
+      {
+        "ts": 1772141445392,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 99
+      },
+      {
+        "ts": 1772141445459,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 100
+      },
+      {
+        "ts": 1772141445469,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 101
+      },
+      {
+        "ts": 1772141445522,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 102
+      },
+      {
+        "ts": 1772141445527,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 103
+      },
+      {
+        "ts": 1772141445831,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 13052
+        },
+        "seq": 104
+      },
+      {
+        "ts": 1772141445850,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 13084
+        },
+        "seq": 105
+      },
+      {
+        "ts": 1772141445872,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 503
+        },
+        "seq": 106
+      },
+      {
+        "ts": 1772141445895,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 558
+        },
+        "seq": 107
+      },
+      {
+        "ts": 1772141445902,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 580
+        },
+        "seq": 108
+      },
+      {
+        "ts": 1772141445903,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 492
+        },
+        "seq": 109
+      },
+      {
+        "ts": 1772141445909,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 510
+        },
+        "seq": 110
+      },
+      {
+        "ts": 1772141445910,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 661
+        },
+        "seq": 111
+      },
+      {
+        "ts": 1772141445918,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 549
+        },
+        "seq": 112
+      },
+      {
+        "ts": 1772141460246,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 14253
+        },
+        "seq": 113
+      },
+      {
+        "ts": 1772141460293,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 114
+      },
+      {
+        "ts": 1772141460295,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 115
+      },
+      {
+        "ts": 1772141460332,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 116
+      },
+      {
+        "ts": 1772141460335,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 117
+      },
+      {
+        "ts": 1772141460341,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 118
+      },
+      {
+        "ts": 1772141460344,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 119
+      },
+      {
+        "ts": 1772141460639,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 14602
+        },
+        "seq": 120
+      },
+      {
+        "ts": 1772141461099,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 793
+        },
+        "seq": 121
+      },
+      {
+        "ts": 1772141461130,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 806
+        },
+        "seq": 122
+      },
+      {
+        "ts": 1772141461132,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 645
+        },
+        "seq": 123
+      },
+      {
+        "ts": 1772141461154,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 869
+        },
+        "seq": 124
+      },
+      {
+        "ts": 1772141461156,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-5:standard",
+          "status": null,
+          "latencyMs": 13054
+        },
+        "seq": 125
+      },
+      {
+        "ts": 1772141461157,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 14982
+        },
+        "seq": 126
+      },
+      {
+        "ts": 1772141461183,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 297
+        },
+        "seq": 127
+      },
+      {
+        "ts": 1772141461201,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "o4-mini:standard",
+          "status": null,
+          "latencyMs": 505
+        },
+        "seq": 128
+      },
+      {
+        "ts": 1772141461203,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 896
+        },
+        "seq": 129
+      },
+      {
+        "ts": 1772141461497,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 909
+        },
+        "seq": 130
+      },
+      {
+        "ts": 1772141465750,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 5463
+        },
+        "seq": 131
+      },
+      {
+        "ts": 1772141473714,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 12514
+        },
+        "seq": 132
+      },
+      {
+        "ts": 1772141474007,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 12698
+        },
+        "seq": 133
+      },
+      {
+        "ts": 1772141475297,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "o3:standard",
+          "status": null,
+          "latencyMs": 13085
+        },
+        "seq": 134
+      },
+      {
+        "ts": 1772141475319,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 2,
+          "latencyMs": null
+        },
+        "seq": 135
+      },
+      {
+        "ts": 1772141475344,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 9590
+        },
+        "seq": 136
+      },
+      {
+        "ts": 1772141475358,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 137
+      },
+      {
+        "ts": 1772141475390,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 31356173,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 138
+      },
+      {
+        "ts": 1772141475448,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 139
+      },
+      {
+        "ts": 1772141475452,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 140
+      },
+      {
+        "ts": 1772141475527,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 141
+      },
+      {
+        "ts": 1772141475529,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 1525
+        },
+        "seq": 142
+      },
+      {
+        "ts": 1772141475541,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 143
+      },
+      {
+        "ts": 1772141475551,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 180
+        },
+        "seq": 144
+      },
+      {
+        "ts": 1772141475554,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 153
+        },
+        "seq": 145
+      },
+      {
+        "ts": 1772141475561,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 194
+        },
+        "seq": 146
+      },
+      {
+        "ts": 1772141475564,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 163
+        },
+        "seq": 147
+      },
+      {
+        "ts": 1772141475572,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 230
+        },
+        "seq": 148
+      },
+      {
+        "ts": 1772141475574,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 190
+        },
+        "seq": 149
+      }
+    ]
+  },
+  "report": {
+    "ok": true,
+    "tabId": 0,
+    "report": {
+      "kind": "nt_test_report",
+      "exportedAt": 1772141482250,
+      "tabId": 0,
+      "activeJobId": null,
+      "lastJobId": null,
+      "job": null,
+      "agent": {
+        "checklist": [],
+        "reports": [],
+        "toolExecutionTrace": [],
+        "patchHistory": [],
+        "recentDiffItems": []
+      },
+      "logs": [
+        {
+          "ts": 1772141385723,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "UI hello",
+          "meta": {
+            "source": "debug",
+            "tabId": null,
+            "requestId": null,
+            "stage": "hello",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 1
+        },
+        {
+          "ts": 1772141385773,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "UI subscribed",
+          "meta": {
+            "source": "debug",
+            "tabId": null,
+            "requestId": null,
+            "stage": "subscribe",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 2
+        },
+        {
+          "ts": 1772141385815,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Создан alarm nt.tick",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 3
+        },
+        {
+          "ts": 1772141385816,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 4
+        },
+        {
+          "ts": 1772141385911,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 5
+        },
+        {
+          "ts": 1772141385919,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 6
+        },
+        {
+          "ts": 1772141385919,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Фоновый сервис запущен",
+          "meta": {
+            "source": "background",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 7
+        },
+        {
+          "ts": 1772141386033,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 8
+        },
+        {
+          "ts": 1772141386049,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 9
+        },
+        {
+          "ts": 1772141386162,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 10
+        },
+        {
+          "ts": 1772141386217,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 11
+        },
+        {
+          "ts": 1772141386294,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 12
+        },
+        {
+          "ts": 1772141386308,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 13
+        },
+        {
+          "ts": 1772141386371,
+          "level": "info",
+          "tag": "translation.start",
+          "message": "Р вЂ”Р В°Р Т‘Р В°РЎвЂЎР В° Р С—Р ВµРЎР‚Р ВµР Р†Р С•Р Т‘Р В° Р В·Р В°Р С—РЎС“РЎвЂ°Р ВµР Р…Р В°",
+          "meta": {
+            "source": "bg",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": "preparing",
+            "latencyMs": null
+          },
+          "seq": 14
+        },
+        {
+          "ts": 1772141386419,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 15
+        },
+        {
+          "ts": 1772141386513,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 16
+        },
+        {
+          "ts": 1772141386714,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 17
+        },
+        {
+          "ts": 1772141386715,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 18
+        },
+        {
+          "ts": 1772141386998,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 19
+        },
+        {
+          "ts": 1772141387000,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 20
+        },
+        {
+          "ts": 1772141387276,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 21
+        },
+        {
+          "ts": 1772141387277,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 22
+        },
+        {
+          "ts": 1772141387590,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 23
+        },
+        {
+          "ts": 1772141387591,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 24
+        },
+        {
+          "ts": 1772141400517,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick prebench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": null,
+            "status": 4,
+            "latencyMs": null
+          },
+          "seq": 25
+        },
+        {
+          "ts": 1772141400523,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 6,
+            "latencyMs": null
+          },
+          "seq": 26
+        },
+        {
+          "ts": 1772141400530,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick prebench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": null,
+            "status": 4,
+            "latencyMs": null
+          },
+          "seq": 27
+        },
+        {
+          "ts": 1772141400538,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 5,
+            "latencyMs": null
+          },
+          "seq": 28
+        },
+        {
+          "ts": 1772141400978,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": 200,
+            "latencyMs": 457
+          },
+          "seq": 29
+        },
+        {
+          "ts": 1772141400981,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick bench sample recorded",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": null,
+            "latencyMs": 457
+          },
+          "seq": 30
+        },
+        {
+          "ts": 1772141400985,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": 200,
+            "latencyMs": 455
+          },
+          "seq": 31
+        },
+        {
+          "ts": 1772141400998,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 455
+          },
+          "seq": 32
+        },
+        {
+          "ts": 1772141401006,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 472
+          },
+          "seq": 33
+        },
+        {
+          "ts": 1772141401008,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick bench sample recorded",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": null,
+            "latencyMs": 472
+          },
+          "seq": 34
+        },
+        {
+          "ts": 1772141401035,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 49
+          },
+          "seq": 35
+        },
+        {
+          "ts": 1772141401038,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick bench sample recorded",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": "o4-mini:standard",
+            "status": null,
+            "latencyMs": 50
+          },
+          "seq": 36
+        },
+        {
+          "ts": 1772141401039,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick prebench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": null,
+            "status": 4,
+            "latencyMs": null
+          },
+          "seq": 37
+        },
+        {
+          "ts": 1772141401046,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 38
+        },
+        {
+          "ts": 1772141401068,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 56
+          },
+          "seq": 39
+        },
+        {
+          "ts": 1772141401071,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick bench sample recorded",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": "gpt-5:standard",
+            "status": null,
+            "latencyMs": 56
+          },
+          "seq": 40
+        },
+        {
+          "ts": 1772141401071,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Quick prebench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "quick",
+            "modelSpec": null,
+            "status": 4,
+            "latencyMs": null
+          },
+          "seq": 41
+        },
+        {
+          "ts": 1772141401076,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 42
+        },
+        {
+          "ts": 1772141401105,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "throughput_bench",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": 200,
+            "latencyMs": 62
+          },
+          "seq": 43
+        },
+        {
+          "ts": 1772141401110,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "Throughput calibration sample",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "throughput",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": null,
+            "latencyMs": 63
+          },
+          "seq": 44
+        },
+        {
+          "ts": 1772141401118,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 66
+          },
+          "seq": 45
+        },
+        {
+          "ts": 1772141401122,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 72
+          },
+          "seq": 46
+        },
+        {
+          "ts": 1772141401128,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 661
+          },
+          "seq": 47
+        },
+        {
+          "ts": 1772141401136,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 55
+          },
+          "seq": 48
+        },
+        {
+          "ts": 1772141401360,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 59
+          },
+          "seq": 49
+        },
+        {
+          "ts": 1772141402600,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 2107
+          },
+          "seq": 50
+        },
+        {
+          "ts": 1772141407390,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "throughput_bench",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 6279
+          },
+          "seq": 51
+        },
+        {
+          "ts": 1772141408199,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "Throughput calibration sample",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "throughput",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": null,
+            "latencyMs": 6279
+          },
+          "seq": 52
+        },
+        {
+          "ts": 1772141410873,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 9640
+          },
+          "seq": 53
+        },
+        {
+          "ts": 1772141413137,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": 200,
+            "latencyMs": 11778
+          },
+          "seq": 54
+        },
+        {
+          "ts": 1772141413212,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 55
+        },
+        {
+          "ts": 1772141413245,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 56
+        },
+        {
+          "ts": 1772141413323,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 2,
+            "latencyMs": null
+          },
+          "seq": 57
+        },
+        {
+          "ts": 1772141413364,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 1,
+            "latencyMs": null
+          },
+          "seq": 58
+        },
+        {
+          "ts": 1772141413747,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 2519
+          },
+          "seq": 59
+        },
+        {
+          "ts": 1772141413757,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": null,
+            "latencyMs": 2521
+          },
+          "seq": 60
+        },
+        {
+          "ts": 1772141414347,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1120
+          },
+          "seq": 61
+        },
+        {
+          "ts": 1772141414352,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1133
+          },
+          "seq": 62
+        },
+        {
+          "ts": 1772141414368,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 1187
+          },
+          "seq": 63
+        },
+        {
+          "ts": 1772141414375,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 1027
+          },
+          "seq": 64
+        },
+        {
+          "ts": 1772141414677,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": 200,
+            "latencyMs": 1211
+          },
+          "seq": 65
+        },
+        {
+          "ts": 1772141416054,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-5-mini:standard",
+            "status": null,
+            "latencyMs": 1212
+          },
+          "seq": 66
+        },
+        {
+          "ts": 1772141416057,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 2801
+          },
+          "seq": 67
+        },
+        {
+          "ts": 1772141416063,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 2812
+          },
+          "seq": 68
+        },
+        {
+          "ts": 1772141416076,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 2850
+          },
+          "seq": 69
+        },
+        {
+          "ts": 1772141418153,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 4384
+          },
+          "seq": 70
+        },
+        {
+          "ts": 1772141419566,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 6175
+          },
+          "seq": 71
+        },
+        {
+          "ts": 1772141426266,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 11727
+          },
+          "seq": 72
+        },
+        {
+          "ts": 1772141427832,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 11756
+          },
+          "seq": 73
+        },
+        {
+          "ts": 1772141430264,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 74
+        },
+        {
+          "ts": 1772141430321,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 75
+        },
+        {
+          "ts": 1772141430364,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 76
+        },
+        {
+          "ts": 1772141430369,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 77
+        },
+        {
+          "ts": 1772141430403,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 78
+        },
+        {
+          "ts": 1772141430407,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 79
+        },
+        {
+          "ts": 1772141430664,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 12359
+          },
+          "seq": 80
+        },
+        {
+          "ts": 1772141431116,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 11326
+          },
+          "seq": 81
+        },
+        {
+          "ts": 1772141431137,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 852
+          },
+          "seq": 82
+        },
+        {
+          "ts": 1772141431147,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 874
+          },
+          "seq": 83
+        },
+        {
+          "ts": 1772141431147,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 604
+          },
+          "seq": 84
+        },
+        {
+          "ts": 1772141431161,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 4543
+          },
+          "seq": 85
+        },
+        {
+          "ts": 1772141431169,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 4553
+          },
+          "seq": 86
+        },
+        {
+          "ts": 1772141431182,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": null,
+            "latencyMs": 4556
+          },
+          "seq": 87
+        },
+        {
+          "ts": 1772141431184,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 351
+          },
+          "seq": 88
+        },
+        {
+          "ts": 1772141431986,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "o4-mini:standard",
+            "status": null,
+            "latencyMs": 4386
+          },
+          "seq": 89
+        },
+        {
+          "ts": 1772141431988,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1660
+          },
+          "seq": 90
+        },
+        {
+          "ts": 1772141432766,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1668
+          },
+          "seq": 91
+        },
+        {
+          "ts": 1772141432778,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 2465
+          },
+          "seq": 92
+        },
+        {
+          "ts": 1772141443784,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 12358
+          },
+          "seq": 93
+        },
+        {
+          "ts": 1772141445229,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "o3:standard",
+            "status": null,
+            "latencyMs": 11326
+          },
+          "seq": 94
+        },
+        {
+          "ts": 1772141445262,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 1,
+            "latencyMs": null
+          },
+          "seq": 95
+        },
+        {
+          "ts": 1772141445278,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": 200,
+            "latencyMs": 13852
+          },
+          "seq": 96
+        },
+        {
+          "ts": 1772141445304,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 97
+        },
+        {
+          "ts": 1772141445319,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-4o-mini:standard",
+            "status": null,
+            "latencyMs": 11757
+          },
+          "seq": 98
+        },
+        {
+          "ts": 1772141445392,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 99
+        },
+        {
+          "ts": 1772141445459,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 100
+        },
+        {
+          "ts": 1772141445469,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 101
+        },
+        {
+          "ts": 1772141445522,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 102
+        },
+        {
+          "ts": 1772141445527,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 103
+        },
+        {
+          "ts": 1772141445831,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 13052
+          },
+          "seq": 104
+        },
+        {
+          "ts": 1772141445850,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 13084
+          },
+          "seq": 105
+        },
+        {
+          "ts": 1772141445872,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 503
+          },
+          "seq": 106
+        },
+        {
+          "ts": 1772141445895,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 558
+          },
+          "seq": 107
+        },
+        {
+          "ts": 1772141445902,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 580
+          },
+          "seq": 108
+        },
+        {
+          "ts": 1772141445903,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 492
+          },
+          "seq": 109
+        },
+        {
+          "ts": 1772141445909,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 510
+          },
+          "seq": 110
+        },
+        {
+          "ts": 1772141445910,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 661
+          },
+          "seq": 111
+        },
+        {
+          "ts": 1772141445918,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 549
+          },
+          "seq": 112
+        },
+        {
+          "ts": 1772141460246,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 14253
+          },
+          "seq": 113
+        },
+        {
+          "ts": 1772141460293,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 114
+        },
+        {
+          "ts": 1772141460295,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 115
+        },
+        {
+          "ts": 1772141460332,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 116
+        },
+        {
+          "ts": 1772141460335,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 117
+        },
+        {
+          "ts": 1772141460341,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 118
+        },
+        {
+          "ts": 1772141460344,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 119
+        },
+        {
+          "ts": 1772141460639,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 14602
+          },
+          "seq": 120
+        },
+        {
+          "ts": 1772141461099,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 793
+          },
+          "seq": 121
+        },
+        {
+          "ts": 1772141461130,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 806
+          },
+          "seq": 122
+        },
+        {
+          "ts": 1772141461132,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 645
+          },
+          "seq": 123
+        },
+        {
+          "ts": 1772141461154,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 869
+          },
+          "seq": 124
+        },
+        {
+          "ts": 1772141461156,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-5:standard",
+            "status": null,
+            "latencyMs": 13054
+          },
+          "seq": 125
+        },
+        {
+          "ts": 1772141461157,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 14982
+          },
+          "seq": 126
+        },
+        {
+          "ts": 1772141461183,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 297
+          },
+          "seq": 127
+        },
+        {
+          "ts": 1772141461201,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "o4-mini:standard",
+            "status": null,
+            "latencyMs": 505
+          },
+          "seq": 128
+        },
+        {
+          "ts": 1772141461203,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 896
+          },
+          "seq": 129
+        },
+        {
+          "ts": 1772141461497,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 909
+          },
+          "seq": 130
+        },
+        {
+          "ts": 1772141465750,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 5463
+          },
+          "seq": 131
+        },
+        {
+          "ts": 1772141473714,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 12514
+          },
+          "seq": 132
+        },
+        {
+          "ts": 1772141474007,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 12698
+          },
+          "seq": 133
+        },
+        {
+          "ts": 1772141475297,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "o3:standard",
+            "status": null,
+            "latencyMs": 13085
+          },
+          "seq": 134
+        },
+        {
+          "ts": 1772141475319,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 2,
+            "latencyMs": null
+          },
+          "seq": 135
+        },
+        {
+          "ts": 1772141475344,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 9590
+          },
+          "seq": 136
+        },
+        {
+          "ts": 1772141475358,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 137
+        },
+        {
+          "ts": 1772141475390,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 31356173,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 138
+        },
+        {
+          "ts": 1772141475448,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 139
+        },
+        {
+          "ts": 1772141475452,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 140
+        },
+        {
+          "ts": 1772141475527,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 141
+        },
+        {
+          "ts": 1772141475529,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 1525
+          },
+          "seq": 142
+        },
+        {
+          "ts": 1772141475541,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 143
+        },
+        {
+          "ts": 1772141475551,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 180
+          },
+          "seq": 144
+        },
+        {
+          "ts": 1772141475554,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 153
+          },
+          "seq": 145
+        },
+        {
+          "ts": 1772141475561,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 194
+          },
+          "seq": 146
+        },
+        {
+          "ts": 1772141475564,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 163
+          },
+          "seq": 147
+        },
+        {
+          "ts": 1772141475572,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 230
+          },
+          "seq": 148
+        },
+        {
+          "ts": 1772141475574,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 190
+          },
+          "seq": 149
+        }
+      ]
+    }
+  },
+  "summaryState": {
+    "hasJobsRoot": true,
+    "statusByTabKeys": [
+      "31356173"
+    ]
+  },
+  "mockStats": {
+    "totalRequests": 44,
+    "responsesRequests": 44,
+    "streamRequests": 0,
+    "nonStreamRequests": 44,
+    "toolRequests": 6,
+    "status429": 0,
+    "status5xx": 0,
+    "streamAborts": 0
+  },
+  "mockRecentRequests": [
+    {
+      "ts": 1772141386151,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141400967,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141400978,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141400986,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141400997,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141401025,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141401052,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141401096,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141401105,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141405405,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141408875,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141410552,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141413713,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141414323,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_9",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141414346,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141414369,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141416189,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141416742,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141424211,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141425876,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141430642,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141431098,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141431112,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_14",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141431128,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141431141,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141431157,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141442487,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141444914,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141445790,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141445809,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141445835,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141445855,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_23",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141460006,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141460613,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141461069,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_32",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141461084,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141461102,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141461133,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141471020,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141472812,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141474940,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141475483,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141475510,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_35",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141481366,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    }
+  ]
+}

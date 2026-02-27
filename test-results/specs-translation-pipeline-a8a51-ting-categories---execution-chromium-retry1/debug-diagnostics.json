@@ -1,0 +1,7449 @@
+{
+  "testMode": "mock",
+  "logs": {
+    "ok": true,
+    "seq": 365,
+    "logs": [
+      {
+        "ts": 1772141031301,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 166
+      },
+      {
+        "ts": 1772141031303,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 167
+      },
+      {
+        "ts": 1772141031408,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 436
+        },
+        "seq": 168
+      },
+      {
+        "ts": 1772141031437,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 169
+      },
+      {
+        "ts": 1772141031443,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 170
+      },
+      {
+        "ts": 1772141031448,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 171
+      },
+      {
+        "ts": 1772141031486,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 172
+      },
+      {
+        "ts": 1772141031600,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 266
+        },
+        "seq": 173
+      },
+      {
+        "ts": 1772141031603,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 269
+        },
+        "seq": 174
+      },
+      {
+        "ts": 1772141031611,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 300
+        },
+        "seq": 175
+      },
+      {
+        "ts": 1772141031615,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 300
+        },
+        "seq": 176
+      },
+      {
+        "ts": 1772141031632,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 363
+        },
+        "seq": 177
+      },
+      {
+        "ts": 1772141031636,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 365
+        },
+        "seq": 178
+      },
+      {
+        "ts": 1772141031832,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 350
+        },
+        "seq": 179
+      },
+      {
+        "ts": 1772141031863,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": null,
+          "latencyMs": 468
+        },
+        "seq": 180
+      },
+      {
+        "ts": 1772141032107,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-5:standard",
+          "status": 200,
+          "latencyMs": 518
+        },
+        "seq": 181
+      },
+      {
+        "ts": 1772141032162,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-5:standard",
+          "status": null,
+          "latencyMs": 438
+        },
+        "seq": 182
+      },
+      {
+        "ts": 1772141032580,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 618
+        },
+        "seq": 183
+      },
+      {
+        "ts": 1772141032908,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 686
+        },
+        "seq": 184
+      },
+      {
+        "ts": 1772141033113,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 185
+      },
+      {
+        "ts": 1772141033305,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 435
+        },
+        "seq": 186
+      },
+      {
+        "ts": 1772141033367,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 187
+      },
+      {
+        "ts": 1772141033380,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 188
+      },
+      {
+        "ts": 1772141033639,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 410
+        },
+        "seq": 189
+      },
+      {
+        "ts": 1772141033670,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 190
+      },
+      {
+        "ts": 1772141033735,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 191
+      },
+      {
+        "ts": 1772141033886,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 368
+        },
+        "seq": 192
+      },
+      {
+        "ts": 1772141033903,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "o3:standard",
+          "status": null,
+          "latencyMs": 437
+        },
+        "seq": 193
+      },
+      {
+        "ts": 1772141033928,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 5,
+          "latencyMs": null
+        },
+        "seq": 194
+      },
+      {
+        "ts": 1772141033934,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 195
+      },
+      {
+        "ts": 1772141034547,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": 200,
+          "latencyMs": 557
+        },
+        "seq": 196
+      },
+      {
+        "ts": 1772141034594,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 197
+      },
+      {
+        "ts": 1772141034615,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "gpt-4.1-mini:standard",
+          "status": null,
+          "latencyMs": 569
+        },
+        "seq": 198
+      },
+      {
+        "ts": 1772141034897,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 199
+      },
+      {
+        "ts": 1772141034931,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 200
+      },
+      {
+        "ts": 1772141035145,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 464
+        },
+        "seq": 201
+      },
+      {
+        "ts": 1772141035176,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 556
+        },
+        "seq": 202
+      },
+      {
+        "ts": 1772141035275,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 811
+        },
+        "seq": 203
+      },
+      {
+        "ts": 1772141035324,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 624
+        },
+        "seq": 204
+      },
+      {
+        "ts": 1772141035701,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 205
+      },
+      {
+        "ts": 1772141035715,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 206
+      },
+      {
+        "ts": 1772141036454,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 857
+        },
+        "seq": 207
+      },
+      {
+        "ts": 1772141037001,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 208
+      },
+      {
+        "ts": 1772141037363,
+        "level": "info",
+        "tag": "bench.sample",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "ping",
+          "modelSpec": "o3:standard",
+          "status": 200,
+          "latencyMs": 623
+        },
+        "seq": 209
+      },
+      {
+        "ts": 1772141037391,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench completed",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": "o3:standard",
+          "status": null,
+          "latencyMs": 630
+        },
+        "seq": 210
+      },
+      {
+        "ts": 1772141037420,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": 6,
+          "latencyMs": null
+        },
+        "seq": 211
+      },
+      {
+        "ts": 1772141037514,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 212
+      },
+      {
+        "ts": 1772141037538,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 213
+      },
+      {
+        "ts": 1772141037595,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 214
+      },
+      {
+        "ts": 1772141037601,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 215
+      },
+      {
+        "ts": 1772141037883,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 216
+      },
+      {
+        "ts": 1772141038176,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 217
+      },
+      {
+        "ts": 1772141038470,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1433
+        },
+        "seq": 218
+      },
+      {
+        "ts": 1772141038536,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1469
+        },
+        "seq": 219
+      },
+      {
+        "ts": 1772141038631,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 1684
+        },
+        "seq": 220
+      },
+      {
+        "ts": 1772141039270,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 221
+      },
+      {
+        "ts": 1772141039652,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 222
+      },
+      {
+        "ts": 1772141039662,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 223
+      },
+      {
+        "ts": 1772141041016,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 224
+      },
+      {
+        "ts": 1772141041021,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 225
+      },
+      {
+        "ts": 1772141042605,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 226
+      },
+      {
+        "ts": 1772141042623,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 227
+      },
+      {
+        "ts": 1772141044176,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 228
+      },
+      {
+        "ts": 1772141044257,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 229
+      },
+      {
+        "ts": 1772141044269,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 230
+      },
+      {
+        "ts": 1772141044364,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 231
+      },
+      {
+        "ts": 1772141044378,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 232
+      },
+      {
+        "ts": 1772141047114,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 2910
+        },
+        "seq": 233
+      },
+      {
+        "ts": 1772141047151,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 2942
+        },
+        "seq": 234
+      },
+      {
+        "ts": 1772141047174,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 3035
+        },
+        "seq": 235
+      },
+      {
+        "ts": 1772141048271,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 236
+      },
+      {
+        "ts": 1772141048279,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 237
+      },
+      {
+        "ts": 1772141048392,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 238
+      },
+      {
+        "ts": 1772141048436,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 239
+      },
+      {
+        "ts": 1772141048441,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 240
+      },
+      {
+        "ts": 1772141048787,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 241
+      },
+      {
+        "ts": 1772141049031,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 242
+      },
+      {
+        "ts": 1772141049136,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 728
+        },
+        "seq": 243
+      },
+      {
+        "ts": 1772141049164,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 746
+        },
+        "seq": 244
+      },
+      {
+        "ts": 1772141049237,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 858
+        },
+        "seq": 245
+      },
+      {
+        "ts": 1772141050072,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 246
+      },
+      {
+        "ts": 1772141050408,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 247
+      },
+      {
+        "ts": 1772141050424,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 248
+      },
+      {
+        "ts": 1772141051423,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 249
+      },
+      {
+        "ts": 1772141051435,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 250
+      },
+      {
+        "ts": 1772141052174,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 251
+      },
+      {
+        "ts": 1772141052178,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 252
+      },
+      {
+        "ts": 1772141053111,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 253
+      },
+      {
+        "ts": 1772141053120,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 254
+      },
+      {
+        "ts": 1772141054451,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 255
+      },
+      {
+        "ts": 1772141054741,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 256
+      },
+      {
+        "ts": 1772141054756,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 257
+      },
+      {
+        "ts": 1772141054858,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 258
+      },
+      {
+        "ts": 1772141054865,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 259
+      },
+      {
+        "ts": 1772141054955,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 466
+        },
+        "seq": 260
+      },
+      {
+        "ts": 1772141054974,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 503
+        },
+        "seq": 261
+      },
+      {
+        "ts": 1772141055010,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 606
+        },
+        "seq": 262
+      },
+      {
+        "ts": 1772141056887,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 263
+      },
+      {
+        "ts": 1772141056896,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 264
+      },
+      {
+        "ts": 1772141057063,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 265
+      },
+      {
+        "ts": 1772141057155,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 266
+      },
+      {
+        "ts": 1772141057161,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 267
+      },
+      {
+        "ts": 1772141057554,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 268
+      },
+      {
+        "ts": 1772141057793,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 269
+      },
+      {
+        "ts": 1772141058037,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 270
+      },
+      {
+        "ts": 1772141058106,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1017
+        },
+        "seq": 271
+      },
+      {
+        "ts": 1772141058146,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1042
+        },
+        "seq": 272
+      },
+      {
+        "ts": 1772141058200,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 1156
+        },
+        "seq": 273
+      },
+      {
+        "ts": 1772141058861,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 274
+      },
+      {
+        "ts": 1772141059814,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 275
+      },
+      {
+        "ts": 1772141059825,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 276
+      },
+      {
+        "ts": 1772141060559,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 277
+      },
+      {
+        "ts": 1772141060567,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 278
+      },
+      {
+        "ts": 1772141061331,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 279
+      },
+      {
+        "ts": 1772141061339,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 280
+      },
+      {
+        "ts": 1772141062822,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 281
+      },
+      {
+        "ts": 1772141062833,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 282
+      },
+      {
+        "ts": 1772141063130,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 283
+      },
+      {
+        "ts": 1772141063353,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 284
+      },
+      {
+        "ts": 1772141063365,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 285
+      },
+      {
+        "ts": 1772141063555,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 407
+        },
+        "seq": 286
+      },
+      {
+        "ts": 1772141063593,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 429
+        },
+        "seq": 287
+      },
+      {
+        "ts": 1772141063619,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 497
+        },
+        "seq": 288
+      },
+      {
+        "ts": 1772141064017,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 289
+      },
+      {
+        "ts": 1772141064028,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 290
+      },
+      {
+        "ts": 1772141064569,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 291
+      },
+      {
+        "ts": 1772141064753,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 292
+      },
+      {
+        "ts": 1772141064769,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 293
+      },
+      {
+        "ts": 1772141065096,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 294
+      },
+      {
+        "ts": 1772141065199,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 295
+      },
+      {
+        "ts": 1772141065344,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 296
+      },
+      {
+        "ts": 1772141065543,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 297
+      },
+      {
+        "ts": 1772141065635,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1044
+        },
+        "seq": 298
+      },
+      {
+        "ts": 1772141065662,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1066
+        },
+        "seq": 299
+      },
+      {
+        "ts": 1772141065752,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 1214
+        },
+        "seq": 300
+      },
+      {
+        "ts": 1772141066379,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 301
+      },
+      {
+        "ts": 1772141067265,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 302
+      },
+      {
+        "ts": 1772141067278,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 303
+      },
+      {
+        "ts": 1772141067997,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 304
+      },
+      {
+        "ts": 1772141068003,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 305
+      },
+      {
+        "ts": 1772141068760,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 306
+      },
+      {
+        "ts": 1772141068765,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 307
+      },
+      {
+        "ts": 1772141070005,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 308
+      },
+      {
+        "ts": 1772141070015,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 309
+      },
+      {
+        "ts": 1772141070247,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 310
+      },
+      {
+        "ts": 1772141070413,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 311
+      },
+      {
+        "ts": 1772141070423,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 312
+      },
+      {
+        "ts": 1772141070628,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 354
+        },
+        "seq": 313
+      },
+      {
+        "ts": 1772141070664,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 383
+        },
+        "seq": 314
+      },
+      {
+        "ts": 1772141070714,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 482
+        },
+        "seq": 315
+      },
+      {
+        "ts": 1772141071245,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 316
+      },
+      {
+        "ts": 1772141071253,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 317
+      },
+      {
+        "ts": 1772141071729,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 318
+      },
+      {
+        "ts": 1772141071945,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 319
+      },
+      {
+        "ts": 1772141071960,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 320
+      },
+      {
+        "ts": 1772141072358,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 321
+      },
+      {
+        "ts": 1772141072426,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 322
+      },
+      {
+        "ts": 1772141072616,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 323
+      },
+      {
+        "ts": 1772141072949,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1190
+        },
+        "seq": 324
+      },
+      {
+        "ts": 1772141072988,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1219
+        },
+        "seq": 325
+      },
+      {
+        "ts": 1772141073035,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 1401
+        },
+        "seq": 326
+      },
+      {
+        "ts": 1772141073584,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 327
+      },
+      {
+        "ts": 1772141074301,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 328
+      },
+      {
+        "ts": 1772141074308,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 329
+      },
+      {
+        "ts": 1772141075058,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 330
+      },
+      {
+        "ts": 1772141075065,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 331
+      },
+      {
+        "ts": 1772141075790,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 332
+      },
+      {
+        "ts": 1772141075801,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 333
+      },
+      {
+        "ts": 1772141076959,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 334
+      },
+      {
+        "ts": 1772141076969,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 335
+      },
+      {
+        "ts": 1772141078338,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 336
+      },
+      {
+        "ts": 1772141078345,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 337
+      },
+      {
+        "ts": 1772141078456,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 338
+      },
+      {
+        "ts": 1772141078503,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 339
+      },
+      {
+        "ts": 1772141078507,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 340
+      },
+      {
+        "ts": 1772141078657,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 179
+        },
+        "seq": 341
+      },
+      {
+        "ts": 1772141078675,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 200
+        },
+        "seq": 342
+      },
+      {
+        "ts": 1772141078706,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 265
+        },
+        "seq": 343
+      },
+      {
+        "ts": 1772141081946,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 344
+      },
+      {
+        "ts": 1772141081956,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 345
+      },
+      {
+        "ts": 1772141082448,
+        "level": "info",
+        "tag": "ai.choose",
+        "message": "model selected",
+        "meta": {
+          "source": "ai",
+          "tabId": 1308774576,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 346
+      },
+      {
+        "ts": 1772141082638,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench started",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 347
+      },
+      {
+        "ts": 1772141082655,
+        "level": "info",
+        "tag": "bg.error",
+        "message": "Bench finished",
+        "meta": {
+          "source": "bench",
+          "tabId": null,
+          "requestId": null,
+          "stage": "auto",
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 348
+      },
+      {
+        "ts": 1772141083059,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 349
+      },
+      {
+        "ts": 1772141083129,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 350
+      },
+      {
+        "ts": 1772141083638,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 351
+      },
+      {
+        "ts": 1772141083686,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": "request",
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1215
+        },
+        "seq": 352
+      },
+      {
+        "ts": 1772141083741,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "response metrics",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": "o4-mini:standard",
+          "status": 200,
+          "latencyMs": 1243
+        },
+        "seq": 353
+      },
+      {
+        "ts": 1772141083798,
+        "level": "info",
+        "tag": "ai.response",
+        "message": "LLM ok",
+        "meta": {
+          "source": "ai",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": 200,
+          "latencyMs": 1441
+        },
+        "seq": 354
+      },
+      {
+        "ts": 1772141084366,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 355
+      },
+      {
+        "ts": 1772141085189,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 356
+      },
+      {
+        "ts": 1772141085211,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 357
+      },
+      {
+        "ts": 1772141086271,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 358
+      },
+      {
+        "ts": 1772141086278,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 359
+      },
+      {
+        "ts": 1772141087372,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 360
+      },
+      {
+        "ts": 1772141087384,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 361
+      },
+      {
+        "ts": 1772141088962,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 362
+      },
+      {
+        "ts": 1772141088980,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 363
+      },
+      {
+        "ts": 1772141089972,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Scheduler tick завершён",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 364
+      },
+      {
+        "ts": 1772141089983,
+        "level": "info",
+        "tag": "bg.start",
+        "message": "Запланирован wake alarm",
+        "meta": {
+          "source": "bg",
+          "tabId": null,
+          "requestId": null,
+          "stage": null,
+          "modelSpec": null,
+          "status": null,
+          "latencyMs": null
+        },
+        "seq": 365
+      }
+    ]
+  },
+  "report": {
+    "ok": true,
+    "tabId": 0,
+    "report": {
+      "kind": "nt_test_report",
+      "exportedAt": 1772141090342,
+      "tabId": 0,
+      "activeJobId": null,
+      "lastJobId": null,
+      "job": null,
+      "agent": {
+        "checklist": [],
+        "reports": [],
+        "toolExecutionTrace": [],
+        "patchHistory": [],
+        "recentDiffItems": []
+      },
+      "logs": [
+        {
+          "ts": 1772141031303,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 167
+        },
+        {
+          "ts": 1772141031408,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 436
+          },
+          "seq": 168
+        },
+        {
+          "ts": 1772141031437,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 169
+        },
+        {
+          "ts": 1772141031443,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 170
+        },
+        {
+          "ts": 1772141031448,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 171
+        },
+        {
+          "ts": 1772141031486,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 172
+        },
+        {
+          "ts": 1772141031600,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 266
+          },
+          "seq": 173
+        },
+        {
+          "ts": 1772141031603,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 269
+          },
+          "seq": 174
+        },
+        {
+          "ts": 1772141031611,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 300
+          },
+          "seq": 175
+        },
+        {
+          "ts": 1772141031615,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 300
+          },
+          "seq": 176
+        },
+        {
+          "ts": 1772141031632,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 363
+          },
+          "seq": 177
+        },
+        {
+          "ts": 1772141031636,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 365
+          },
+          "seq": 178
+        },
+        {
+          "ts": 1772141031832,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 350
+          },
+          "seq": 179
+        },
+        {
+          "ts": 1772141031863,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": null,
+            "latencyMs": 468
+          },
+          "seq": 180
+        },
+        {
+          "ts": 1772141032107,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-5:standard",
+            "status": 200,
+            "latencyMs": 518
+          },
+          "seq": 181
+        },
+        {
+          "ts": 1772141032162,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-5:standard",
+            "status": null,
+            "latencyMs": 438
+          },
+          "seq": 182
+        },
+        {
+          "ts": 1772141032580,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 618
+          },
+          "seq": 183
+        },
+        {
+          "ts": 1772141032908,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 686
+          },
+          "seq": 184
+        },
+        {
+          "ts": 1772141033113,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 185
+        },
+        {
+          "ts": 1772141033305,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 435
+          },
+          "seq": 186
+        },
+        {
+          "ts": 1772141033367,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 187
+        },
+        {
+          "ts": 1772141033380,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 188
+        },
+        {
+          "ts": 1772141033639,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 410
+          },
+          "seq": 189
+        },
+        {
+          "ts": 1772141033670,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 190
+        },
+        {
+          "ts": 1772141033735,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 191
+        },
+        {
+          "ts": 1772141033886,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 368
+          },
+          "seq": 192
+        },
+        {
+          "ts": 1772141033903,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "o3:standard",
+            "status": null,
+            "latencyMs": 437
+          },
+          "seq": 193
+        },
+        {
+          "ts": 1772141033928,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 5,
+            "latencyMs": null
+          },
+          "seq": 194
+        },
+        {
+          "ts": 1772141033934,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 195
+        },
+        {
+          "ts": 1772141034547,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": 200,
+            "latencyMs": 557
+          },
+          "seq": 196
+        },
+        {
+          "ts": 1772141034594,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 197
+        },
+        {
+          "ts": 1772141034615,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "gpt-4.1-mini:standard",
+            "status": null,
+            "latencyMs": 569
+          },
+          "seq": 198
+        },
+        {
+          "ts": 1772141034897,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 199
+        },
+        {
+          "ts": 1772141034931,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 200
+        },
+        {
+          "ts": 1772141035145,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 464
+          },
+          "seq": 201
+        },
+        {
+          "ts": 1772141035176,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 556
+          },
+          "seq": 202
+        },
+        {
+          "ts": 1772141035275,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 811
+          },
+          "seq": 203
+        },
+        {
+          "ts": 1772141035324,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 624
+          },
+          "seq": 204
+        },
+        {
+          "ts": 1772141035701,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 205
+        },
+        {
+          "ts": 1772141035715,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 206
+        },
+        {
+          "ts": 1772141036454,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 857
+          },
+          "seq": 207
+        },
+        {
+          "ts": 1772141037001,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 208
+        },
+        {
+          "ts": 1772141037363,
+          "level": "info",
+          "tag": "bench.sample",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "ping",
+            "modelSpec": "o3:standard",
+            "status": 200,
+            "latencyMs": 623
+          },
+          "seq": 209
+        },
+        {
+          "ts": 1772141037391,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench completed",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": "o3:standard",
+            "status": null,
+            "latencyMs": 630
+          },
+          "seq": 210
+        },
+        {
+          "ts": 1772141037420,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": 6,
+            "latencyMs": null
+          },
+          "seq": 211
+        },
+        {
+          "ts": 1772141037514,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 212
+        },
+        {
+          "ts": 1772141037538,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 213
+        },
+        {
+          "ts": 1772141037595,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 214
+        },
+        {
+          "ts": 1772141037601,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 215
+        },
+        {
+          "ts": 1772141037883,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 216
+        },
+        {
+          "ts": 1772141038176,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 217
+        },
+        {
+          "ts": 1772141038470,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1433
+          },
+          "seq": 218
+        },
+        {
+          "ts": 1772141038536,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1469
+          },
+          "seq": 219
+        },
+        {
+          "ts": 1772141038631,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 1684
+          },
+          "seq": 220
+        },
+        {
+          "ts": 1772141039270,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 221
+        },
+        {
+          "ts": 1772141039652,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 222
+        },
+        {
+          "ts": 1772141039662,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 223
+        },
+        {
+          "ts": 1772141041016,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 224
+        },
+        {
+          "ts": 1772141041021,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 225
+        },
+        {
+          "ts": 1772141042605,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 226
+        },
+        {
+          "ts": 1772141042623,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 227
+        },
+        {
+          "ts": 1772141044176,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 228
+        },
+        {
+          "ts": 1772141044257,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 229
+        },
+        {
+          "ts": 1772141044269,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 230
+        },
+        {
+          "ts": 1772141044364,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 231
+        },
+        {
+          "ts": 1772141044378,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 232
+        },
+        {
+          "ts": 1772141047114,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 2910
+          },
+          "seq": 233
+        },
+        {
+          "ts": 1772141047151,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 2942
+          },
+          "seq": 234
+        },
+        {
+          "ts": 1772141047174,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 3035
+          },
+          "seq": 235
+        },
+        {
+          "ts": 1772141048271,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 236
+        },
+        {
+          "ts": 1772141048279,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 237
+        },
+        {
+          "ts": 1772141048392,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 238
+        },
+        {
+          "ts": 1772141048436,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 239
+        },
+        {
+          "ts": 1772141048441,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 240
+        },
+        {
+          "ts": 1772141048787,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 241
+        },
+        {
+          "ts": 1772141049031,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 242
+        },
+        {
+          "ts": 1772141049136,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 728
+          },
+          "seq": 243
+        },
+        {
+          "ts": 1772141049164,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 746
+          },
+          "seq": 244
+        },
+        {
+          "ts": 1772141049237,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 858
+          },
+          "seq": 245
+        },
+        {
+          "ts": 1772141050072,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 246
+        },
+        {
+          "ts": 1772141050408,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 247
+        },
+        {
+          "ts": 1772141050424,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 248
+        },
+        {
+          "ts": 1772141051423,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 249
+        },
+        {
+          "ts": 1772141051435,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 250
+        },
+        {
+          "ts": 1772141052174,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 251
+        },
+        {
+          "ts": 1772141052178,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 252
+        },
+        {
+          "ts": 1772141053111,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 253
+        },
+        {
+          "ts": 1772141053120,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 254
+        },
+        {
+          "ts": 1772141054451,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 255
+        },
+        {
+          "ts": 1772141054741,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 256
+        },
+        {
+          "ts": 1772141054756,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 257
+        },
+        {
+          "ts": 1772141054858,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 258
+        },
+        {
+          "ts": 1772141054865,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 259
+        },
+        {
+          "ts": 1772141054955,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 466
+          },
+          "seq": 260
+        },
+        {
+          "ts": 1772141054974,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 503
+          },
+          "seq": 261
+        },
+        {
+          "ts": 1772141055010,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 606
+          },
+          "seq": 262
+        },
+        {
+          "ts": 1772141056887,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 263
+        },
+        {
+          "ts": 1772141056896,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 264
+        },
+        {
+          "ts": 1772141057063,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 265
+        },
+        {
+          "ts": 1772141057155,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 266
+        },
+        {
+          "ts": 1772141057161,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 267
+        },
+        {
+          "ts": 1772141057554,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 268
+        },
+        {
+          "ts": 1772141057793,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 269
+        },
+        {
+          "ts": 1772141058037,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 270
+        },
+        {
+          "ts": 1772141058106,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1017
+          },
+          "seq": 271
+        },
+        {
+          "ts": 1772141058146,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1042
+          },
+          "seq": 272
+        },
+        {
+          "ts": 1772141058200,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 1156
+          },
+          "seq": 273
+        },
+        {
+          "ts": 1772141058861,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 274
+        },
+        {
+          "ts": 1772141059814,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 275
+        },
+        {
+          "ts": 1772141059825,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 276
+        },
+        {
+          "ts": 1772141060559,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 277
+        },
+        {
+          "ts": 1772141060567,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 278
+        },
+        {
+          "ts": 1772141061331,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 279
+        },
+        {
+          "ts": 1772141061339,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 280
+        },
+        {
+          "ts": 1772141062822,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 281
+        },
+        {
+          "ts": 1772141062833,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 282
+        },
+        {
+          "ts": 1772141063130,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 283
+        },
+        {
+          "ts": 1772141063353,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 284
+        },
+        {
+          "ts": 1772141063365,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 285
+        },
+        {
+          "ts": 1772141063555,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 407
+          },
+          "seq": 286
+        },
+        {
+          "ts": 1772141063593,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 429
+          },
+          "seq": 287
+        },
+        {
+          "ts": 1772141063619,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 497
+          },
+          "seq": 288
+        },
+        {
+          "ts": 1772141064017,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 289
+        },
+        {
+          "ts": 1772141064028,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 290
+        },
+        {
+          "ts": 1772141064569,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 291
+        },
+        {
+          "ts": 1772141064753,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 292
+        },
+        {
+          "ts": 1772141064769,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 293
+        },
+        {
+          "ts": 1772141065096,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 294
+        },
+        {
+          "ts": 1772141065199,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 295
+        },
+        {
+          "ts": 1772141065344,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 296
+        },
+        {
+          "ts": 1772141065543,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 297
+        },
+        {
+          "ts": 1772141065635,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1044
+          },
+          "seq": 298
+        },
+        {
+          "ts": 1772141065662,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1066
+          },
+          "seq": 299
+        },
+        {
+          "ts": 1772141065752,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 1214
+          },
+          "seq": 300
+        },
+        {
+          "ts": 1772141066379,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 301
+        },
+        {
+          "ts": 1772141067265,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 302
+        },
+        {
+          "ts": 1772141067278,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 303
+        },
+        {
+          "ts": 1772141067997,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 304
+        },
+        {
+          "ts": 1772141068003,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 305
+        },
+        {
+          "ts": 1772141068760,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 306
+        },
+        {
+          "ts": 1772141068765,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 307
+        },
+        {
+          "ts": 1772141070005,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 308
+        },
+        {
+          "ts": 1772141070015,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 309
+        },
+        {
+          "ts": 1772141070247,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 310
+        },
+        {
+          "ts": 1772141070413,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 311
+        },
+        {
+          "ts": 1772141070423,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 312
+        },
+        {
+          "ts": 1772141070628,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 354
+          },
+          "seq": 313
+        },
+        {
+          "ts": 1772141070664,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 383
+          },
+          "seq": 314
+        },
+        {
+          "ts": 1772141070714,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 482
+          },
+          "seq": 315
+        },
+        {
+          "ts": 1772141071245,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 316
+        },
+        {
+          "ts": 1772141071253,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 317
+        },
+        {
+          "ts": 1772141071729,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 318
+        },
+        {
+          "ts": 1772141071945,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 319
+        },
+        {
+          "ts": 1772141071960,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 320
+        },
+        {
+          "ts": 1772141072358,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 321
+        },
+        {
+          "ts": 1772141072426,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 322
+        },
+        {
+          "ts": 1772141072616,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 323
+        },
+        {
+          "ts": 1772141072949,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1190
+          },
+          "seq": 324
+        },
+        {
+          "ts": 1772141072988,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1219
+          },
+          "seq": 325
+        },
+        {
+          "ts": 1772141073035,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 1401
+          },
+          "seq": 326
+        },
+        {
+          "ts": 1772141073584,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 327
+        },
+        {
+          "ts": 1772141074301,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 328
+        },
+        {
+          "ts": 1772141074308,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 329
+        },
+        {
+          "ts": 1772141075058,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 330
+        },
+        {
+          "ts": 1772141075065,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 331
+        },
+        {
+          "ts": 1772141075790,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 332
+        },
+        {
+          "ts": 1772141075801,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 333
+        },
+        {
+          "ts": 1772141076959,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 334
+        },
+        {
+          "ts": 1772141076969,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 335
+        },
+        {
+          "ts": 1772141078338,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 336
+        },
+        {
+          "ts": 1772141078345,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 337
+        },
+        {
+          "ts": 1772141078456,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 338
+        },
+        {
+          "ts": 1772141078503,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 339
+        },
+        {
+          "ts": 1772141078507,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 340
+        },
+        {
+          "ts": 1772141078657,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 179
+          },
+          "seq": 341
+        },
+        {
+          "ts": 1772141078675,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 200
+          },
+          "seq": 342
+        },
+        {
+          "ts": 1772141078706,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 265
+          },
+          "seq": 343
+        },
+        {
+          "ts": 1772141081946,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 344
+        },
+        {
+          "ts": 1772141081956,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 345
+        },
+        {
+          "ts": 1772141082448,
+          "level": "info",
+          "tag": "ai.choose",
+          "message": "model selected",
+          "meta": {
+            "source": "ai",
+            "tabId": 1308774576,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 346
+        },
+        {
+          "ts": 1772141082638,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench started",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 347
+        },
+        {
+          "ts": 1772141082655,
+          "level": "info",
+          "tag": "bg.error",
+          "message": "Bench finished",
+          "meta": {
+            "source": "bench",
+            "tabId": null,
+            "requestId": null,
+            "stage": "auto",
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 348
+        },
+        {
+          "ts": 1772141083059,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 349
+        },
+        {
+          "ts": 1772141083129,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 350
+        },
+        {
+          "ts": 1772141083638,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 351
+        },
+        {
+          "ts": 1772141083686,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": "request",
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1215
+          },
+          "seq": 352
+        },
+        {
+          "ts": 1772141083741,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "response metrics",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": "o4-mini:standard",
+            "status": 200,
+            "latencyMs": 1243
+          },
+          "seq": 353
+        },
+        {
+          "ts": 1772141083798,
+          "level": "info",
+          "tag": "ai.response",
+          "message": "LLM ok",
+          "meta": {
+            "source": "ai",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": 200,
+            "latencyMs": 1441
+          },
+          "seq": 354
+        },
+        {
+          "ts": 1772141084366,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 355
+        },
+        {
+          "ts": 1772141085189,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 356
+        },
+        {
+          "ts": 1772141085211,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 357
+        },
+        {
+          "ts": 1772141086271,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 358
+        },
+        {
+          "ts": 1772141086278,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 359
+        },
+        {
+          "ts": 1772141087372,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 360
+        },
+        {
+          "ts": 1772141087384,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 361
+        },
+        {
+          "ts": 1772141088962,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 362
+        },
+        {
+          "ts": 1772141088980,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 363
+        },
+        {
+          "ts": 1772141089972,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Scheduler tick завершён",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 364
+        },
+        {
+          "ts": 1772141089983,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 365
+        },
+        {
+          "ts": 1772141090279,
+          "level": "info",
+          "tag": "bg.start",
+          "message": "Запланирован wake alarm",
+          "meta": {
+            "source": "bg",
+            "tabId": null,
+            "requestId": null,
+            "stage": null,
+            "modelSpec": null,
+            "status": null,
+            "latencyMs": null
+          },
+          "seq": 366
+        }
+      ]
+    }
+  },
+  "summaryState": {
+    "hasJobsRoot": true,
+    "statusByTabKeys": [
+      "1308774576"
+    ]
+  },
+  "mockStats": {
+    "totalRequests": 77,
+    "responsesRequests": 77,
+    "streamRequests": 6,
+    "nonStreamRequests": 71,
+    "toolRequests": 13,
+    "status429": 0,
+    "status5xx": 0,
+    "streamAborts": 0
+  },
+  "mockRecentRequests": [
+    {
+      "ts": 1772141023865,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025598,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025611,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025636,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025648,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025680,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025744,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025904,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141025951,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141025976,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026149,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026179,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026506,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026534,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026629,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_9",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141026667,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026709,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026745,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141026776,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027166,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027195,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027231,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027317,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027371,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_15",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141027583,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027641,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027717,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141027978,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028085,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028164,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028234,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028262,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028323,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028376,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_24",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141028437,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028529,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141028648,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029005,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029046,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029079,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029123,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029386,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029463,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029508,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_34",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141029709,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141029867,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141030270,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141030312,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141030396,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141030597,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_44",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141030681,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141031086,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141031338,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141031550,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 26,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_50",
+      "inputItems": 1
+    },
+    {
+      "ts": 1772141031763,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141031989,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141032490,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141032782,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141033248,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141033568,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141033808,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141034343,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141035031,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 29,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141035143,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141036306,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141037247,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": false,
+      "toolCount": 0,
+      "outputItems": 0,
+      "previousResponseId": null,
+      "inputItems": 0
+    },
+    {
+      "ts": 1772141037597,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses_stream",
+      "stream": true,
+      "abortAfterFirstChunk": false,
+      "firstByteDelayMs": 0,
+      "hasTools": false,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141047011,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 29,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_63",
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141048554,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses_stream",
+      "stream": true,
+      "abortAfterFirstChunk": false,
+      "firstByteDelayMs": 0,
+      "hasTools": false,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141054855,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 29,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_68",
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141057293,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses_stream",
+      "stream": true,
+      "abortAfterFirstChunk": false,
+      "firstByteDelayMs": 0,
+      "hasTools": false,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141063460,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 29,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_70",
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141064861,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses_stream",
+      "stream": true,
+      "abortAfterFirstChunk": false,
+      "firstByteDelayMs": 0,
+      "hasTools": false,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141070548,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 29,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_72",
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141072111,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses_stream",
+      "stream": true,
+      "abortAfterFirstChunk": false,
+      "firstByteDelayMs": 0,
+      "hasTools": false,
+      "previousResponseId": null,
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141078607,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses",
+      "stream": false,
+      "hasTools": true,
+      "toolCount": 29,
+      "outputItems": 0,
+      "previousResponseId": "resp_mock_74",
+      "inputItems": 2
+    },
+    {
+      "ts": 1772141082806,
+      "method": "POST",
+      "url": "/v1/responses",
+      "status": 200,
+      "kind": "responses_stream",
+      "stream": true,
+      "abortAfterFirstChunk": false,
+      "firstByteDelayMs": 0,
+      "hasTools": false,
+      "previousResponseId": null,
+      "inputItems": 2
+    }
+  ]
+}

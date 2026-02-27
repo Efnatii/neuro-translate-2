@@ -982,14 +982,17 @@
         description: 'Translate one execution unit (block or range) and stream deltas.',
         parametersJsonSchema: {
           type: 'object',
-          additionalProperties: false,
+          additionalProperties: true,
           properties: {
             unitType: { type: 'string', enum: ['block', 'range'] },
-            id: { type: 'string', minLength: 1, maxLength: 240 },
+            id: { type: 'string' },
+            unitId: { type: 'string' },
+            blockId: { type: 'string' },
+            rangeId: { type: 'string' },
             blockIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 400 },
-            categoryId: { type: 'string', minLength: 1, maxLength: 64 },
-            targetLang: { type: 'string', minLength: 1, maxLength: 40 },
-            model: { type: 'string', maxLength: 120 },
+            categoryId: { type: 'string' },
+            targetLang: { type: 'string' },
+            model: { type: 'string' },
             style: { type: 'string', enum: ['auto', 'literal', 'readable', 'technical', 'balanced'] },
             contextStrategy: { type: 'object', additionalProperties: true },
             glossary: {
@@ -999,10 +1002,9 @@
                 additionalProperties: true
               }
             },
-            contextSummary: { type: 'string', maxLength: 4000 },
+            contextSummary: { type: 'string' },
             keepHistory: { type: 'string', enum: ['auto', 'on', 'off'] }
-          },
-          required: ['unitType', 'id']
+          }
         },
         capabilitiesRequired: { content: [], offscreen: ['stream'], permissions: [] },
         qos: { queueDepthLimit: 80 },

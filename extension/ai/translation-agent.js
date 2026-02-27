@@ -2230,6 +2230,7 @@
       }
       trace.push({
         ts: Date.now(),
+        toolName: tool || 'unknown',
         tool: tool || 'unknown',
         mode: mode || 'auto',
         status: status || 'ok',
@@ -2560,4 +2561,3 @@
     KNOWN_CATEGORIES
   };
 })(globalThis);
-

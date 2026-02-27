@@ -201,11 +201,30 @@ async function run() {
   assert.strictEqual(forceClassify.ok, true, 'force reclassify should succeed');
   assert.strictEqual(forceClassify.classificationStale, false, 'force reclassify should clear stale flag');
   assert.strictEqual(mismatchJob.classificationStale, false, 'job stale flag should clear after force reclassify');
-  assert(mismatchJob.blocksById.b5, 'force reclassify should bring newly scanned blocks');
+  const rescannedHeadingBlock = Object.values(mismatchJob.blocksById || {}).find((block) => (
+    block
+    && typeof block.originalText === 'string'
+    && block.originalText === 'Fresh heading'
+  ));
+  assert(rescannedHeadingBlock, 'force reclassify should bring newly scanned blocks');
+  const paragraphABlock = Object.values(mismatchJob.blocksById || {}).find((block) => (
+    block
+    && typeof block.originalText === 'string'
+    && block.originalText === 'Paragraph A'
+  ));
+  assert(paragraphABlock, 'paragraph block should be present after force reclassify');
   assert.strictEqual(
-    mismatchJob.blocksById.b1.translatedText,
+    paragraphABlock.translatedText,
     'T_A',
     'force reclassify should preserve translated text for existing blocks'
+  );
+  const classifyByBlockId = mismatchJob.classification && mismatchJob.classification.byBlockId
+    ? mismatchJob.classification.byBlockId
+    : {};
+  assert(
+    classifyByBlockId[rescannedHeadingBlock.blockId]
+      && classifyByBlockId[rescannedHeadingBlock.blockId].category === 'headings',
+    'classification must stay aligned with merged block ids after force reclassify'
   );
 
   console.log('PASS: category selection modes + stale guard');
