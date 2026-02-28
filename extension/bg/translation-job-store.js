@@ -33,6 +33,7 @@
         sizeThresholdBytes: 260 * 1024,
         hardSizeThresholdBytes: 420 * 1024
       });
+      this._mutationChain = Promise.resolve();
     }
 
     async getSnapshot() {
@@ -64,6 +65,29 @@
         migrated: Boolean(force || !hasCanonical),
         snapshot
       };
+    }
+
+    async _withMutationLock(fn) {
+      if (typeof fn !== 'function') {
+        return null;
+      }
+      const current = this._mutationChain || Promise.resolve();
+      let result = null;
+      const next = current
+        .catch(() => null)
+        .then(async () => {
+          result = await fn();
+          return result;
+        });
+      this._mutationChain = next;
+      try {
+        await next;
+        return result;
+      } finally {
+        if (this._mutationChain === next) {
+          this._mutationChain = Promise.resolve();
+        }
+      }
     }
 
     async getJob(jobId) {
@@ -103,55 +127,104 @@
       if (!job || !job.id) {
         return null;
       }
-      const data = await this.getSnapshot();
-      const mergedJob = {
-        ...(data.translationJobsById[job.id] || {}),
-        ...(job || {})
-      };
-      this.compactJobState(mergedJob);
-      data.translationJobsById[job.id] = mergedJob;
-      await this._writeSnapshot(data);
-      return mergedJob;
+      return this._withMutationLock(async () => {
+        const data = await this._readSnapshot();
+        const mergedJob = {
+          ...(data.translationJobsById[job.id] || {}),
+          ...(job || {})
+        };
+        this.compactJobState(mergedJob);
+        data.translationJobsById[job.id] = mergedJob;
+        await this._writeSnapshot(data);
+        return mergedJob;
+      });
+    }
+
+    async saveJob(job, { setActive = false, clearActive = false } = {}) {
+      if (!job || !job.id) {
+        return null;
+      }
+      return this._withMutationLock(async () => {
+        const data = await this._readSnapshot();
+        const mergedJob = {
+          ...(data.translationJobsById[job.id] || {}),
+          ...(job || {})
+        };
+        this.compactJobState(mergedJob);
+        data.translationJobsById[job.id] = mergedJob;
+
+        const key = String(mergedJob.tabId);
+        const now = Date.now();
+        if (setActive) {
+          data.translationJobsByTab[key] = mergedJob.id || null;
+          const prev = data.translationJobIndexByTab[key] || {};
+          data.translationJobIndexByTab[key] = {
+            ...prev,
+            activeJobId: mergedJob.id || null,
+            lastJobId: mergedJob.id || prev.lastJobId || null,
+            updatedAt: now
+          };
+        } else if (clearActive) {
+          const current = data.translationJobsByTab[key] || null;
+          if (!mergedJob.id || !current || current === mergedJob.id) {
+            data.translationJobsByTab[key] = null;
+            const prev = data.translationJobIndexByTab[key] || {};
+            data.translationJobIndexByTab[key] = {
+              ...prev,
+              activeJobId: null,
+              lastJobId: mergedJob.id || prev.lastJobId || null,
+              updatedAt: now
+            };
+          }
+        }
+
+        await this._writeSnapshot(data);
+        return mergedJob;
+      });
     }
 
     async setActiveJob(tabId, jobId) {
       if (tabId === null || tabId === undefined) {
         return;
       }
-      const key = String(tabId);
-      const now = Date.now();
-      const data = await this.getSnapshot();
-      data.translationJobsByTab[key] = jobId || null;
-      const prev = data.translationJobIndexByTab[key] || {};
-      data.translationJobIndexByTab[key] = {
-        ...prev,
-        activeJobId: jobId || null,
-        lastJobId: jobId || prev.lastJobId || null,
-        updatedAt: now
-      };
-      await this._writeSnapshot(data);
+      await this._withMutationLock(async () => {
+        const key = String(tabId);
+        const now = Date.now();
+        const data = await this._readSnapshot();
+        data.translationJobsByTab[key] = jobId || null;
+        const prev = data.translationJobIndexByTab[key] || {};
+        data.translationJobIndexByTab[key] = {
+          ...prev,
+          activeJobId: jobId || null,
+          lastJobId: jobId || prev.lastJobId || null,
+          updatedAt: now
+        };
+        await this._writeSnapshot(data);
+      });
     }
 
     async clearActiveJob(tabId, jobId) {
       if (tabId === null || tabId === undefined) {
         return;
       }
-      const key = String(tabId);
-      const now = Date.now();
-      const data = await this.getSnapshot();
-      const current = data.translationJobsByTab[key] || null;
-      if (jobId && current && current !== jobId) {
-        return;
-      }
-      data.translationJobsByTab[key] = null;
-      const prev = data.translationJobIndexByTab[key] || {};
-      data.translationJobIndexByTab[key] = {
-        ...prev,
-        activeJobId: null,
-        lastJobId: jobId || prev.lastJobId || null,
-        updatedAt: now
-      };
-      await this._writeSnapshot(data);
+      await this._withMutationLock(async () => {
+        const key = String(tabId);
+        const now = Date.now();
+        const data = await this._readSnapshot();
+        const current = data.translationJobsByTab[key] || null;
+        if (jobId && current && current !== jobId) {
+          return;
+        }
+        data.translationJobsByTab[key] = null;
+        const prev = data.translationJobIndexByTab[key] || {};
+        data.translationJobIndexByTab[key] = {
+          ...prev,
+          activeJobId: null,
+          lastJobId: jobId || prev.lastJobId || null,
+          updatedAt: now
+        };
+        await this._writeSnapshot(data);
+      });
     }
 
     async listActiveJobs() {
@@ -171,46 +244,48 @@
     }
 
     async compactInactiveJobs({ traceLimit = 140, patchLimit = 220, diffLimit = 20 } = {}) {
-      const data = await this.getSnapshot();
-      const activeJobIds = new Set(
-        Object.keys(data.translationJobsByTab || {})
-          .map((tabKey) => data.translationJobsByTab[tabKey])
-          .filter(Boolean)
-      );
-      const safeTraceLimit = Number.isFinite(Number(traceLimit)) ? Math.max(20, Number(traceLimit)) : 140;
-      const safePatchLimit = Number.isFinite(Number(patchLimit)) ? Math.max(40, Number(patchLimit)) : 220;
-      const safeDiffLimit = Number.isFinite(Number(diffLimit)) ? Math.max(10, Number(diffLimit)) : 20;
-      let compactedJobs = 0;
-      let changed = false;
+      return this._withMutationLock(async () => {
+        const data = await this._readSnapshot();
+        const activeJobIds = new Set(
+          Object.keys(data.translationJobsByTab || {})
+            .map((tabKey) => data.translationJobsByTab[tabKey])
+            .filter(Boolean)
+        );
+        const safeTraceLimit = Number.isFinite(Number(traceLimit)) ? Math.max(20, Number(traceLimit)) : 140;
+        const safePatchLimit = Number.isFinite(Number(patchLimit)) ? Math.max(40, Number(patchLimit)) : 220;
+        const safeDiffLimit = Number.isFinite(Number(diffLimit)) ? Math.max(10, Number(diffLimit)) : 20;
+        let compactedJobs = 0;
+        let changed = false;
 
-      Object.keys(data.translationJobsById || {}).forEach((jobId) => {
-        if (!jobId || activeJobIds.has(jobId)) {
-          return;
-        }
-        const job = data.translationJobsById[jobId];
-        if (!job || typeof job !== 'object') {
-          return;
-        }
-        const nextJob = { ...job };
-        const compacted = this.compactJobState(nextJob, {
-          traceLimit: safeTraceLimit,
-          patchLimit: safePatchLimit,
-          reportsLimit: safeTraceLimit,
-          diffLimit: safeDiffLimit
+        Object.keys(data.translationJobsById || {}).forEach((jobId) => {
+          if (!jobId || activeJobIds.has(jobId)) {
+            return;
+          }
+          const job = data.translationJobsById[jobId];
+          if (!job || typeof job !== 'object') {
+            return;
+          }
+          const nextJob = { ...job };
+          const compacted = this.compactJobState(nextJob, {
+            traceLimit: safeTraceLimit,
+            patchLimit: safePatchLimit,
+            reportsLimit: safeTraceLimit,
+            diffLimit: safeDiffLimit
+          });
+          if (compacted.changed) {
+            data.translationJobsById[jobId] = nextJob;
+            compactedJobs += 1;
+            changed = true;
+          }
         });
-        if (compacted.changed) {
-          data.translationJobsById[jobId] = nextJob;
-          compactedJobs += 1;
-          changed = true;
+
+        if (!changed) {
+          return { ok: true, compactedJobs: 0 };
         }
+
+        await this._writeSnapshot(data);
+        return { ok: true, compactedJobs };
       });
-
-      if (!changed) {
-        return { ok: true, compactedJobs: 0 };
-      }
-
-      await this._writeSnapshot(data);
-      return { ok: true, compactedJobs };
     }
 
     async compactAllJobs({
@@ -223,47 +298,49 @@
       hardSizeThresholdBytes,
       chunkSize = 25
     } = {}) {
-      const data = await this.getSnapshot();
-      const jobIds = Object.keys(data.translationJobsById || {});
-      const safeChunk = Number.isFinite(Number(chunkSize)) ? Math.max(1, Math.round(Number(chunkSize))) : 25;
-      let compactedJobs = 0;
-      let scannedJobs = 0;
-      let changed = false;
-      for (let i = 0; i < jobIds.length; i += 1) {
-        const jobId = jobIds[i];
-        const job = data.translationJobsById[jobId];
-        if (!job || typeof job !== 'object') {
-          continue;
+      return this._withMutationLock(async () => {
+        const data = await this._readSnapshot();
+        const jobIds = Object.keys(data.translationJobsById || {});
+        const safeChunk = Number.isFinite(Number(chunkSize)) ? Math.max(1, Math.round(Number(chunkSize))) : 25;
+        let compactedJobs = 0;
+        let scannedJobs = 0;
+        let changed = false;
+        for (let i = 0; i < jobIds.length; i += 1) {
+          const jobId = jobIds[i];
+          const job = data.translationJobsById[jobId];
+          if (!job || typeof job !== 'object') {
+            continue;
+          }
+          scannedJobs += 1;
+          const nextJob = { ...job };
+          const compacted = this.compactJobState(nextJob, {
+            traceLimit,
+            patchLimit,
+            rateLimitLimit,
+            reportsLimit,
+            diffLimit,
+            sizeThresholdBytes,
+            hardSizeThresholdBytes
+          });
+          if (compacted.changed) {
+            data.translationJobsById[jobId] = nextJob;
+            compactedJobs += 1;
+            changed = true;
+          }
+          if ((i + 1) % safeChunk === 0) {
+            await new Promise((resolve) => global.setTimeout(resolve, 0));
+          }
         }
-        scannedJobs += 1;
-        const nextJob = { ...job };
-        const compacted = this.compactJobState(nextJob, {
-          traceLimit,
-          patchLimit,
-          rateLimitLimit,
-          reportsLimit,
-          diffLimit,
-          sizeThresholdBytes,
-          hardSizeThresholdBytes
-        });
-        if (compacted.changed) {
-          data.translationJobsById[jobId] = nextJob;
-          compactedJobs += 1;
-          changed = true;
+        if (changed) {
+          await this._writeSnapshot(data);
         }
-        if ((i + 1) % safeChunk === 0) {
-          await new Promise((resolve) => global.setTimeout(resolve, 0));
-        }
-      }
-      if (changed) {
-        await this._writeSnapshot(data);
-      }
-      return {
-        ok: true,
-        changed,
-        scannedJobs,
-        compactedJobs
-      };
+        return {
+          ok: true,
+          changed,
+          scannedJobs,
+          compactedJobs
+        };
+      });
     }
 
     compactJobState(job, options = {}) {
@@ -427,132 +504,140 @@
     }
 
     async repairIndices() {
-      const snapshot = await this.getSnapshot();
-      const jobsById = snapshot.translationJobsById && typeof snapshot.translationJobsById === 'object'
-        ? snapshot.translationJobsById
-        : {};
-      const nextJobsByTab = {};
-      const nextIndexByTab = {};
-      const byTabBuckets = {};
+      return this._withMutationLock(async () => {
+        const snapshot = await this._readSnapshot();
+        const jobsById = snapshot.translationJobsById && typeof snapshot.translationJobsById === 'object'
+          ? snapshot.translationJobsById
+          : {};
+        const nextJobsByTab = {};
+        const nextIndexByTab = {};
+        const byTabBuckets = {};
 
-      Object.keys(jobsById).forEach((jobId) => {
-        const job = jobsById[jobId];
-        if (!job || !Number.isFinite(Number(job.tabId))) {
-          return;
-        }
-        const tabKey = String(Number(job.tabId));
-        byTabBuckets[tabKey] = Array.isArray(byTabBuckets[tabKey]) ? byTabBuckets[tabKey] : [];
-        byTabBuckets[tabKey].push({
-          jobId,
-          status: String(job.status || '').toLowerCase(),
-          updatedAt: Number.isFinite(Number(job.updatedAt)) ? Number(job.updatedAt) : 0
-        });
-      });
-
-      Object.keys(byTabBuckets).forEach((tabKey) => {
-        const rows = byTabBuckets[tabKey].slice().sort((a, b) => {
-          if (a.updatedAt !== b.updatedAt) {
-            return b.updatedAt - a.updatedAt;
+        Object.keys(jobsById).forEach((jobId) => {
+          const job = jobsById[jobId];
+          if (!job || !Number.isFinite(Number(job.tabId))) {
+            return;
           }
-          return String(b.jobId).localeCompare(String(a.jobId));
+          const tabKey = String(Number(job.tabId));
+          byTabBuckets[tabKey] = Array.isArray(byTabBuckets[tabKey]) ? byTabBuckets[tabKey] : [];
+          byTabBuckets[tabKey].push({
+            jobId,
+            status: String(job.status || '').toLowerCase(),
+            updatedAt: Number.isFinite(Number(job.updatedAt)) ? Number(job.updatedAt) : 0
+          });
         });
-        const latest = rows[0] || null;
-        const active = rows.find((row) => row.status !== 'done' && row.status !== 'failed' && row.status !== 'cancelled') || null;
-        nextJobsByTab[tabKey] = active ? active.jobId : null;
-        nextIndexByTab[tabKey] = {
-          activeJobId: active ? active.jobId : null,
-          lastJobId: latest ? latest.jobId : null,
-          updatedAt: Date.now()
+
+        Object.keys(byTabBuckets).forEach((tabKey) => {
+          const rows = byTabBuckets[tabKey].slice().sort((a, b) => {
+            if (a.updatedAt !== b.updatedAt) {
+              return b.updatedAt - a.updatedAt;
+            }
+            return String(b.jobId).localeCompare(String(a.jobId));
+          });
+          const latest = rows[0] || null;
+          const active = rows.find((row) => row.status !== 'done' && row.status !== 'failed' && row.status !== 'cancelled') || null;
+          nextJobsByTab[tabKey] = active ? active.jobId : null;
+          nextIndexByTab[tabKey] = {
+            activeJobId: active ? active.jobId : null,
+            lastJobId: latest ? latest.jobId : null,
+            updatedAt: Date.now()
+          };
+        });
+
+        let changed = false;
+        const prevByTab = snapshot.translationJobsByTab && typeof snapshot.translationJobsByTab === 'object'
+          ? snapshot.translationJobsByTab
+          : {};
+        const prevIndex = snapshot.translationJobIndexByTab && typeof snapshot.translationJobIndexByTab === 'object'
+          ? snapshot.translationJobIndexByTab
+          : {};
+        const serialize = (value) => {
+          try {
+            return JSON.stringify(value);
+          } catch (_) {
+            return '';
+          }
+        };
+        if (serialize(prevByTab) !== serialize(nextJobsByTab) || serialize(prevIndex) !== serialize(nextIndexByTab)) {
+          changed = true;
+          snapshot.translationJobsByTab = nextJobsByTab;
+          snapshot.translationJobIndexByTab = nextIndexByTab;
+        }
+        if (changed) {
+          await this._writeSnapshot(snapshot);
+        }
+        return {
+          ok: true,
+          repaired: changed,
+          tabCount: Object.keys(nextIndexByTab).length
         };
       });
-
-      let changed = false;
-      const prevByTab = snapshot.translationJobsByTab && typeof snapshot.translationJobsByTab === 'object'
-        ? snapshot.translationJobsByTab
-        : {};
-      const prevIndex = snapshot.translationJobIndexByTab && typeof snapshot.translationJobIndexByTab === 'object'
-        ? snapshot.translationJobIndexByTab
-        : {};
-      const serialize = (value) => {
-        try {
-          return JSON.stringify(value);
-        } catch (_) {
-          return '';
-        }
-      };
-      if (serialize(prevByTab) !== serialize(nextJobsByTab) || serialize(prevIndex) !== serialize(nextIndexByTab)) {
-        changed = true;
-        snapshot.translationJobsByTab = nextJobsByTab;
-        snapshot.translationJobIndexByTab = nextIndexByTab;
-      }
-      if (changed) {
-        await this._writeSnapshot(snapshot);
-      }
-      return {
-        ok: true,
-        repaired: changed,
-        tabCount: Object.keys(nextIndexByTab).length
-      };
     }
 
     async removeJob(jobId) {
       if (!jobId) {
         return false;
       }
-      const data = await this.getSnapshot();
-      if (!Object.prototype.hasOwnProperty.call(data.translationJobsById, jobId)) {
-        return false;
-      }
-      delete data.translationJobsById[jobId];
-      Object.keys(data.translationJobsByTab).forEach((tabKey) => {
-        if (data.translationJobsByTab[tabKey] === jobId) {
-          data.translationJobsByTab[tabKey] = null;
+      return this._withMutationLock(async () => {
+        const data = await this._readSnapshot();
+        if (!Object.prototype.hasOwnProperty.call(data.translationJobsById, jobId)) {
+          return false;
         }
+        delete data.translationJobsById[jobId];
+        Object.keys(data.translationJobsByTab).forEach((tabKey) => {
+          if (data.translationJobsByTab[tabKey] === jobId) {
+            data.translationJobsByTab[tabKey] = null;
+          }
+        });
+        Object.keys(data.translationJobIndexByTab).forEach((tabKey) => {
+          const row = data.translationJobIndexByTab[tabKey] || {};
+          if (row.activeJobId === jobId) {
+            row.activeJobId = null;
+          }
+          if (row.lastJobId === jobId) {
+            row.lastJobId = null;
+          }
+          data.translationJobIndexByTab[tabKey] = row;
+        });
+        await this._writeSnapshot(data);
+        return true;
       });
-      Object.keys(data.translationJobIndexByTab).forEach((tabKey) => {
-        const row = data.translationJobIndexByTab[tabKey] || {};
-        if (row.activeJobId === jobId) {
-          row.activeJobId = null;
-        }
-        if (row.lastJobId === jobId) {
-          row.lastJobId = null;
-        }
-        data.translationJobIndexByTab[tabKey] = row;
-      });
-      await this._writeSnapshot(data);
-      return true;
     }
 
     async clearTabHistory(tabId) {
       if (tabId === null || tabId === undefined) {
         return false;
       }
-      const key = String(tabId);
-      const data = await this.getSnapshot();
-      const index = data.translationJobIndexByTab[key] || {};
-      const activeJobId = data.translationJobsByTab[key] || null;
-      const lastJobId = index.lastJobId || null;
-      data.translationJobsByTab[key] = null;
-      data.translationJobIndexByTab[key] = {
-        ...index,
-        activeJobId: null,
-        lastJobId: null,
-        updatedAt: Date.now()
-      };
-      if (activeJobId && data.translationJobsById[activeJobId]) {
-        delete data.translationJobsById[activeJobId];
-      }
-      if (lastJobId && data.translationJobsById[lastJobId]) {
-        delete data.translationJobsById[lastJobId];
-      }
-      await this._writeSnapshot(data);
-      return true;
+      return this._withMutationLock(async () => {
+        const key = String(tabId);
+        const data = await this._readSnapshot();
+        const index = data.translationJobIndexByTab[key] || {};
+        const activeJobId = data.translationJobsByTab[key] || null;
+        const lastJobId = index.lastJobId || null;
+        data.translationJobsByTab[key] = null;
+        data.translationJobIndexByTab[key] = {
+          ...index,
+          activeJobId: null,
+          lastJobId: null,
+          updatedAt: Date.now()
+        };
+        if (activeJobId && data.translationJobsById[activeJobId]) {
+          delete data.translationJobsById[activeJobId];
+        }
+        if (lastJobId && data.translationJobsById[lastJobId]) {
+          delete data.translationJobsById[lastJobId];
+        }
+        await this._writeSnapshot(data);
+        return true;
+      });
     }
 
     async replaceSnapshot(snapshot, { pruneLegacy = false } = {}) {
-      const normalized = this._normalizeData(snapshot);
-      await this._writeSnapshot(normalized, { pruneLegacy });
-      return normalized;
+      return this._withMutationLock(async () => {
+        const normalized = this._normalizeData(snapshot);
+        await this._writeSnapshot(normalized, { pruneLegacy });
+        return normalized;
+      });
     }
 
     _resolveCompactionConfig(options = {}) {

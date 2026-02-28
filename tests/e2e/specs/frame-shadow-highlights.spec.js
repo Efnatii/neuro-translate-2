@@ -101,6 +101,16 @@ test.describe('Frames/Shadow/Highlights e2e', () => {
       return node ? String(node.textContent || '') : '';
     });
     expect(originalShadow.length).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      return site.evaluate(() => {
+        const host = document.getElementById('shadow-host');
+        if (!host || !host.shadowRoot) {
+          return '';
+        }
+        const node = host.shadowRoot.getElementById('shadow-text');
+        return node ? String(node.textContent || '') : '';
+      });
+    }, { timeout: 10000 }).toContain('inside open shadow root');
 
     const startRes = await app.sendCommand('START_TRANSLATION', { tabId }, tabId);
     expect(startRes && startRes.ok).toBeTruthy();

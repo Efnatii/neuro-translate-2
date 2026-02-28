@@ -498,6 +498,7 @@
       this._dispatchCursor = 0;
       this._dispatchDrainActive = false;
       this._lastDispatchedJobId = null;
+      this._lastDispatchedTabId = null;
       this._unsubscribeManager = this.offscreenManager.onMessage((parsed) => this._handleOffscreenMessage(parsed));
     }
 
@@ -543,6 +544,12 @@
       }
       const activeTabId = await this._resolveActiveTabId();
       if (Number.isFinite(Number(activeTabId))) {
+        const hasNonActiveQueued = this._dispatchQueue.some((entry) => {
+          const tabId = entry && entry.task && Number.isFinite(Number(entry.task.tabId))
+            ? Number(entry.task.tabId)
+            : null;
+          return tabId === null || tabId !== Number(activeTabId);
+        });
         for (let i = 0; i < queueLen; i += 1) {
           const idx = (this._dispatchCursor + i) % queueLen;
           const entry = this._dispatchQueue[idx];
@@ -550,6 +557,16 @@
             ? Number(entry.task.tabId)
             : null;
           if (tabId !== null && tabId === Number(activeTabId)) {
+            const jobId = entry && entry.task && entry.task.jobId
+              ? String(entry.task.jobId)
+              : null;
+            const sameAsLast = Boolean(
+              (jobId && this._lastDispatchedJobId && jobId === this._lastDispatchedJobId)
+              || (this._lastDispatchedTabId !== null && tabId === this._lastDispatchedTabId)
+            );
+            if (hasNonActiveQueued && sameAsLast) {
+              continue;
+            }
             this._dispatchCursor = (idx + 1) % queueLen;
             return idx;
           }
@@ -592,6 +609,10 @@
           if (jobId) {
             this._lastDispatchedJobId = jobId;
           }
+          const tabId = Number.isFinite(Number(entry.task.tabId))
+            ? Number(entry.task.tabId)
+            : null;
+          this._lastDispatchedTabId = tabId;
           this._dispatchInFlight += 1;
           Promise.resolve()
             .then(() => entry.task.run())
@@ -1067,8 +1088,15 @@
       if (this.inflightStore && typeof this.inflightStore.findByKey === 'function') {
         const byKey = await this.inflightStore.findByKey(requestKey).catch(() => null);
         if (byKey && byKey.requestId) {
-          usedRequestId = byKey.requestId;
-          if (byKey.status === 'pending') {
+          const byKeyStatus = String(byKey.status || '').toLowerCase();
+          if (byKeyStatus === 'failed' || byKeyStatus === 'cancelled') {
+            // Failed/cancelled attempts may have a cached offscreen error payload.
+            // Use a fresh requestId to force a real retry instead of replaying cache.
+            usedRequestId = buildRequestId();
+          } else {
+            usedRequestId = byKey.requestId;
+          }
+          if (byKeyStatus === 'pending') {
             const waiter = this._waiterFor(usedRequestId);
             if (waiter && waiter.promise) {
               return waiter.promise;
@@ -1082,7 +1110,7 @@
               return attachedResult;
             }
           }
-          if (byKey.status === 'done' && (!payloadHash || !byKey.payloadHash || byKey.payloadHash === payloadHash)) {
+          if (byKeyStatus === 'done' && (!payloadHash || !byKey.payloadHash || byKey.payloadHash === payloadHash)) {
             if (byKey.rawResult) {
               return byKey.rawResult;
             }

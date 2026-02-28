@@ -1178,13 +1178,25 @@
       const existing = agentState.execution && typeof agentState.execution === 'object'
         ? agentState.execution
         : null;
+      const existingErrorCode = existing && existing.lastError && typeof existing.lastError.code === 'string'
+        ? String(existing.lastError.code || '').toUpperCase()
+        : '';
+      const canResumeFailedExecution = Boolean(
+        existing
+        && existing.status === 'failed'
+        && (
+          existingErrorCode === 'OPENAI_429'
+          || existingErrorCode === 'RATE_LIMIT_BUDGET_WAIT'
+          || existingErrorCode === 'OFFSCREEN_BACKPRESSURE'
+        )
+      );
       if (existing && existing.status === 'done') {
         return existing;
       }
-      if (existing && existing.status === 'failed') {
+      if (existing && existing.status === 'failed' && !canResumeFailedExecution) {
         return existing;
       }
-      if (existing && (existing.status === 'running' || existing.status === 'yielded' || existing.status === 'stopped')) {
+      if (existing && (existing.status === 'running' || existing.status === 'yielded' || existing.status === 'stopped' || canResumeFailedExecution)) {
         existing.status = 'running';
         existing.maxIterationsPerTick = this._executionMaxIterationsPerTick(settings);
         existing.maxStepAttempts = this._executionMaxStepAttempts(settings);
@@ -1192,9 +1204,13 @@
         existing.maxNoProgressIterations = this._executionMaxNoProgressIterations(settings);
         existing.autoCompressEvery = this._executionCompressEvery(settings);
         existing.iteration = Number.isFinite(Number(existing.iteration)) ? Number(existing.iteration) : 0;
-        existing.stepAttempt = Number.isFinite(Number(existing.stepAttempt)) ? Number(existing.stepAttempt) : 1;
+        existing.stepAttempt = canResumeFailedExecution
+          ? 1
+          : (Number.isFinite(Number(existing.stepAttempt)) ? Number(existing.stepAttempt) : 1);
         existing.toolCallsExecuted = Number.isFinite(Number(existing.toolCallsExecuted)) ? Number(existing.toolCallsExecuted) : 0;
-        existing.noProgressIterations = Number.isFinite(Number(existing.noProgressIterations)) ? Number(existing.noProgressIterations) : 0;
+        existing.noProgressIterations = canResumeFailedExecution
+          ? 0
+          : (Number.isFinite(Number(existing.noProgressIterations)) ? Number(existing.noProgressIterations) : 0);
         existing.pendingInputItems = Array.isArray(existing.pendingInputItems) && existing.pendingInputItems.length
           ? existing.pendingInputItems
           : this._buildExecutionInitialInput({ job, blocks, settings });
@@ -1204,6 +1220,10 @@
         existing.recoveryAttempts = Number.isFinite(Number(existing.recoveryAttempts))
           ? Number(existing.recoveryAttempts)
           : 0;
+        if (canResumeFailedExecution) {
+          existing.lastError = null;
+          existing.lastProgressAt = Date.now();
+        }
         existing.updatedAt = Date.now();
         agentState.execution = existing;
         return existing;

@@ -99,6 +99,7 @@
       this.MAX_JOB_AGE_MS = 7 * 24 * 60 * 60 * 1000;
       this.APPLY_ACK_TIMEOUT_MS = 8000;
       this.APPLY_DELTA_ACK_TIMEOUT_MS = 2500;
+      this.APPLY_ACK_CACHE_TTL_MS = 15000;
       this.MEMORY_PAGE_INDEX_CAP = 5;
       this.PATCH_HISTORY_LIMIT = 2000;
       this.PATCH_DELTA_DEBOUNCE_MS = 320;
@@ -106,6 +107,7 @@
       this.COMPARE_DIFF_THRESHOLD_DEFAULT = 8000;
       this.processingJobs = new Set();
       this.pendingApplyAcks = new Map();
+      this.recentApplyAcks = new Map();
       this.pendingDeltaAcks = new Map();
       this.jobAbortControllers = new Map();
       this.contentCapsByTab = {};
@@ -1180,6 +1182,13 @@
             frameUrl: senderFrameUrl
           });
         }
+        const isTopFrameMessage = Boolean(
+          (contentCaps && contentCaps.isTopFrame === true)
+          || (Number.isFinite(Number(senderFrameId)) && Number(senderFrameId) === 0)
+        );
+        if (!isTopFrameMessage) {
+          return { ok: true };
+        }
         if (tabId !== null) {
           const active = await this.jobStore.getActiveJob(tabId);
           if (active && (active.status === 'preparing' || active.status === 'planning' || active.status === 'running' || active.status === 'completing' || active.status === 'awaiting_categories')) {
@@ -1195,13 +1204,19 @@
             }
 
             const canSkipRescan = (
-              active.status === 'awaiting_categories'
-              && active.scanReceived === true
+              active.scanReceived === true
               && !hasSessionChanged
+              && (
+                active.status === 'awaiting_categories'
+                || active.status === 'planning'
+                || active.status === 'running'
+                || active.status === 'completing'
+              )
             );
             if (canSkipRescan) {
               active.displayMode = await this._resolveTabDisplayMode(tabId);
               active.compareDiffThreshold = await this._getCompareDiffThreshold({ job: active });
+              active.compareRendering = await this._getCompareRendering({ job: active });
               await this._saveJob(active, { setActive: true });
               const sessionId = incomingSessionId || previousSessionId || null;
               await this._syncVisibilityToContent(tabId, { contentSessionId: sessionId, job: active }).catch(() => {});
@@ -1218,6 +1233,11 @@
               Array.from(this.pendingDeltaAcks.keys()).forEach((key) => {
                 if (typeof key === 'string' && key.indexOf(prefix) === 0) {
                   this.pendingDeltaAcks.delete(key);
+                }
+              });
+              Array.from(this.recentApplyAcks.keys()).forEach((key) => {
+                if (typeof key === 'string' && key.indexOf(prefix) === 0) {
+                  this.recentApplyAcks.delete(key);
                 }
               });
             } catch (_) {
@@ -1481,11 +1501,35 @@
       if (tabId !== null && job.tabId !== tabId) {
         return { ok: false, error: { code: 'TAB_MISMATCH', message: 'Р СњР ВµРЎРѓР С•Р Р†Р С—Р В°Р Т‘Р ВµР Р…Р С‘Р Вµ Р Р†Р С”Р В»Р В°Р Т‘Р С”Р С‘ Р Р† РЎР‚Р ВµР В·РЎС“Р В»РЎРЉРЎвЂљР В°РЎвЂљР Вµ РЎРѓР С”Р В°Р Р…Р С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘РЎРЏ' } };
       }
-      if (message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
+      const senderFrameId = Number.isFinite(Number(frameId)) ? Number(frameId) : null;
+      const messageFrameId = Number.isFinite(Number(message && message.frameId)) ? Number(message.frameId) : null;
+      const isTopFrameMessage = senderFrameId !== null
+        ? senderFrameId === 0
+        : true;
+      const payloadFrameId = senderFrameId !== null && senderFrameId !== 0
+        ? senderFrameId
+        : (messageFrameId !== null ? messageFrameId : (senderFrameId !== null ? senderFrameId : 0));
+      if (isTopFrameMessage && message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
         job.contentSessionId = message.contentSessionId;
       }
       if (this._isTerminalStatus(job.status)) {
         return { ok: true, ignored: true };
+      }
+      if (!isTopFrameMessage) {
+        this._mergeFrameShadowMetricsIntoJob(job, {
+          frameId: payloadFrameId,
+          frameUrl: typeof frameUrl === 'string' && frameUrl
+            ? frameUrl
+            : (typeof message.frameUrl === 'string' ? message.frameUrl : null),
+          documentId: typeof documentId === 'string' && documentId
+            ? documentId
+            : (typeof message.documentId === 'string' ? message.documentId : null),
+          scanStats: message && message.scanStats && typeof message.scanStats === 'object'
+            ? message.scanStats
+            : null
+        });
+        await this._saveJob(job, { setActive: true }).catch(() => {});
+        return { ok: true, ignored: true, reason: 'non_top_frame_scan' };
       }
       const scanError = message && message.scanError && typeof message.scanError === 'object'
         ? message.scanError
@@ -1531,9 +1575,6 @@
         job.message = 'Scan budget reached; using partial snapshot';
       }
 
-      const payloadFrameId = Number.isFinite(Number(message && message.frameId))
-        ? Number(message.frameId)
-        : (Number.isFinite(Number(frameId)) ? Number(frameId) : 0);
       const normalized = this._normalizeBlocks(message.blocks, {
         frameId: payloadFrameId
       });
@@ -1642,7 +1683,7 @@
         if (!latest || this._isTerminalStatus(latest.status)) {
           return { ok: true, ignored: true };
         }
-        if (message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
+        if (isTopFrameMessage && message && typeof message.contentSessionId === 'string' && message.contentSessionId) {
           latest.contentSessionId = message.contentSessionId;
         }
         const blocksById = {};
@@ -2119,9 +2160,8 @@
       const sessionIdFromJob = job && typeof job.contentSessionId === 'string' && job.contentSessionId
         ? job.contentSessionId
         : null;
-      if (sessionIdFromMsg && sessionIdFromJob && sessionIdFromMsg !== sessionIdFromJob) {
-        return { ok: true, ignored: true };
-      }
+      // Do not short-circuit on session mismatch: we keep legacy/null keys to avoid
+      // losing acks when content session ids rotate mid-run.
 
       const keys = [];
       const pushKey = (key) => {
@@ -2133,6 +2173,15 @@
       pushKey(this._ackKey(jobId, batchId, sessionIdFromJob));
       pushKey(this._ackKey(jobId, batchId, null));
 
+      const ackPayload = {
+        ok: message.ok !== false,
+        appliedCount: Number.isFinite(Number(message.appliedCount)) ? Number(message.appliedCount) : null,
+        tabId,
+        frameId: Number.isFinite(Number(frameId))
+          ? Number(frameId)
+          : (Number.isFinite(Number(message.frameId)) ? Number(message.frameId) : null)
+      };
+
       let waiter = null;
       for (let i = 0; i < keys.length; i += 1) {
         waiter = this.pendingApplyAcks.get(keys[i]);
@@ -2141,16 +2190,17 @@
         }
       }
       if (!waiter) {
-        return { ok: true, ignored: true };
+        this._pruneRecentApplyAcks();
+        const now = Date.now();
+        keys.forEach((key) => {
+          this.recentApplyAcks.set(key, {
+            ts: now,
+            ack: { ...ackPayload }
+          });
+        });
+        return { ok: true, cached: true };
       }
-      waiter.resolve({
-        ok: message.ok !== false,
-        appliedCount: Number.isFinite(Number(message.appliedCount)) ? Number(message.appliedCount) : null,
-        tabId,
-        frameId: Number.isFinite(Number(frameId))
-          ? Number(frameId)
-          : (Number.isFinite(Number(message.frameId)) ? Number(message.frameId) : null)
-      });
+      waiter.resolve(ackPayload);
       return { ok: true };
     }
 
@@ -2175,9 +2225,8 @@
       const sessionIdFromJob = job && typeof job.contentSessionId === 'string' && job.contentSessionId
         ? job.contentSessionId
         : null;
-      if (sessionIdFromMsg && sessionIdFromJob && sessionIdFromMsg !== sessionIdFromJob) {
-        return { ok: true, ignored: true };
-      }
+      // Do not short-circuit on session mismatch: we keep legacy/null keys to avoid
+      // losing acks when content session ids rotate mid-run.
 
       const keys = [];
       const pushKey = (key) => {
@@ -3218,6 +3267,39 @@
       return `${jobId}:${batchId}:${sessionId || 'none'}`;
     }
 
+    _pruneRecentApplyAcks(now = Date.now()) {
+      if (!this.recentApplyAcks || typeof this.recentApplyAcks.forEach !== 'function') {
+        return;
+      }
+      const ttlMs = Number.isFinite(Number(this.APPLY_ACK_CACHE_TTL_MS))
+        ? Math.max(1000, Number(this.APPLY_ACK_CACHE_TTL_MS))
+        : 15000;
+      this.recentApplyAcks.forEach((entry, key) => {
+        const ts = entry && Number.isFinite(Number(entry.ts)) ? Number(entry.ts) : 0;
+        if (!ts || (now - ts) > ttlMs) {
+          this.recentApplyAcks.delete(key);
+        }
+      });
+    }
+
+    _takeRecentApplyAck(keys) {
+      this._pruneRecentApplyAcks();
+      const probe = Array.isArray(keys) ? keys : [];
+      for (let i = 0; i < probe.length; i += 1) {
+        const key = probe[i];
+        if (!key) {
+          continue;
+        }
+        const hit = this.recentApplyAcks.get(key);
+        if (!hit || !hit.ack) {
+          continue;
+        }
+        this.recentApplyAcks.delete(key);
+        return hit.ack;
+      }
+      return null;
+    }
+
     _deltaAckKey(jobId, blockId, deltaId, sessionId) {
       return `${jobId}:${blockId}:delta:${deltaId || 'none'}:${sessionId || 'none'}`;
     }
@@ -3234,8 +3316,12 @@
       }
       const key = this._ackKey(jobId, batchId, sessionId);
       const legacyKey = this._ackKey(jobId, batchId, null);
+      const keys = key === legacyKey ? [key] : [key, legacyKey];
+      const cachedAck = this._takeRecentApplyAck(keys);
+      if (cachedAck) {
+        return cachedAck;
+      }
       return new Promise((resolve) => {
-        const keys = key === legacyKey ? [key] : [key, legacyKey];
         let waiter = null;
         const cleanup = () => {
           keys.forEach((entryKey) => {
@@ -3433,12 +3519,16 @@
           }
         }
         this._updateJobPerfSnapshot(job);
-        await this.jobStore.upsertJob(job);
-        if (setActive) {
-          await this.jobStore.setActiveJob(job.tabId, job.id);
-        }
-        if (clearActive) {
-          await this.jobStore.clearActiveJob(job.tabId, job.id);
+        if (this.jobStore && typeof this.jobStore.saveJob === 'function') {
+          await this.jobStore.saveJob(job, { setActive, clearActive });
+        } else {
+          await this.jobStore.upsertJob(job);
+          if (setActive) {
+            await this.jobStore.setActiveJob(job.tabId, job.id);
+          }
+          if (clearActive) {
+            await this.jobStore.clearActiveJob(job.tabId, job.id);
+          }
         }
         await this._syncTabStatus(job);
         this._emitUiPatch(job);
@@ -4578,7 +4668,10 @@
         ? String(errorLike.code)
         : 'RATE_LIMIT_BUDGET_WAIT';
       const isOffscreenBackpressure = sourceCode === 'OFFSCREEN_BACKPRESSURE';
-      const waitMs = this._retryAfterMsFromError(errorLike) || 30 * 1000;
+      const sourceReason = errorLike && typeof errorLike.reason === 'string' && errorLike.reason
+        ? String(errorLike.reason)
+        : null;
+      const waitMs = this._retryAfterMsFromError(errorLike) || 5 * 1000;
       const runtime = this._ensureJobRuntime(latest, { now });
       runtime.status = 'QUEUED';
       runtime.retry = runtime.retry && typeof runtime.retry === 'object' ? runtime.retry : {};
@@ -4594,10 +4687,15 @@
       runtime.lease.heartbeatTs = now;
       runtime.lease.op = isOffscreenBackpressure ? 'offscreen_wait' : 'rate_limit_wait';
       runtime.lease.opId = latest.id;
-      latest.status = 'preparing';
+      const latestStatus = String(latest.status || '').toLowerCase();
+      if (latestStatus !== 'running' && latestStatus !== 'completing' && latestStatus !== 'planning') {
+        latest.status = 'preparing';
+      }
       latest.message = isOffscreenBackpressure
         ? `Р С›Р В¶Р С‘Р Т‘Р В°РЎР‹ РЎРѓР В»Р С•РЎвЂљ offscreen ${Math.ceil(waitMs / 1000)}РЎРѓ`
-        : `Р С›Р В¶Р С‘Р Т‘Р В°РЎР‹ Р В»Р С‘Р СР С‘РЎвЂљ API ${Math.ceil(waitMs / 1000)}РЎРѓ`;
+        : (sourceReason
+          ? `Р С›Р В¶Р С‘Р Т‘Р В°РЎР‹ Р В»Р С‘Р СР С‘РЎвЂљ API ${Math.ceil(waitMs / 1000)}РЎРѓ (${sourceReason})`
+          : `Р С›Р В¶Р С‘Р Т‘Р В°РЎР‹ Р В»Р С‘Р СР С‘РЎвЂљ API ${Math.ceil(waitMs / 1000)}РЎРѓ`);
       latest.runtime = runtime;
       await this._saveJob(latest, { setActive: true });
       this._emitEvent('warn', NT.EventTypes && NT.EventTypes.Tags ? NT.EventTypes.Tags.AI_RATE_LIMIT : 'ai.rate_limit', latest.message, {
@@ -7831,6 +7929,11 @@
       Array.from(this.pendingDeltaAcks.keys()).forEach((key) => {
         if (typeof key === 'string' && key.indexOf(prefix) === 0) {
           this.pendingDeltaAcks.delete(key);
+        }
+      });
+      Array.from(this.recentApplyAcks.keys()).forEach((key) => {
+        if (typeof key === 'string' && key.indexOf(prefix) === 0) {
+          this.recentApplyAcks.delete(key);
         }
       });
       const patchBucket = this.pendingPatchFlushByJob.get(jobId);

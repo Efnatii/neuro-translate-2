@@ -2757,6 +2757,18 @@
           : (Array.isArray(job.selectedCategories) ? job.selectedCategories : [])
       );
       const categorySet = selectedCategories.length ? new Set(selectedCategories) : null;
+      const taxonomy = job && job.agentState && job.agentState.taxonomy && typeof job.agentState.taxonomy === 'object'
+        ? job.agentState.taxonomy
+        : null;
+      const blockToCategory = taxonomy && taxonomy.blockToCategory && typeof taxonomy.blockToCategory === 'object'
+        ? taxonomy.blockToCategory
+        : {};
+      const resolveCategory = (blockId, block) => {
+        const fromTaxonomy = blockToCategory && blockId && Object.prototype.hasOwnProperty.call(blockToCategory, blockId)
+          ? blockToCategory[blockId]
+          : null;
+        return this._normalizeCategory(fromTaxonomy || (block && (block.category || block.pathHint)) || 'unknown') || 'unknown';
+      };
       const prefer = args.prefer === 'short_first' || args.prefer === 'long_first'
         ? args.prefer
         : 'dom_order';
@@ -2769,7 +2781,7 @@
           if (!block) {
             return null;
           }
-          const category = this._normalizeCategory(block.category || block.pathHint) || 'unknown';
+          const category = resolveCategory(blockId, block);
           if (categorySet && !categorySet.has(category)) {
             return null;
           }

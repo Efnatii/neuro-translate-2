@@ -1,41 +1,23 @@
-2026/02/27-00:26:10.233 6571 Creating DB /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-translation-pipeline-be858-t-before-category-selection-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp since it was missing.
-2026/02/27-00:26:10.245 6571 Reusing MANIFEST /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-translation-pipeline-be858-t-before-category-selection-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp/MANIFEST-000001
-2026/02/27-00:26:12.458 6572 Level-0 table #5: started
-2026/02/27-00:26:12.478 6572 Level-0 table #5: 806000 bytes OK
-2026/02/27-00:26:12.485 6572 Delete type=0 #3
-2026/02/27-00:26:13.550 6572 Level-0 table #7: started
-2026/02/27-00:26:13.564 6572 Level-0 table #7: 775741 bytes OK
-2026/02/27-00:26:13.570 6572 Delete type=0 #4
-2026/02/27-00:26:13.664 6572 Compacting 1@1 + 1@2 files
-2026/02/27-00:26:13.680 6572 Generated table #8@1: 43 keys, 43027 bytes
-2026/02/27-00:26:13.680 6572 Compacted 1@1 + 1@2 files => 43027 bytes
-2026/02/27-00:26:13.685 6572 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:26:13.685 6572 Delete type=2 #5
-2026/02/27-00:26:13.685 6572 Delete type=2 #7
-2026/02/27-00:26:14.651 6572 Level-0 table #10: started
-2026/02/27-00:26:14.665 6572 Level-0 table #10: 704085 bytes OK
-2026/02/27-00:26:14.669 6572 Delete type=0 #6
-2026/02/27-00:26:14.854 6571 Compacting 1@1 + 1@2 files
-2026/02/27-00:26:14.864 6571 Generated table #11@1: 43 keys, 47363 bytes
-2026/02/27-00:26:14.864 6571 Compacted 1@1 + 1@2 files => 47363 bytes
-2026/02/27-00:26:14.868 6571 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:26:14.868 6571 Delete type=2 #10
-2026/02/27-00:26:14.868 6571 Delete type=2 #8
-2026/02/27-00:26:15.619 6571 Level-0 table #13: started
-2026/02/27-00:26:15.633 6571 Level-0 table #13: 731485 bytes OK
-2026/02/27-00:26:15.638 6571 Delete type=0 #9
-2026/02/27-00:26:15.839 6571 Compacting 1@1 + 1@2 files
-2026/02/27-00:26:15.851 6571 Generated table #14@1: 43 keys, 41690 bytes
-2026/02/27-00:26:15.851 6571 Compacted 1@1 + 1@2 files => 41690 bytes
-2026/02/27-00:26:15.854 6571 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:26:15.855 6571 Delete type=2 #13
-2026/02/27-00:26:15.855 6571 Delete type=2 #11
-2026/02/27-00:26:16.611 6572 Level-0 table #16: started
-2026/02/27-00:26:16.626 6572 Level-0 table #16: 886864 bytes OK
-2026/02/27-00:26:16.630 6572 Delete type=0 #12
-2026/02/27-00:26:16.957 6571 Compacting 1@1 + 1@2 files
-2026/02/27-00:26:16.965 6571 Generated table #17@1: 43 keys, 58122 bytes
-2026/02/27-00:26:16.965 6571 Compacted 1@1 + 1@2 files => 58122 bytes
-2026/02/27-00:26:16.970 6571 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:26:16.970 6571 Delete type=2 #16
-2026/02/27-00:26:16.970 6571 Delete type=2 #14
+2026/02/28-20:50:45.638 3f6a8 Creating DB /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-translation-pipeline-be858-t-before-category-selection-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp since it was missing.
+2026/02/28-20:50:45.652 3f6a8 Reusing MANIFEST /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-translation-pipeline-be858-t-before-category-selection-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp/MANIFEST-000001
+2026/02/28-20:50:47.597 3f6a9 Level-0 table #5: started
+2026/02/28-20:50:47.620 3f6a9 Level-0 table #5: 957004 bytes OK
+2026/02/28-20:50:47.627 3f6a9 Delete type=0 #3
+2026/02/28-20:50:48.925 3f6a8 Level-0 table #7: started
+2026/02/28-20:50:48.936 3f6a8 Level-0 table #7: 911203 bytes OK
+2026/02/28-20:50:48.941 3f6a8 Delete type=0 #4
+2026/02/28-20:50:49.133 3f6a8 Compacting 1@1 + 1@2 files
+2026/02/28-20:50:49.145 3f6a8 Generated table #8@1: 41 keys, 36775 bytes
+2026/02/28-20:50:49.146 3f6a8 Compacted 1@1 + 1@2 files => 36775 bytes
+2026/02/28-20:50:49.150 3f6a8 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:50:49.150 3f6a8 Delete type=2 #5
+2026/02/28-20:50:49.150 3f6a8 Delete type=2 #7
+2026/02/28-20:50:49.983 3f6ab Level-0 table #10: started
+2026/02/28-20:50:49.995 3f6ab Level-0 table #10: 967847 bytes OK
+2026/02/28-20:50:50.004 3f6ab Delete type=0 #6
+2026/02/28-20:50:52.641 3f6a8 Compacting 1@1 + 1@2 files
+2026/02/28-20:50:52.650 3f6a8 Generated table #11@1: 41 keys, 45147 bytes
+2026/02/28-20:50:52.650 3f6a8 Compacted 1@1 + 1@2 files => 45147 bytes
+2026/02/28-20:50:52.654 3f6a8 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:50:52.655 3f6a8 Delete type=2 #10
+2026/02/28-20:50:52.655 3f6a8 Delete type=2 #8

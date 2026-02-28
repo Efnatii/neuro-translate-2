@@ -1309,9 +1309,6 @@
       runtime.lease.op = 'rate_limit_wait';
       runtime.lease.opId = job.id;
       job.runtime = runtime;
-      if (status === 'running' || status === 'completing') {
-        job.status = 'preparing';
-      }
       job.message = `Ожидаю общий лимит запросов (${Math.ceil(wait / 1000)}с)`;
       job.updatedAt = now;
 
@@ -1420,7 +1417,7 @@
           leaseMs: requestMeta.timeoutMs
         }).catch(() => ({ ok: true }));
         if (!reserve || reserve.ok !== true) {
-          const waitMs = Math.max(250, Number.isFinite(Number(reserve && reserve.waitMs)) ? Number(reserve.waitMs) : 30 * 1000);
+          const waitMs = Math.max(250, Number.isFinite(Number(reserve && reserve.waitMs)) ? Number(reserve.waitMs) : 5 * 1000);
           let budgetSnapshot = null;
           if (this.rateLimitBudgetStore && typeof this.rateLimitBudgetStore.getBudgetSnapshot === 'function') {
             budgetSnapshot = await this.rateLimitBudgetStore.getBudgetSnapshot({ provider: budgetProvider }).catch(() => null);
@@ -1665,6 +1662,16 @@
       } catch (error) {
         const errorCode = error && (error.code || error.name) ? (error.code || error.name) : 'REQUEST_FAILED';
         const aborted = errorCode === 'ABORT_ERR' || errorCode === 'ABORTED' || errorCode === 'AbortError';
+        const isSyntheticBudget429 = Boolean(
+          error
+          && Number(error.status) === 429
+          && (
+            error.reason === 'budget_wait'
+            || error.reason === 'cooldown'
+            || error.reason === 'requests_limit'
+            || error.reason === 'tokens_limit'
+          )
+        );
         if (error && Number(error.status) === 429) {
           await this._recordRateLimitHeaders({
             requestMeta,
@@ -1672,7 +1679,7 @@
             headers: error.headers || null,
             status: 429
           }).catch(() => {});
-          if (this.rateLimitBudgetStore && typeof this.rateLimitBudgetStore.on429 === 'function') {
+          if (!isSyntheticBudget429 && this.rateLimitBudgetStore && typeof this.rateLimitBudgetStore.on429 === 'function') {
             await this.rateLimitBudgetStore.on429({
               provider: this._resolveSharedBudgetProvider(),
               jobId: requestMeta.jobId || null,

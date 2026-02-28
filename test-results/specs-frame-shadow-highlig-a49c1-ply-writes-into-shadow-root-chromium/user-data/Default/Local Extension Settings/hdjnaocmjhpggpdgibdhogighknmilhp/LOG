@@ -1,32 +1,68 @@
-2026/02/27-00:20:25.069 5cc3 Creating DB /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-frame-shadow-highlig-a49c1-ply-writes-into-shadow-root-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp since it was missing.
-2026/02/27-00:20:25.103 5cc3 Reusing MANIFEST /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-frame-shadow-highlig-a49c1-ply-writes-into-shadow-root-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp/MANIFEST-000001
-2026/02/27-00:20:27.142 5cc4 Level-0 table #5: started
-2026/02/27-00:20:27.159 5cc4 Level-0 table #5: 989747 bytes OK
-2026/02/27-00:20:27.165 5cc4 Delete type=0 #3
-2026/02/27-00:20:28.103 5cc4 Level-0 table #7: started
-2026/02/27-00:20:28.135 5cc4 Level-0 table #7: 823385 bytes OK
-2026/02/27-00:20:28.138 5cc4 Delete type=0 #4
-2026/02/27-00:20:28.249 5cc3 Compacting 1@1 + 1@2 files
-2026/02/27-00:20:28.260 5cc3 Generated table #8@1: 43 keys, 36174 bytes
-2026/02/27-00:20:28.260 5cc3 Compacted 1@1 + 1@2 files => 36174 bytes
-2026/02/27-00:20:28.264 5cc3 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:20:28.264 5cc3 Delete type=2 #5
-2026/02/27-00:20:28.264 5cc3 Delete type=2 #7
-2026/02/27-00:20:29.002 5cc3 Level-0 table #10: started
-2026/02/27-00:20:29.034 5cc3 Level-0 table #10: 787765 bytes OK
-2026/02/27-00:20:29.037 5cc3 Delete type=0 #6
-2026/02/27-00:20:29.151 5cc3 Compacting 1@1 + 1@2 files
-2026/02/27-00:20:29.159 5cc3 Generated table #11@1: 43 keys, 40658 bytes
-2026/02/27-00:20:29.159 5cc3 Compacted 1@1 + 1@2 files => 40658 bytes
-2026/02/27-00:20:29.162 5cc3 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:20:29.162 5cc3 Delete type=2 #10
-2026/02/27-00:20:29.162 5cc3 Delete type=2 #8
-2026/02/27-00:20:30.098 5cc4 Level-0 table #13: started
-2026/02/27-00:20:30.127 5cc4 Level-0 table #13: 946495 bytes OK
-2026/02/27-00:20:30.130 5cc4 Delete type=0 #9
-2026/02/27-00:20:30.774 5cc4 Compacting 1@1 + 1@2 files
-2026/02/27-00:20:30.789 5cc4 Generated table #14@1: 43 keys, 48254 bytes
-2026/02/27-00:20:30.789 5cc4 Compacted 1@1 + 1@2 files => 48254 bytes
-2026/02/27-00:20:30.794 5cc4 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/02/27-00:20:30.795 5cc4 Delete type=2 #13
-2026/02/27-00:20:30.795 5cc4 Delete type=2 #11
+2026/02/28-20:48:16.966 3f2fc Creating DB /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-frame-shadow-highlig-a49c1-ply-writes-into-shadow-root-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp since it was missing.
+2026/02/28-20:48:16.984 3f2fc Reusing MANIFEST /home/efnat/my-projects/git-repos/neuro-translate-2/test-results/specs-frame-shadow-highlig-a49c1-ply-writes-into-shadow-root-chromium/user-data/Default/Local Extension Settings/hdjnaocmjhpggpdgibdhogighknmilhp/MANIFEST-000001
+2026/02/28-20:48:19.418 3f2fd Level-0 table #5: started
+2026/02/28-20:48:19.441 3f2fd Level-0 table #5: 1148161 bytes OK
+2026/02/28-20:48:19.447 3f2fd Delete type=0 #3
+2026/02/28-20:48:20.851 3f2fd Level-0 table #7: started
+2026/02/28-20:48:20.900 3f2fd Level-0 table #7: 1131514 bytes OK
+2026/02/28-20:48:20.911 3f2fd Delete type=0 #4
+2026/02/28-20:48:21.204 3f2fd Compacting 1@1 + 1@2 files
+2026/02/28-20:48:21.222 3f2fd Generated table #8@1: 41 keys, 39818 bytes
+2026/02/28-20:48:21.223 3f2fd Compacted 1@1 + 1@2 files => 39818 bytes
+2026/02/28-20:48:21.226 3f2fd compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:21.227 3f2fd Delete type=2 #5
+2026/02/28-20:48:21.227 3f2fd Delete type=2 #7
+2026/02/28-20:48:23.161 3f2fd Level-0 table #10: started
+2026/02/28-20:48:23.220 3f2fd Level-0 table #10: 1061790 bytes OK
+2026/02/28-20:48:23.227 3f2fd Delete type=0 #6
+2026/02/28-20:48:23.725 3f2fd Compacting 1@1 + 1@2 files
+2026/02/28-20:48:23.756 3f2fd Generated table #11@1: 41 keys, 47322 bytes
+2026/02/28-20:48:23.756 3f2fd Compacted 1@1 + 1@2 files => 47322 bytes
+2026/02/28-20:48:23.759 3f2fd compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:23.759 3f2fd Delete type=2 #10
+2026/02/28-20:48:23.759 3f2fd Delete type=2 #8
+2026/02/28-20:48:26.237 3f2fc Level-0 table #13: started
+2026/02/28-20:48:26.253 3f2fc Level-0 table #13: 1048688 bytes OK
+2026/02/28-20:48:26.258 3f2fc Delete type=0 #9
+2026/02/28-20:48:26.490 3f2fc Compacting 1@1 + 1@2 files
+2026/02/28-20:48:26.515 3f2fc Generated table #14@1: 41 keys, 52511 bytes
+2026/02/28-20:48:26.515 3f2fc Compacted 1@1 + 1@2 files => 52511 bytes
+2026/02/28-20:48:26.523 3f2fc compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:26.523 3f2fc Delete type=2 #13
+2026/02/28-20:48:26.523 3f2fc Delete type=2 #11
+2026/02/28-20:48:28.130 3f2fd Level-0 table #16: started
+2026/02/28-20:48:28.139 3f2fd Level-0 table #16: 1001382 bytes OK
+2026/02/28-20:48:28.146 3f2fd Delete type=0 #12
+2026/02/28-20:48:28.612 3f2fd Compacting 1@1 + 1@2 files
+2026/02/28-20:48:28.644 3f2fd Generated table #17@1: 41 keys, 58759 bytes
+2026/02/28-20:48:28.644 3f2fd Compacted 1@1 + 1@2 files => 58759 bytes
+2026/02/28-20:48:28.650 3f2fd compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:28.650 3f2fd Delete type=2 #16
+2026/02/28-20:48:28.650 3f2fd Delete type=2 #14
+2026/02/28-20:48:30.724 3f2fc Level-0 table #19: started
+2026/02/28-20:48:30.763 3f2fc Level-0 table #19: 986622 bytes OK
+2026/02/28-20:48:30.769 3f2fc Delete type=0 #15
+2026/02/28-20:48:30.977 3f2fc Compacting 1@1 + 1@2 files
+2026/02/28-20:48:31.001 3f2fc Generated table #20@1: 41 keys, 60018 bytes
+2026/02/28-20:48:31.001 3f2fc Compacted 1@1 + 1@2 files => 60018 bytes
+2026/02/28-20:48:31.005 3f2fc compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:31.005 3f2fc Delete type=2 #19
+2026/02/28-20:48:31.005 3f2fc Delete type=2 #17
+2026/02/28-20:48:32.153 3f2fc Level-0 table #22: started
+2026/02/28-20:48:32.196 3f2fc Level-0 table #22: 921410 bytes OK
+2026/02/28-20:48:32.205 3f2fc Delete type=0 #18
+2026/02/28-20:48:32.378 3f2fc Compacting 1@1 + 1@2 files
+2026/02/28-20:48:32.387 3f2fc Generated table #23@1: 41 keys, 62466 bytes
+2026/02/28-20:48:32.387 3f2fc Compacted 1@1 + 1@2 files => 62466 bytes
+2026/02/28-20:48:32.391 3f2fc compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:32.391 3f2fc Delete type=2 #22
+2026/02/28-20:48:32.391 3f2fc Delete type=2 #20
+2026/02/28-20:48:35.075 3f2fd Level-0 table #25: started
+2026/02/28-20:48:35.111 3f2fd Level-0 table #25: 960172 bytes OK
+2026/02/28-20:48:35.116 3f2fd Delete type=0 #21
+2026/02/28-20:48:35.456 3f2fc Compacting 1@1 + 1@2 files
+2026/02/28-20:48:35.469 3f2fc Generated table #26@1: 41 keys, 62608 bytes
+2026/02/28-20:48:35.469 3f2fc Compacted 1@1 + 1@2 files => 62608 bytes
+2026/02/28-20:48:35.477 3f2fc compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/28-20:48:35.477 3f2fc Delete type=2 #25
+2026/02/28-20:48:35.477 3f2fc Delete type=2 #23

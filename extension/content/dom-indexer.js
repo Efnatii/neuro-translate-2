@@ -159,6 +159,14 @@
             continue;
           }
           if (node.nodeType !== 1) {
+            if (node.nodeType === 11 && node.childNodes && node.childNodes.length) {
+              for (let i = node.childNodes.length - 1; i >= 0; i -= 1) {
+                const child = node.childNodes[i];
+                if (child) {
+                  nodeStack.push(child);
+                }
+              }
+            }
             continue;
           }
 
@@ -413,6 +421,14 @@
             continue;
           }
           if (node.nodeType !== 1) {
+            if (node.nodeType === 11 && node.childNodes && node.childNodes.length) {
+              for (let i = node.childNodes.length - 1; i >= 0; i -= 1) {
+                const child = node.childNodes[i];
+                if (child) {
+                  nodeStack.push(child);
+                }
+              }
+            }
             continue;
           }
 

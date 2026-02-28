@@ -541,6 +541,17 @@ const test = base.extend({
         }
         const settingsRes = await app.sendCommand('SET_SETTINGS', {
           patch: {
+            translationAgentExecutionMode: 'agent',
+            modelSelection: {
+              speed: false,
+              preference: 'smartest'
+            },
+            translationAgentModelPolicy: {
+              mode: 'fixed',
+              speed: false,
+              preference: 'smartest',
+              allowRouteOverride: false
+            },
             translationAgentTuning: {
               proofreadingPassesOverride: 0,
               plannerMaxOutputTokens: 700
